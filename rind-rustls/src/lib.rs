@@ -6,9 +6,7 @@
 //! Use it like:
 //!
 //! ```rust
-//! rind_rustls::default_provider()
-//!     .install_default()
-//!     .unwrap();
+//! rind_rustls::default_provider().install_default().unwrap();
 //! ```
 //!
 //! And then use rustls as normal.
