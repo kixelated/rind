@@ -8,7 +8,7 @@ from parse import parse_file
 if __name__ == "__main__":
     with (
         open("../../thirdparty/s2n-bignum/x86/sha3/sha3_keccak_f1600.S") as input,
-        open("../../graviola/src/low/x86_64/sha3_keccak_f1600.rs", "w") as output,
+        open("../../rind/src/low/x86_64/sha3_keccak_f1600.rs", "w") as output,
     ):
         d = RustDriver(output, Architecture_amd64)
         d.emit_rust_function(
@@ -23,7 +23,7 @@ if __name__ == "__main__":
 
     with (
         open("../../thirdparty/s2n-bignum/x86/sha3/sha3_keccak4_f1600_alt.S") as input,
-        open("../../graviola/src/low/x86_64/sha3_keccak4_f1600_alt.rs", "w") as output,
+        open("../../rind/src/low/x86_64/sha3_keccak4_f1600_alt.rs", "w") as output,
     ):
         d = RustDriver(output, Architecture_amd64)
         d.emit_rust_function(
@@ -40,7 +40,7 @@ if __name__ == "__main__":
 
     with (
         open("../../thirdparty/s2n-bignum/arm/sha3/sha3_keccak_f1600.S") as input,
-        open("../../graviola/src/low/aarch64/sha3_keccak_f1600.rs", "w") as output,
+        open("../../rind/src/low/aarch64/sha3_keccak_f1600.rs", "w") as output,
     ):
         d = RustDriver(output, Architecture_aarch64)
         d.emit_rust_function(
@@ -55,7 +55,7 @@ if __name__ == "__main__":
 
     with (
         open("../../thirdparty/s2n-bignum/arm/sha3/sha3_keccak_f1600_alt.S") as input,
-        open("../../graviola/src/low/aarch64/sha3_keccak_f1600_alt.rs", "w") as output,
+        open("../../rind/src/low/aarch64/sha3_keccak_f1600_alt.rs", "w") as output,
     ):
         d = RustDriver(output, Architecture_aarch64)
         d.emit_rust_function(
@@ -71,7 +71,7 @@ if __name__ == "__main__":
 
     with (
         open("../../thirdparty/s2n-bignum/arm/sha3/sha3_keccak2_f1600.S") as input,
-        open("../../graviola/src/low/aarch64/sha3_keccak2_f1600.rs", "w") as output,
+        open("../../rind/src/low/aarch64/sha3_keccak2_f1600.rs", "w") as output,
     ):
         d = RustDriver(output, Architecture_aarch64)
         d.emit_rust_function(

@@ -31,7 +31,7 @@ jobs:
         run: cargo binstall -y cargo-codspeed
 
       - name: Build benchmarks
-        run: cargo codspeed build -p graviola-bench --features __bench_codspeed
+        run: cargo codspeed build -p rind-bench --features __bench_codspeed
 
       - name: Run benchmarks
         uses: CodSpeedHQ/action@v3

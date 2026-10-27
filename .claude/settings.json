@@ -1,0 +1,28 @@
+{
+	"$schema": "https://json.schemastore.org/claude-code-settings.json",
+	"hooks": {
+		"SessionStart": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/submodule.sh"
+					},
+					{
+						"type": "command",
+						"command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/direnv.sh"
+					}
+				]
+			}
+		]
+	},
+	"permissions": {
+		"allow": [
+			"Bash(just *)",
+			"Bash(cargo *)",
+			"WebFetch(domain:docs.rs)",
+			"WebFetch(domain:www.rfc-editor.org)",
+			"WebFetch(domain:datatracker.ietf.org)"
+		]
+	}
+}

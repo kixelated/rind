@@ -1,15 +1,21 @@
-<h1 align="center">Graviola</h1>
-<img width="40%" align="right" src="https://raw.githubusercontent.com/ctz/graviola/main/admin/picture.png">
+<h1 align="center">rind</h1>
+<img width="40%" align="right" src="https://raw.githubusercontent.com/kixelated/rind/main/admin/picture.png">
 
-> **Graviola** is a compendium of **high quality**,
+> **rind** is a compendium of **high quality**,
 > **fast** and **easy to build** cryptography for Rust, aimed
-> at use with [rustls](https://github.com/rustls/rustls).
+> at use with [rustls](https://github.com/rustls/rustls) and
+> [MoQ](https://github.com/moq-dev/moq).
 
-*High quality*: Graviola incorporates assembler routines
+rind is a fork of [Graviola](https://github.com/ctz/graviola) by Joe
+Birr-Pixton. It keeps Graviola's history so changes can be rebased or offered
+upstream, and adds what MoQ needs to drop C cryptography entirely; the plan
+lives in [`quest/`](quest/README.md).
+
+*High quality*: rind incorporates assembler routines
 from the [s2n-bignum] project.  These have been formally proven
 to correctly implement the desired mathematical operation.
 
-*Fast*: Graviola beats or is competitive with other cryptography
+*Fast*: rind beats or is competitive with other cryptography
 libraries for Rust.  See [performance comparison][performance].
 
 *Easy and fast to build*: no C compiler, assembler or other tooling
@@ -18,13 +24,12 @@ needed: just the Rust compiler.  Compiles in less than one second.
 ## Status
 
 This project is very new, so exercise due caution.  The overriding
-goal of this crate is for use with `rustls` via [rustls-graviola][],
+goal of this crate is for use with `rustls` via [rind-rustls][],
 but there is also a public API for general-purpose use.
 
-[![Build Status](https://img.shields.io/github/actions/workflow/status/ctz/graviola/build.yml)](https://github.com/ctz/graviola/actions/workflows/build.yml?query=branch%3Amain)
-[![Latest release](https://img.shields.io/crates/v/graviola)](https://crates.io/crates/graviola)
-[![Coverage Status (codecov.io)](https://img.shields.io/codecov/c/github/ctz/graviola)](https://codecov.io/gh/ctz/graviola/)
-[![Documentation](https://img.shields.io/docsrs/graviola)](https://docs.rs/graviola/)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/kixelated/rind/build.yml)](https://github.com/kixelated/rind/actions/workflows/build.yml?query=branch%3Amain)
+[![Latest release](https://img.shields.io/crates/v/rind)](https://crates.io/crates/rind)
+[![Documentation](https://img.shields.io/docsrs/rind)](https://docs.rs/rind/)
 
 ## Goals
 
@@ -33,7 +38,7 @@ but there is also a public API for general-purpose use.
 - [x] Competitive performance (with *ring*, aws-lc-rs, and rustcrypto)
 - [x] Uses formally-verified assembler from other projects (where available)
 - [x] Intended to provide algorithms in wide use on web
-- [x] Intended for use as a rustls `CryptoProvider`, via [rustls-graviola][].
+- [x] Intended for use as a rustls `CryptoProvider`, via [rind-rustls][].
 
 ## Limitations
 
@@ -63,9 +68,12 @@ Run performance benchmarks:
 cargo bench
 ```
 
+With [Nix](https://nixos.org), `nix develop` (or direnv) provides CI's
+toolchain, and `just check` runs CI's gate over what the branch changed.
+
 ## Acknowledgements and Thanks
 
-Graviola incorporates significant code from other open source projects.
+rind incorporates significant code from other open source projects.
 We are grateful to:
 
 - [s2n-bignum]: formally verified assembler for
@@ -79,8 +87,8 @@ We are grateful to:
 [s2n-bignum]: https://github.com/awslabs/s2n-bignum
 [wycheproof]: https://github.com/C2SP/wycheproof
 [SLOTHY]: https://github.com/slothy-optimizer/slothy
-[performance]: https://jbp.io/graviola/
-[rustls-graviola]: https://crates.io/crates/rustls-graviola
+[performance]: https://jbp.io/rind/
+[rind-rustls]: https://crates.io/crates/rind-rustls
 
 ## Algorithms
 
@@ -130,7 +138,7 @@ Only RSA signing and verification are provided.  Our policy on RSA encryption is
 "These are not made. They should never be made. We will not make them. We will not help make them."
 
 RSA key generation is supported for five fixed key sizes between 2048-8192-bits.
-All generated keys have e = 0x10001.  Unlike other private key operations in Graviola,
+All generated keys have e = 0x10001.  Unlike other private key operations in rind,
 RSA key generation is currently not side-channel safe.  Avoid doing it in untrusted multi-tenant or
 physical environments.
 
@@ -208,11 +216,12 @@ or intrinsic-based implementations for a certain platform.
 
 ## License
 
-Graviola incorporates and redistributes code from:
+rind incorporates and redistributes code from:
 
+- [Graviola](https://github.com/ctz/graviola): Apache-2.0 OR ISC OR MIT-0
 - [s2n-bignum]: Apache-2.0 OR ISC OR MIT-0
 
-New code written for Graviola is licensed under
+New code written for rind is licensed under
 Apache-2.0 OR ISC OR MIT-0.
 
 Every file has a `SPDX-License-Identifier` comment.

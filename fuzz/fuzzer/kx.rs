@@ -14,7 +14,7 @@ fuzz_target!(|op: Operation| {
             .unwrap();
 
             let right =
-                graviola::key_agreement::x25519::StaticPrivateKey::from_array(&scalar).public_key();
+                rind::key_agreement::x25519::StaticPrivateKey::from_array(&scalar).public_key();
 
             assert_eq!(left.as_ref(), right.as_bytes());
         }
@@ -32,10 +32,8 @@ fuzz_target!(|op: Operation| {
             )
             .map_err(|_| ());
 
-            let right = graviola::key_agreement::x25519::StaticPrivateKey::from_array(&scalar)
-                .diffie_hellman(&graviola::key_agreement::x25519::PublicKey::from_array(
-                    &peer,
-                ))
+            let right = rind::key_agreement::x25519::StaticPrivateKey::from_array(&scalar)
+                .diffie_hellman(&rind::key_agreement::x25519::PublicKey::from_array(&peer))
                 .map(|ss| ss.0.to_vec())
                 .map_err(|_| ());
 
@@ -50,7 +48,7 @@ fuzz_target!(|op: Operation| {
             .map(|private| private.compute_public_key().unwrap().as_ref().to_vec())
             .map_err(|_| ());
 
-            let right = graviola::key_agreement::p256::StaticPrivateKey::from_bytes(&scalar)
+            let right = rind::key_agreement::p256::StaticPrivateKey::from_bytes(&scalar)
                 .map(|private| private.public_key_uncompressed().to_vec())
                 .map_err(|_| ());
 
@@ -76,9 +74,9 @@ fuzz_target!(|op: Operation| {
             })
             .map_err(|_| ());
 
-            let right = graviola::key_agreement::p256::StaticPrivateKey::from_bytes(&scalar)
+            let right = rind::key_agreement::p256::StaticPrivateKey::from_bytes(&scalar)
                 .and_then(|private| {
-                    graviola::key_agreement::p256::PublicKey::from_x962_uncompressed(&peer)
+                    rind::key_agreement::p256::PublicKey::from_x962_uncompressed(&peer)
                         .map(|public| (private, public))
                 })
                 .and_then(|(private, public)| private.diffie_hellman(&public))
@@ -96,7 +94,7 @@ fuzz_target!(|op: Operation| {
             .map(|private| private.compute_public_key().unwrap().as_ref().to_vec())
             .map_err(|_| ());
 
-            let right = graviola::key_agreement::p384::StaticPrivateKey::from_bytes(&scalar)
+            let right = rind::key_agreement::p384::StaticPrivateKey::from_bytes(&scalar)
                 .map(|private| private.public_key_uncompressed().to_vec())
                 .map_err(|_| ());
 
@@ -122,9 +120,9 @@ fuzz_target!(|op: Operation| {
             })
             .map_err(|_| ());
 
-            let right = graviola::key_agreement::p384::StaticPrivateKey::from_bytes(&scalar)
+            let right = rind::key_agreement::p384::StaticPrivateKey::from_bytes(&scalar)
                 .and_then(|private| {
-                    graviola::key_agreement::p384::PublicKey::from_x962_uncompressed(&peer)
+                    rind::key_agreement::p384::PublicKey::from_x962_uncompressed(&peer)
                         .map(|public| (private, public))
                 })
                 .and_then(|(private, public)| private.diffie_hellman(&public))

@@ -1,0 +1,10 @@
+# m2: later work
+
+## Goal
+
+Work that follows the release MoQ switches to: re-checking the costs accepted
+to get there.
+
+## Required
+
+- [Re-measure accepted costs](/quest/m2/remeasure.md) - ChaCha20-Poly1305 throughput and RSA key generation timing on rind's first release

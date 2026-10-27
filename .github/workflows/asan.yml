@@ -2,6 +2,8 @@ name: asan
 
 on:
   push:
+    branches:
+      - main
   pull_request:
   schedule:
     - cron: "0 18 * * *"
@@ -36,4 +38,4 @@ jobs:
       - name: ASAN tests (release)
         # Specify the target so the -Zsanitizer setting doesn't break
         # proc macro compilation in any of the crate dependencies.
-        run: cargo test --release --target=$(rustc --print host-tuple)
+        run: cargo test --release --target="$(rustc --print host-tuple)"

@@ -1,0 +1,6 @@
+[workspace]
+dependencies_update = true
+git_release_enable = false
+# Publish only when the commit is a merged release PR, so an ordinary merge to
+# `main` never publishes.
+release_always = false

@@ -1,8 +1,8 @@
 #![no_main]
 
 use aws_lc_rs::{digest, hmac};
-use graviola::hashing;
 use libfuzzer_sys::{arbitrary, arbitrary::Arbitrary, fuzz_target};
+use rind::hashing;
 
 fuzz_target!(|op: Operation| {
     match op {
