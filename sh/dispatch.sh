@@ -57,6 +57,8 @@ declare -A scope=(
     # as does a bump of the flake-pinned validator.
     [quest]='^(quest/|flake\.lock$)'
     [gh]='^\.github/'
+    # The agent session hooks and their regression suite.
+    [hooks]='^\.(claude|codex)/hooks/'
     [shell]=''
     [nix]=''
 )
@@ -69,6 +71,7 @@ declare -A tools=(
     [deny]='cargo-deny'
     [quest]='quest'
     [gh]='actionlint'
+    [hooks]='shellcheck'
     [shell]='shellcheck'
     [nix]='nixfmt'
 )
@@ -77,7 +80,7 @@ verb=$action
 [[ "$verb" != ci ]] || verb=check
 
 case "$verb" in
-    check) modules=(rs deny quest gh shell nix) ;;
+    check) modules=(rs deny quest gh hooks shell nix) ;;
     fix) modules=(rs nix) ;;
 esac
 
@@ -146,6 +149,10 @@ for module in "${selected[@]}"; do
         check:deny) cargo deny --locked check ;;
         check:quest) quest check ;;
         check:gh) actionlint ;;
+        check:hooks)
+            files '.claude/hooks/*.sh' '.codex/hooks/*.sh' | xargs -0 shellcheck
+            bash .claude/hooks/direnv.test.sh
+            ;;
         check:shell) files 'sh/*.sh' | xargs -0 shellcheck ;;
         check:nix) files '*.nix' | xargs -0 nixfmt --check ;;
         fix:nix) files '*.nix' | xargs -0 nixfmt ;;
