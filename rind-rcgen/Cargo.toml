@@ -15,5 +15,8 @@ rind = { version = "0.1.0", path = "../rind" }
 rustls-pki-types = "1"
 
 [dev-dependencies]
+# Requests reach valgrind only once `rind/__ctgrind` turns on crabgrind's default
+# features, as `admin/ctgrind` does; otherwise they build as no-ops.
+crabgrind = { version = "0.4", default-features = false }
 rind-rustls = { path = "../rind-rustls" }
 rustls = { version = "0.23.23", default-features = false, features = ["aws-lc-rs", "std"] }

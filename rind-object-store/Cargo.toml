@@ -19,6 +19,9 @@ rustls-pki-types = { version = "1.9", default-features = false, features = ["std
 [dev-dependencies]
 aws-lc-rs = { version = "1.16", default-features = false, features = ["alloc", "prebuilt-nasm", "non-fips"] }
 async-trait = "0.1"
+# Requests reach valgrind only once `rind/__ctgrind` turns on crabgrind's default
+# features, as `admin/ctgrind` does; otherwise they build as no-ops.
+crabgrind = { version = "0.4", default-features = false }
 http = "1"
 object_store = { version = "0.14", default-features = false, features = ["aws-base", "azure-base", "gcp-base"] }
 tokio = { version = "1", features = ["macros", "rt"] }
