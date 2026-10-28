@@ -7,9 +7,7 @@ use rustls::crypto::{CryptoProvider, aws_lc_rs, ring};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::quic::{self, Connection, DirectionalKeys, KeyChange, PacketKey, Version};
-use rustls::{
-    CipherSuite, ClientConfig, RootCertStore, ServerConfig, Side, SupportedCipherSuite,
-};
+use rustls::{CipherSuite, ClientConfig, RootCertStore, ServerConfig, Side, SupportedCipherSuite};
 
 #[test]
 fn initial_keys() {
@@ -88,8 +86,14 @@ fn handshake(
     assert!(!client.is_handshaking() && !server.is_handshaking());
     assert_eq!(client.negotiated_cipher_suite(), Some(suite));
     assert_eq!(server.negotiated_cipher_suite(), Some(suite));
-    assert_eq!(server.quic_transport_parameters(), Some(&b"client params"[..]));
-    assert_eq!(client.quic_transport_parameters(), Some(&b"server params"[..]));
+    assert_eq!(
+        server.quic_transport_parameters(),
+        Some(&b"client params"[..])
+    );
+    assert_eq!(
+        client.quic_transport_parameters(),
+        Some(&b"server params"[..])
+    );
 
     let (
         KeyChange::OneRtt {
@@ -176,7 +180,10 @@ fn protect_unprotect(send: &DirectionalKeys, recv: &DirectionalKeys) {
         .unwrap();
     let (head, body) = packet.split_at_mut(header.len());
     assert_eq!(head, &header[..]);
-    assert_eq!(recv.packet.decrypt_in_place(PN, head, body).unwrap(), payload);
+    assert_eq!(
+        recv.packet.decrypt_in_place(PN, head, body).unwrap(),
+        payload
+    );
 }
 
 fn seal_open(send: &dyn PacketKey, recv: &dyn PacketKey) {

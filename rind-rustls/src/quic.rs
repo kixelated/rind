@@ -10,13 +10,13 @@ pub(crate) struct AesGcm(pub(crate) usize);
 impl quic::Algorithm for AesGcm {
     fn packet_key(&self, key: AeadKey, iv: Iv) -> Box<dyn quic::PacketKey> {
         Box::new(PacketKey {
-            aead: Aead::AesGcm(aead::AesGcm::new(key.as_ref())),
+            aead: aead::AesGcm::new(key.as_ref()),
             iv,
         })
     }
 
     fn header_protection_key(&self, key: AeadKey) -> Box<dyn quic::HeaderProtectionKey> {
-        Box::new(HeaderProtectionKey::Aes(Aes::new(key.as_ref()).unwrap()))
+        Box::new(HeaderProtectionKey(Aes::new(key.as_ref()).unwrap()))
     }
 
     fn aead_key_len(&self) -> usize {
@@ -30,15 +30,13 @@ pub(crate) struct ChaCha20Poly1305;
 impl quic::Algorithm for ChaCha20Poly1305 {
     fn packet_key(&self, key: AeadKey, iv: Iv) -> Box<dyn quic::PacketKey> {
         Box::new(PacketKey {
-            aead: Aead::ChaCha20Poly1305(aead::ChaCha20Poly1305::new(
-                key.as_ref().try_into().unwrap(),
-            )),
+            aead: aead::ChaCha20Poly1305::new(key.as_ref().try_into().unwrap()),
             iv,
         })
     }
 
     fn header_protection_key(&self, key: AeadKey) -> Box<dyn quic::HeaderProtectionKey> {
-        Box::new(HeaderProtectionKey::ChaCha20(ChaCha20::new(
+        Box::new(HeaderProtectionKey(ChaCha20::new(
             key.as_ref().try_into().unwrap(),
         )))
     }
@@ -48,17 +46,67 @@ impl quic::Algorithm for ChaCha20Poly1305 {
     }
 }
 
-enum Aead {
-    AesGcm(aead::AesGcm),
-    ChaCha20Poly1305(aead::ChaCha20Poly1305),
+/// An AEAD that protects QUIC packet payloads.
+trait Aead: Send + Sync {
+    /// RFC 9001 section 6.6
+    const CONFIDENTIALITY_LIMIT: u64;
+    /// RFC 9001 section 6.6
+    const INTEGRITY_LIMIT: u64;
+
+    fn encrypt(&self, nonce: &[u8; 12], aad: &[u8], inout: &mut [u8], tag: &mut [u8; TAG_LEN]);
+    fn decrypt(
+        &self,
+        nonce: &[u8; 12],
+        aad: &[u8],
+        inout: &mut [u8],
+        tag: &[u8],
+    ) -> Result<(), rind::Error>;
 }
 
-struct PacketKey {
-    aead: Aead,
+impl Aead for aead::AesGcm {
+    const CONFIDENTIALITY_LIMIT: u64 = 1 << 23;
+    const INTEGRITY_LIMIT: u64 = 1 << 52;
+
+    fn encrypt(&self, nonce: &[u8; 12], aad: &[u8], inout: &mut [u8], tag: &mut [u8; TAG_LEN]) {
+        self.encrypt(nonce, aad, inout, tag)
+    }
+
+    fn decrypt(
+        &self,
+        nonce: &[u8; 12],
+        aad: &[u8],
+        inout: &mut [u8],
+        tag: &[u8],
+    ) -> Result<(), rind::Error> {
+        self.decrypt(nonce, aad, inout, tag)
+    }
+}
+
+impl Aead for aead::ChaCha20Poly1305 {
+    const CONFIDENTIALITY_LIMIT: u64 = u64::MAX;
+    const INTEGRITY_LIMIT: u64 = 1 << 36;
+
+    fn encrypt(&self, nonce: &[u8; 12], aad: &[u8], inout: &mut [u8], tag: &mut [u8; TAG_LEN]) {
+        self.encrypt(nonce, aad, inout, tag)
+    }
+
+    fn decrypt(
+        &self,
+        nonce: &[u8; 12],
+        aad: &[u8],
+        inout: &mut [u8],
+        tag: &[u8],
+    ) -> Result<(), rind::Error> {
+        self.decrypt(nonce, aad, inout, tag)
+    }
+}
+
+struct PacketKey<A> {
+    aead: A,
     iv: Iv,
 }
 
-impl quic::PacketKey for PacketKey {
+impl<A: Aead> quic::PacketKey for PacketKey<A> {
     fn encrypt_in_place(
         &self,
         packet_number: u64,
@@ -67,10 +115,7 @@ impl quic::PacketKey for PacketKey {
     ) -> Result<quic::Tag, Error> {
         let nonce = Nonce::new(&self.iv, packet_number);
         let mut tag = [0u8; TAG_LEN];
-        match &self.aead {
-            Aead::AesGcm(key) => key.encrypt(&nonce.0, header, payload, &mut tag),
-            Aead::ChaCha20Poly1305(key) => key.encrypt(&nonce.0, header, payload, &mut tag),
-        }
+        self.aead.encrypt(&nonce.0, header, payload, &mut tag);
         Ok(quic::Tag::from(&tag[..]))
     }
 
@@ -86,11 +131,9 @@ impl quic::PacketKey for PacketKey {
             .ok_or(Error::DecryptError)?;
         let (plain, tag) = payload.split_at_mut(plain_len);
         let nonce = Nonce::new(&self.iv, packet_number);
-        match &self.aead {
-            Aead::AesGcm(key) => key.decrypt(&nonce.0, header, plain, tag),
-            Aead::ChaCha20Poly1305(key) => key.decrypt(&nonce.0, header, plain, tag),
-        }
-        .map_err(|_| Error::DecryptError)?;
+        self.aead
+            .decrypt(&nonce.0, header, plain, tag)
+            .map_err(|_| Error::DecryptError)?;
         Ok(plain)
     }
 
@@ -98,29 +141,44 @@ impl quic::PacketKey for PacketKey {
         TAG_LEN
     }
 
-    // RFC 9001 section 6.6
     fn confidentiality_limit(&self) -> u64 {
-        match self.aead {
-            Aead::AesGcm(_) => 1 << 23,
-            Aead::ChaCha20Poly1305(_) => u64::MAX,
-        }
+        A::CONFIDENTIALITY_LIMIT
     }
 
-    // RFC 9001 section 6.6
     fn integrity_limit(&self) -> u64 {
-        match self.aead {
-            Aead::AesGcm(_) => 1 << 52,
-            Aead::ChaCha20Poly1305(_) => 1 << 36,
-        }
+        A::INTEGRITY_LIMIT
     }
 }
 
-enum HeaderProtectionKey {
-    Aes(Aes),
-    ChaCha20(ChaCha20),
+/// A cipher that derives the QUIC header protection mask from a sample.
+trait Mask: Send + Sync {
+    fn mask(&self, sample: &[u8; SAMPLE_LEN]) -> Result<[u8; MASK_LEN], Error>;
 }
 
-impl HeaderProtectionKey {
+/// RFC 9001 section 5.4.3
+impl Mask for Aes {
+    fn mask(&self, sample: &[u8; SAMPLE_LEN]) -> Result<[u8; MASK_LEN], Error> {
+        let mut block = *sample;
+        self.encrypt_block(&mut block);
+        Ok(core::array::from_fn(|i| block[i]))
+    }
+}
+
+/// RFC 9001 section 5.4.4
+impl Mask for ChaCha20 {
+    fn mask(&self, sample: &[u8; SAMPLE_LEN]) -> Result<[u8; MASK_LEN], Error> {
+        let counter = u32::from_le_bytes([sample[0], sample[1], sample[2], sample[3]]);
+        let nonce: [u8; 12] = core::array::from_fn(|i| sample[4 + i]);
+        let mut mask = [0u8; MASK_LEN];
+        self.apply_keystream(&nonce, counter, &mut mask)
+            .map_err(|_| Error::EncryptError)?;
+        Ok(mask)
+    }
+}
+
+struct HeaderProtectionKey<M>(M);
+
+impl<M: Mask> HeaderProtectionKey<M> {
     /// RFC 9001 section 5.4.1, leaving `first` and `packet_number` unchanged on error.
     fn xor_in_place(
         &self,
@@ -132,7 +190,7 @@ impl HeaderProtectionKey {
         let sample: &[u8; SAMPLE_LEN] = sample
             .try_into()
             .map_err(|_| Error::General("sample of invalid length".into()))?;
-        let [first_mask, pn_mask @ ..] = self.mask(sample)?;
+        let [first_mask, pn_mask @ ..] = self.0.mask(sample)?;
         if packet_number.len() > pn_mask.len() {
             return Err(Error::General("packet number too long".into()));
         }
@@ -155,29 +213,9 @@ impl HeaderProtectionKey {
         }
         Ok(())
     }
-
-    fn mask(&self, sample: &[u8; SAMPLE_LEN]) -> Result<[u8; MASK_LEN], Error> {
-        let mut mask = [0u8; MASK_LEN];
-        match self {
-            // RFC 9001 section 5.4.3
-            Self::Aes(key) => {
-                let mut block = *sample;
-                key.encrypt_block(&mut block);
-                mask.copy_from_slice(&block[..MASK_LEN]);
-            }
-            // RFC 9001 section 5.4.4
-            Self::ChaCha20(key) => {
-                let counter = u32::from_le_bytes([sample[0], sample[1], sample[2], sample[3]]);
-                let nonce: [u8; 12] = core::array::from_fn(|i| sample[4 + i]);
-                key.apply_keystream(&nonce, counter, &mut mask)
-                    .map_err(|_| Error::EncryptError)?;
-            }
-        }
-        Ok(mask)
-    }
 }
 
-impl quic::HeaderProtectionKey for HeaderProtectionKey {
+impl<M: Mask> quic::HeaderProtectionKey for HeaderProtectionKey<M> {
     fn encrypt_in_place(
         &self,
         sample: &[u8],
@@ -207,8 +245,8 @@ const MASK_LEN: usize = 5;
 
 #[cfg(test)]
 mod tests {
-    use rustls::SupportedCipherSuite;
     use rustls::Side;
+    use rustls::SupportedCipherSuite;
     use rustls::quic::{Algorithm as _, DirectionalKeys, Keys, Version};
 
     use super::*;
@@ -254,7 +292,10 @@ mod tests {
 
         let mut packet = [&header[..], &payload[..]].concat();
         let (head, body) = packet.split_at_mut(header.len());
-        let tag = send.packet.encrypt_in_place(packet_number, head, body).unwrap();
+        let tag = send
+            .packet
+            .encrypt_in_place(packet_number, head, body)
+            .unwrap();
         packet.extend_from_slice(tag.as_ref());
         header_protection(&*send.header, &mut packet, pn_offset, true);
         assert_eq!(hex::encode(&packet), expected);
@@ -262,7 +303,10 @@ mod tests {
         header_protection(&*recv.header, &mut packet, pn_offset, false);
         let (head, body) = packet.split_at_mut(header.len());
         assert_eq!(head, &header[..]);
-        let plain = recv.packet.decrypt_in_place(packet_number, head, body).unwrap();
+        let plain = recv
+            .packet
+            .decrypt_in_place(packet_number, head, body)
+            .unwrap();
         assert_eq!(plain, &payload[..]);
     }
 
@@ -337,17 +381,34 @@ mod tests {
             // A bad sample or an overlong packet number changes nothing.
             let (mut first, mut packet_number) = (0xc3, [0u8; 4]);
             let header = &keys.header;
-            assert!(header.encrypt_in_place(&[0; 15], &mut first, &mut packet_number).is_err());
-            assert!(header.decrypt_in_place(&[0; 17], &mut first, &mut packet_number).is_err());
-            assert!(header.encrypt_in_place(&[0; 16], &mut first, &mut [0; 5]).is_err());
+            assert!(
+                header
+                    .encrypt_in_place(&[0; 15], &mut first, &mut packet_number)
+                    .is_err()
+            );
+            assert!(
+                header
+                    .decrypt_in_place(&[0; 17], &mut first, &mut packet_number)
+                    .is_err()
+            );
+            assert!(
+                header
+                    .encrypt_in_place(&[0; 16], &mut first, &mut [0; 5])
+                    .is_err()
+            );
             assert_eq!((first, packet_number), (0xc3, [0; 4]));
 
             let mut sealed = b"payload".to_vec();
-            let tag = keys.packet.encrypt_in_place(7, b"header", &mut sealed).unwrap();
+            let tag = keys
+                .packet
+                .encrypt_in_place(7, b"header", &mut sealed)
+                .unwrap();
             sealed.extend_from_slice(tag.as_ref());
             let open = |packet_number, header: &[u8], sealed: &[u8]| {
                 let mut sealed = sealed.to_vec();
-                let plain = keys.packet.decrypt_in_place(packet_number, header, &mut sealed);
+                let plain = keys
+                    .packet
+                    .decrypt_in_place(packet_number, header, &mut sealed);
                 plain.map(<[u8]>::to_vec)
             };
             assert_eq!(open(7, b"header", &sealed).unwrap(), b"payload");
