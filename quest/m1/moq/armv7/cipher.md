@@ -13,6 +13,9 @@ Settled (maintainer, 2026-10-27): libcrux lacks these, so rind adds them over
 libcrux's constant-time primitives rather than excluding WebRTC or QUIC header
 protection from armv7.
 
+Until this lands, armv7 compiles out `rind::cipher` and its tests with
+`cfg(not(target_arch = "arm"))`; remove those gates here.
+
 Guidance:
 
 - The AES block and ChaCha20 should come from the same libcrux code its
