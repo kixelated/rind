@@ -4,6 +4,9 @@
 // Once const generics is completed this should be able to be
 // done better that way.
 
+// 32-bit ARM swaps out the curves that use some of these.
+#![cfg_attr(target_arch = "arm", allow(dead_code))]
+
 macro_rules! little_endian {
     ([u64; $N:literal], $fn_array_to:ident, $fn_slice_to:ident, $fn_to_bytes:ident) => {
         pub(crate) fn $fn_array_to(b: &[u8; $N * 8]) -> [u64; $N] {
