@@ -28,7 +28,3 @@ Guidance:
 
 Public API: additions to `rind-rustls` (QUIC support, any missing groups or
 key types).
-
-## Required
-
-- [Raw ciphers](/quest/m1/moq/cipher.md) - the AES block and ChaCha20 for QUIC header protection
