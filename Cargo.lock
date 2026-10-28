@@ -2749,6 +2749,7 @@ name = "rind-jsonwebtoken"
 version = "0.1.0"
 dependencies = [
  "aws-lc-rs",
+ "crabgrind 0.4.0",
  "jsonwebtoken",
  "pkcs1 0.7.5",
  "rind",
@@ -2761,6 +2762,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "aws-lc-rs",
+ "crabgrind 0.4.0",
  "http",
  "object_store",
  "rind",
@@ -2772,6 +2774,7 @@ dependencies = [
 name = "rind-rcgen"
 version = "0.1.0"
 dependencies = [
+ "crabgrind 0.4.0",
  "rcgen",
  "rind",
  "rind-rustls",
@@ -2783,6 +2786,7 @@ dependencies = [
 name = "rind-rustls"
 version = "0.1.0"
 dependencies = [
+ "crabgrind 0.4.0",
  "env_logger",
  "http",
  "http-body-util",

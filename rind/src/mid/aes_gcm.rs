@@ -3,7 +3,7 @@
 
 use crate::Error;
 use crate::low::ghash::{Ghash, GhashTable};
-use crate::low::{AesKey, Entry, aes_gcm, ct_equal};
+use crate::low::{self, AesKey, Entry, aes_gcm, ct_equal};
 
 /// An AES-GCM key.
 ///
@@ -29,6 +29,7 @@ impl AesGcm {
     /// (Note: this crate does not support AES-192).
     pub fn new(key: &[u8]) -> Self {
         let _entry = Entry::new_secret();
+        low::ct::secret_slice(key);
         let key = AesKey::new(key);
         let mut h = [0u8; 16];
         key.encrypt_block(&mut h);
@@ -76,6 +77,9 @@ impl AesGcm {
         for ((out, x), e) in tag_out.iter_mut().zip(final_xi.iter()).zip(e_y0.iter()) {
             *out = *x ^ *e;
         }
+
+        low::ct::public_slice(cipher_inout);
+        low::ct::public_slice(tag_out);
     }
 
     /// Decrypts and verifies the given message.
@@ -118,6 +122,7 @@ impl AesGcm {
         }
 
         if ct_equal(&actual_tag, tag) {
+            low::ct::public_slice(cipher_inout);
             Ok(())
         } else {
             // avoid unauthenticated plaintext leak

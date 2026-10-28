@@ -14,6 +14,7 @@ rind = { version = "0.1.0", path = "../rind" }
 rustls = { version = "0.23.18", default-features = false, features = ["std", "tls12"] }
 
 [dev-dependencies]
+crabgrind = "0.4"
 env_logger = "0.11"
 http = "1"
 http-body-util = "0.1"

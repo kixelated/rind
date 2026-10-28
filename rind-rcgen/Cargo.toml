@@ -15,5 +15,6 @@ rind = { version = "0.1.0", path = "../rind" }
 rustls-pki-types = "1"
 
 [dev-dependencies]
+crabgrind = "0.4"
 rind-rustls = { path = "../rind-rustls" }
 rustls = { version = "0.23.23", default-features = false, features = ["aws-lc-rs", "std"] }
