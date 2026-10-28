@@ -246,7 +246,7 @@ fn reduce(x: [u32; 12], m: &[u32; 12]) -> [u32; 12] {
         fp::fiat_p384_subborrowx_u32(d, &mut borrow, b, *x, *m);
     }
     let mut r = [0u32; 12];
-    fp::fiat_p384_selectznz(&mut r, borrow, &diff, &x);
+    fp::fiat_p384_selectznz(&mut r, opaque(borrow), &diff, &x);
     r
 }
 
@@ -305,7 +305,7 @@ fn fs_mul(x: &Fs, y: &Fs) -> Fs {
 fn nonzero(x: &Fe) -> u8 {
     let mut any = 0;
     fp::fiat_p384_nonzero(&mut any, &x.0);
-    ((any | any.wrapping_neg()) >> 31) as u8
+    opaque(((any | any.wrapping_neg()) >> 31) as u8)
 }
 
 /// `if_nonzero` if `flag` is 1, else `if_zero`.
@@ -317,7 +317,13 @@ fn select(flag: u8, if_zero: &Fe, if_nonzero: &Fe) -> Fe {
 
 /// All ones if `x` is nonzero, else zero.
 fn mask_nonzero(x: u64) -> u64 {
-    ((x | x.wrapping_neg()) >> 63).wrapping_neg()
+    opaque(((x | x.wrapping_neg()) >> 63).wrapping_neg())
+}
+
+/// Hides that `x` is a flag or mask, so the optimiser cannot turn the
+/// arithmetic selecting with it into a secret-dependent branch or cmov.
+fn opaque<T>(x: T) -> T {
+    core::hint::black_box(x)
 }
 
 fn coords(p: &[u64; 18]) -> [Fe; 3] {
