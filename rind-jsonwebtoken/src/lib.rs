@@ -6,7 +6,9 @@
 //! Use it like:
 //!
 //! ```rust
-//! rind_jsonwebtoken::DEFAULT_PROVIDER.install_default().unwrap();
+//! rind_jsonwebtoken::DEFAULT_PROVIDER
+//!     .install_default()
+//!     .unwrap();
 //! ```
 //!
 //! And then use jsonwebtoken as normal.
