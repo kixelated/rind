@@ -34,11 +34,10 @@ Settled with the maintainer (2026-10-26 and 2026-10-27):
   and RSA or P-384 TLS keys working on the armv7 release.
 - Raspberry Pi 4, CM4, and Zero 2 W lack aarch64 crypto extensions, so they
   run this armv7 build.
-- graviola's operations that no adapter or MoQ uses, SHA-3 and SHAKE, are
-  not built on armv7 and fail to compile there (maintainer, 2026-10-27).
-  Nothing consumes them, and each would be more unverified code over libcrux;
-  add one only when a consumer needs it. XChaCha20-Poly1305 is built, from
-  libcrux, because `rind-rustls`'s `Ticketer` uses it.
+- Operations with no consumer, SHA-3 and SHAKE, are not built on armv7 and
+  fail to compile there, because no adapter or MoQ uses them (maintainer,
+  2026-10-27). Add one when a consumer needs it. XChaCha20-Poly1305 is built,
+  because `rind-rustls`'s `Ticketer` encrypts session tickets with it.
 
 ## Required
 
