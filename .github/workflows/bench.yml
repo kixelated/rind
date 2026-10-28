@@ -13,6 +13,10 @@ env:
 jobs:
   bench:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      # CodSpeed authenticates the upload with the job's OIDC token.
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,22 +37,8 @@ jobs:
       - name: Build benchmarks
         run: cargo codspeed build -p rind-bench --features __bench_codspeed
 
-      # CodSpeed refuses a repository it has no token for, so the benchmarks
-      # only build until CODSPEED_TOKEN is set.
-      - name: Check CodSpeed token
-        id: codspeed
-        run: |
-          if [[ -n "$CODSPEED_TOKEN" ]]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::notice::CodSpeed skipped: set the CODSPEED_TOKEN secret."
-          fi
-        env:
-          CODSPEED_TOKEN: ${{ secrets.CODSPEED_TOKEN }}
-
       - name: Run benchmarks
-        if: steps.codspeed.outputs.ready == 'true'
-        uses: CodSpeedHQ/action@v3
+        uses: CodSpeedHQ/action@78102a468f96d8e0ccb92d0ec49425753fc42062 # v5.6.0
         with:
+          mode: simulation
           run: cargo codspeed run
-          token: ${{ secrets.CODSPEED_TOKEN }}
