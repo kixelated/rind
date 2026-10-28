@@ -140,6 +140,9 @@ impl VerifyingKey {
         digest_info: &[u8],
         hash: &[u8],
     ) -> Result<(), Error> {
+        if signature.len() != self.0.modulus_len_bytes() {
+            return Err(Error::BadSignature);
+        }
         let c = PosInt::from_bytes(signature).map_err(|_| Error::BadSignature)?;
         let m = self.0.public_op(c).map_err(|_| Error::BadSignature)?;
 
@@ -213,7 +216,7 @@ impl VerifyingKey {
     fn _verify_pss<H: Hash>(&self, signature: &[u8], message: &[u8]) -> Result<(), Error> {
         let hash = H::hash(message);
 
-        if signature.len() > self.0.modulus_len_bytes() {
+        if signature.len() != self.0.modulus_len_bytes() {
             return Err(Error::BadSignature);
         }
         let c = PosInt::from_bytes(signature).map_err(|_| Error::BadSignature)?;
@@ -579,6 +582,50 @@ mod tests {
         let private_key = SigningKey::from_pkcs1_der(include_bytes!("rsa/rsa2048.der")).unwrap();
 
         check_all_algs(&mut [0u8; 256], &private_key, &private_key.public_key());
+    }
+
+    #[test]
+    fn verify_rejects_signature_not_modulus_length() {
+        // RFC 8017 requires a signature of exactly k octets.  A zero byte
+        // added to or removed from the front keeps its integer value, so
+        // only the length check rejects these.
+        type Sign = fn(&SigningKey, &mut [u8], &[u8]) -> Result<(), Error>;
+        type Verify = fn(&VerifyingKey, &[u8], &[u8]) -> Result<(), Error>;
+        let schemes: [(Sign, Verify); 2] = [
+            (
+                |k, s, m| k.sign_pkcs1_sha256(s, m).map(|_| ()),
+                VerifyingKey::verify_pkcs1_sha256,
+            ),
+            (
+                |k, s, m| k.sign_pss_sha256(s, m).map(|_| ()),
+                VerifyingKey::verify_pss_sha256,
+            ),
+        ];
+
+        let private_key = SigningKey::from_pkcs1_der(include_bytes!("rsa/rsa2048.der")).unwrap();
+        let public_key = private_key.public_key();
+
+        for (sign, verify) in schemes {
+            let mut signature = [0u8; 257];
+            for i in 0u32.. {
+                let message = i.to_be_bytes();
+                sign(&private_key, &mut signature[1..], &message).unwrap();
+                assert_eq!(
+                    verify(&public_key, &signature, &message),
+                    Err(Error::BadSignature)
+                );
+
+                // About one signature in 256 starts with a zero byte.
+                if signature[1] == 0 {
+                    verify(&public_key, &signature[1..], &message).unwrap();
+                    assert_eq!(
+                        verify(&public_key, &signature[2..], &message),
+                        Err(Error::BadSignature)
+                    );
+                    break;
+                }
+            }
+        }
     }
 
     #[test]
