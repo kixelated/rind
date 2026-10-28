@@ -3,9 +3,9 @@
 ## Goal
 
 rind builds for `armv7-linux-androideabi` and `armv7-unknown-linux-gnueabihf`
-on a libcrux backend that runs every operation the x86_64 and aarch64 backend
-does, behind the same public API, so no adapter or MoQ feature carries a
-per-target exclusion.
+on a libcrux backend that runs every operation the `rind-*` adapters and MoQ
+use, behind the same public API as the x86_64 and aarch64 backend, so no
+adapter or MoQ feature carries a per-target exclusion.
 
 ## Plan
 
@@ -34,12 +34,10 @@ Settled with the maintainer (2026-10-26 and 2026-10-27):
   and RSA or P-384 TLS keys working on the armv7 release.
 - Raspberry Pi 4, CM4, and Zero 2 W lack aarch64 crypto extensions, so they
   run this armv7 build.
-
-Open question for the backend quest: graviola's API also offers operations MoQ
-does not use, such as XChaCha20-Poly1305, SHA-3, and SHAKE. "Every operation
-the other arches do"
-reads as all of them; recommend covering the whole public API so rind's API
-is identical on every arch, and ask the maintainer before excluding any.
+- graviola's operations that no adapter or MoQ uses, such as
+  XChaCha20-Poly1305, SHA-3, and SHAKE, are not built on armv7 and fail to
+  compile there (maintainer, 2026-10-27). Nothing consumes them, and each would
+  be more unverified code over libcrux; add one only when a consumer needs it.
 
 ## Required
 
