@@ -28,7 +28,7 @@ pub fn check() -> Result<(), MissingFeature> {
 }
 
 /// Panics with [`check`]'s error rather than run instructions this CPU lacks.
-pub(super) fn verify_cpu_features() {
+pub(crate) fn verify_cpu_features() {
     if let Err(missing) = check() {
         panic!("{missing}");
     }
