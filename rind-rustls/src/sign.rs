@@ -360,11 +360,17 @@ mod tests {
         ));
         // 32-bit ARM refuses P-384 keys.
         let p384_supported = cfg!(not(target_arch = "arm"));
-        assert_eq!(provider.load_private_key(ecdsap384_sec1).is_ok(), p384_supported);
+        assert_eq!(
+            provider.load_private_key(ecdsap384_sec1).is_ok(),
+            p384_supported
+        );
         let ecdsap384_pkcs8 = pki_types::PrivateKeyDer::Pkcs8(pki_types::PrivatePkcs8KeyDer::from(
             include_bytes!("../../rind/src/high/ecdsa/secp384r1.pkcs8.der").to_vec(),
         ));
-        assert_eq!(provider.load_private_key(ecdsap384_pkcs8).is_ok(), p384_supported);
+        assert_eq!(
+            provider.load_private_key(ecdsap384_pkcs8).is_ok(),
+            p384_supported
+        );
 
         // Error case: invalid key file
         let invalid_pkcs1 = pki_types::PrivateKeyDer::Pkcs1(pki_types::PrivatePkcs1KeyDer::from(

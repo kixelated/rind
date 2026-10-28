@@ -333,10 +333,16 @@ mod tests {
 
         let mut n_plus_1 = n;
         n_plus_1[31] += 1;
-        assert_eq!(Scalar::from_bytes_reduced(&n_plus_1).unwrap().0, [1, 0, 0, 0]);
+        assert_eq!(
+            Scalar::from_bytes_reduced(&n_plus_1).unwrap().0,
+            [1, 0, 0, 0]
+        );
 
         let max = Scalar::from_bytes_reduced(&[0xff; 32]).unwrap();
-        assert_eq!(max.0, [0x0c46_353d_039c_daae, 0x4319_0552_58e8_617b, 0, 0xffff_ffff]);
+        assert_eq!(
+            max.0,
+            [0x0c46_353d_039c_daae, 0x4319_0552_58e8_617b, 0, 0xffff_ffff]
+        );
     }
 
     #[test]

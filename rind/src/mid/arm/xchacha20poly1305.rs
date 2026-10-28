@@ -37,11 +37,12 @@ impl XChaCha20Poly1305 {
         // libcrux writes the ciphertext and tag to one separate buffer.
         let mut plain = cipher_inout.to_vec();
         let mut sealed = vec![0u8; plain.len() + 16];
-        let result = xchacha20_poly1305::encrypt(&self.key, &plain, &mut sealed, aad, nonce)
-            .map(|(cipher, tag)| {
+        let result = xchacha20_poly1305::encrypt(&self.key, &plain, &mut sealed, aad, nonce).map(
+            |(cipher, tag)| {
                 cipher_inout.copy_from_slice(cipher);
                 tag_out.copy_from_slice(tag);
-            });
+            },
+        );
         zeroise(&mut plain);
         // `usize` is 32 bits here, so every length fits HACL's `u32`.
         result.expect("XChaCha20Poly1305 lengths are within limits");

@@ -73,7 +73,9 @@ impl<const N: usize> PosInt<N> {
     /// The length in bytes, without leading zeroes.
     pub(crate) fn len_bytes(&self) -> usize {
         let top = self.as_words().iter().rposition(|w| *w != 0);
-        top.map_or(0, |i| i * 8 + (64 - self.words[i].leading_zeros() as usize).div_ceil(8))
+        top.map_or(0, |i| {
+            i * 8 + (64 - self.words[i].leading_zeros() as usize).div_ceil(8)
+        })
     }
 
     pub(crate) fn is_even(&self) -> bool {

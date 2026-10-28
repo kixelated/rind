@@ -167,7 +167,8 @@ mod tests {
         assert_eq!(expected_cipher, cipher);
         assert_eq!(expected_tag, tag);
 
-        t.decrypt(b"noncenonceno", b"aad", &mut cipher, &tag).unwrap();
+        t.decrypt(b"noncenonceno", b"aad", &mut cipher, &tag)
+            .unwrap();
         assert_eq!(cipher, [b'p'; 4164]);
     }
 
