@@ -57,21 +57,32 @@ fn all_suites() {
 
 #[test]
 fn all_key_exchanges() {
-    // X25519MLKEM768 not supported by *ring*
+    let tls13 = rind_rustls::suites::TLS13_AES_128_GCM_SHA256;
+    let tls12 = rind_rustls::suites::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256;
+
+    // X25519MLKEM768 not supported by *ring*, and TLS 1.3 only
     for other in [OtherProvider::BaselineAwsLcRs, OtherProvider::SelfTest] {
-        test_key_exchange(rind_rustls::kx::X25519MLKEM768, other, KeyType::Rsa2048);
+        test_key_exchange(rind_rustls::kx::X25519MLKEM768, tls13, other);
     }
 
     for other in OtherProvider::OTHERS {
-        test_key_exchange(&rind_rustls::kx::X25519, *other, KeyType::Rsa2048);
-        test_key_exchange(&rind_rustls::kx::P256, *other, KeyType::Rsa2048);
-        #[cfg(not(target_arch = "arm"))]
-        test_key_exchange(&rind_rustls::kx::P384, *other, KeyType::Rsa2048);
+        for suite in [tls13, tls12] {
+            test_key_exchange(&rind_rustls::kx::X25519, suite, *other);
+            test_key_exchange(&rind_rustls::kx::P256, suite, *other);
+            #[cfg(not(target_arch = "arm"))]
+            test_key_exchange(&rind_rustls::kx::P384, suite, *other);
+        }
     }
 }
 
-fn test_key_exchange(kx: &'static dyn SupportedKxGroup, other: OtherProvider, key_type: KeyType) {
+fn test_key_exchange(
+    kx: &'static dyn SupportedKxGroup,
+    suite: rustls::SupportedCipherSuite,
+    other: OtherProvider,
+) {
+    let key_type = KeyType::Rsa2048;
     let provider: Arc<_> = CryptoProvider {
+        cipher_suites: vec![suite],
         kx_groups: vec![kx],
         ..rind_rustls::default_provider()
     }
@@ -216,10 +227,11 @@ impl KeyType {
         Self::Ed25519,
     ];
     const RSA: &[Self] = &[Self::Rsa2048, Self::Rsa3072, Self::Rsa4096];
+    // TLS 1.2's ECDHE_ECDSA suites also carry Ed25519 (RFC 8422).
     #[cfg(not(target_arch = "arm"))]
-    const ECDSA: &[Self] = &[Self::EcdsaP256, Self::EcdsaP384];
+    const ECDSA: &[Self] = &[Self::EcdsaP256, Self::EcdsaP384, Self::Ed25519];
     #[cfg(target_arch = "arm")]
-    const ECDSA: &[Self] = &[Self::EcdsaP256];
+    const ECDSA: &[Self] = &[Self::EcdsaP256, Self::Ed25519];
 
     fn slug(self) -> &'static str {
         match self {

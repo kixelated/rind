@@ -2788,6 +2788,7 @@ version = "0.1.0"
 dependencies = [
  "crabgrind 0.4.0",
  "env_logger",
+ "hex",
  "http",
  "http-body-util",
  "hyper",
