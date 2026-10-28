@@ -6,6 +6,7 @@ members = [
   "rind-cpuid",
   "rind-dimpl",
   "rind-object-store",
+  "rind-rcgen",
   "rind-rustls",
   "rind-jsonwebtoken",
   "fuzz"

@@ -1,7 +1,8 @@
 // Written for Graviola by Joe Birr-Pixton, 2024.
 // SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 
-use super::{enter_cpu_state, leave_cpu_state, verify_cpu_features};
+use super::cpu::verify_cpu_features;
+use super::{enter_cpu_state, leave_cpu_state};
 
 /// One of these should be made at library entry points: every `pub` function.
 ///

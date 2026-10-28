@@ -22,7 +22,3 @@ Guidance:
   RFC 3711 and RFC 7714 vectors.
 
 Public API: the new crate.
-
-## Required
-
-- [SHA-1 and HMAC-SHA1](/quest/m1/moq/sha1.md) - STUN integrity and SRTP authentication

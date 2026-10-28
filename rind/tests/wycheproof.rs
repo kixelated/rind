@@ -4,8 +4,9 @@ use std::io::BufReader;
 use rind::Error;
 use rind::aead::{AesGcm, ChaCha20Poly1305, XChaCha20Poly1305};
 use rind::cipher::ChaCha20;
+use rind::hashing::hkdf::Prk;
 use rind::hashing::hmac::Hmac;
-use rind::hashing::{Sha256, Sha384, Sha512};
+use rind::hashing::{Hash, LegacySha1, Sha256, Sha384, Sha512};
 use rind::key_agreement::{mlkem768, p256, p384, x25519};
 use rind::signing::{ecdsa, eddsa, rsa};
 use serde::Deserialize;
@@ -83,6 +84,16 @@ struct Test {
     m: Vec<u8>,
     #[serde(default, with = "hex::serde")]
     c: Vec<u8>,
+    #[serde(default, with = "hex::serde")]
+    ikm: Vec<u8>,
+    #[serde(default, with = "hex::serde")]
+    salt: Vec<u8>,
+    #[serde(default, with = "hex::serde")]
+    info: Vec<u8>,
+    #[serde(default)]
+    size: usize,
+    #[serde(default, with = "hex::serde")]
+    okm: Vec<u8>,
     result: ExpectedResult,
 }
 
@@ -151,6 +162,40 @@ impl Drop for Summary {
             self.started, passed, self.skipped
         );
         assert_ne!(self.started, self.skipped, "all tests were skipped");
+    }
+}
+
+#[test]
+fn hmac_sha1_tests() {
+    let data_file = File::open("../thirdparty/wycheproof/testvectors_v1/hmac_sha1_test.json")
+        .expect("failed to open data file");
+
+    let reader = BufReader::new(data_file);
+    let tests: TestFile = serde_json::from_reader(reader).expect("invalid test JSON");
+    let mut summary = Summary::new();
+
+    for group in tests.groups {
+        summary.group(&group);
+        for test in group.tests {
+            summary.start(&test);
+
+            let mut ctx = Hmac::<LegacySha1>::new(test.key);
+            ctx.update(test.msg);
+            let result = match test.tag.len() {
+                20 => ctx.verify(&test.tag),
+                10 => match ctx.finish().truncated_ct_equal::<10>(&test.tag) {
+                    true => Ok(()),
+                    false => Err(Error::BadSignature),
+                },
+                _ => todo!("unhandled truncated hmac"),
+            };
+
+            match (test.result, result) {
+                (ExpectedResult::Valid, Ok(())) => {}
+                (ExpectedResult::Invalid, Err(Error::BadSignature)) => {}
+                _ => panic!("expected {:?} got {:?}", test.result, result),
+            }
+        }
     }
 }
 
@@ -255,6 +300,38 @@ fn hmac_sha512_tests() {
             }
         }
     }
+}
+
+#[test]
+fn hkdf_tests() {
+    fn check<H: Hash>(file: &str) {
+        let data_file = File::open(file).expect("failed to open data file");
+        let reader = BufReader::new(data_file);
+        let tests: TestFile = serde_json::from_reader(reader).expect("invalid test JSON");
+        let mut summary = Summary::new();
+
+        for group in tests.groups {
+            summary.group(&group);
+            for test in group.tests {
+                summary.start(&test);
+
+                let mut okm = vec![0u8; test.size];
+                let result =
+                    Prk::<H>::extract(&test.salt, &test.ikm).expand(&[&test.info], &mut okm);
+
+                match (test.result, result) {
+                    (ExpectedResult::Valid, Ok(())) => assert_eq!(okm, test.okm),
+                    (ExpectedResult::Invalid, Err(Error::WrongLength)) => {}
+                    _ => panic!("expected {:?} got {:?}", test.result, result),
+                }
+            }
+        }
+    }
+
+    check::<LegacySha1>("../thirdparty/wycheproof/testvectors_v1/hkdf_sha1_test.json");
+    check::<Sha256>("../thirdparty/wycheproof/testvectors_v1/hkdf_sha256_test.json");
+    check::<Sha384>("../thirdparty/wycheproof/testvectors_v1/hkdf_sha384_test.json");
+    check::<Sha512>("../thirdparty/wycheproof/testvectors_v1/hkdf_sha512_test.json");
 }
 
 #[test]

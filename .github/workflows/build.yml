@@ -65,7 +65,7 @@ jobs:
       - name: Artificial CPU feature tests (x86_64)
         if: runner.arch == 'X64'
         run: |
-          # test software fallbacks for sha256 and sha512
-          env RIND_CPU_DISABLE_sha=1 RIND_CPU_DISABLE_bmi2=1 cargo test
+          # test software fallbacks for sha1 and sha256
+          env RIND_CPU_DISABLE_sha=1 cargo test
           # test avx2/aesni aes-gcm & ML-KEM without avx512
           env RIND_CPU_DISABLE_avx512bw=1 RIND_CPU_DISABLE_avx512f=1 RIND_CPU_DISABLE_vaes=1 cargo test
