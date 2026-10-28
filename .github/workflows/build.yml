@@ -103,17 +103,17 @@ jobs:
           target: ${{ matrix.target }}
 
       - name: Build
-        run: cargo build -p rind -p rind-rustls -p rind-jsonwebtoken --target ${{ matrix.target }}
+        run: cargo build -p rind -p rind-rustls -p rind-jsonwebtoken -p rind-object-store --target ${{ matrix.target }}
 
       # Tests need dev-dependencies that build C, so only the tested target
       # lints them.
       - name: Clippy
-        run: cargo clippy -p rind -p rind-rustls -p rind-jsonwebtoken --target ${{ matrix.target }} ${{ matrix.test && '--all-targets' || '' }} -- --deny warnings
+        run: cargo clippy -p rind -p rind-rustls -p rind-jsonwebtoken -p rind-object-store --target ${{ matrix.target }} ${{ matrix.test && '--all-targets' || '' }} -- --deny warnings
 
       # Under qemu, so optimised, but keeping the checks a debug build has.
       - name: Run tests
         if: matrix.test
-        run: cargo test -p rind -p rind-rustls -p rind-jsonwebtoken --release --target ${{ matrix.target }}
+        run: cargo test -p rind -p rind-rustls -p rind-jsonwebtoken -p rind-object-store --release --target ${{ matrix.target }}
         env:
           CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: true
           CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS: true
