@@ -6,7 +6,9 @@
 //! Build rcgen with `default-features = false` so it compiles no other crypto backend.
 //! rcgen then needs each certificate's serial number set explicitly.
 //!
-//! ```rust
+// Compile only: on aarch64, cranelift miscompiles hashbrown's NEON scan in a
+// panic=abort doctest dropping `CertificateParams`. tests/rustls.rs runs this.
+//! ```rust,no_run
 //! let key = rind_rcgen::KeyPair::generate().unwrap();
 //!
 //! let mut serial = [0u8; 16];
