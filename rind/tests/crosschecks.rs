@@ -75,3 +75,118 @@ fn ed25519_key_generation() {
         );
     }
 }
+
+#[cfg(not(target_arch = "arm"))]
+mod cipher {
+    use aws_lc_rs::aead::{Aad, CHACHA20_POLY1305, LessSafeKey, Nonce, UnboundKey, quic};
+    use aws_lc_rs::cipher::{AES_128, AES_256, EncryptingKey, EncryptionContext, UnboundCipherKey};
+    use proptest::prelude::*;
+    use rind::Error;
+    use rind::cipher::{Aes, AesCtr, ChaCha20};
+
+    fn aes_key() -> impl Strategy<Value = Vec<u8>> {
+        prop_oneof![
+            prop::collection::vec(any::<u8>(), 16),
+            prop::collection::vec(any::<u8>(), 32)
+        ]
+    }
+
+    fn aws_aes_key(key: &[u8]) -> UnboundCipherKey {
+        let alg = if key.len() == 16 { &AES_128 } else { &AES_256 };
+        UnboundCipherKey::new(alg, key).unwrap()
+    }
+
+    // Counters near the top of the range exercise the wrap refusal.
+    fn counter() -> impl Strategy<Value = u32> {
+        prop_oneof![any::<u32>(), (u32::MAX - 80)..=u32::MAX]
+    }
+
+    proptest! {
+        #[test]
+        fn aes_block(key in aes_key(), block in any::<[u8; 16]>()) {
+            let mut ours = block;
+            Aes::new(&key).unwrap().encrypt_block(&mut ours);
+
+            let mut theirs = block;
+            EncryptingKey::ecb(aws_aes_key(&key))
+                .unwrap()
+                .less_safe_encrypt(&mut theirs, EncryptionContext::None)
+                .unwrap();
+            prop_assert_eq!(ours, theirs);
+        }
+
+        #[test]
+        fn aes_ctr(
+            key in aes_key(),
+            nonce in any::<[u8; 12]>(),
+            counter in counter(),
+            msg in prop::collection::vec(any::<u8>(), 0..1100),
+        ) {
+            let mut ours = msg.clone();
+            let result = AesCtr::new(&key).unwrap().apply_keystream(&nonce, counter, &mut ours);
+
+            // aws-lc-rs carries into the nonce where we refuse, so compare only
+            // what we accept.
+            let blocks = msg.len().div_ceil(16) as u64;
+            if u64::from(counter) + blocks > 1 << 32 {
+                prop_assert_eq!(result, Err(Error::WrongLength));
+                prop_assert_eq!(ours, msg);
+                return Ok(());
+            }
+            result.unwrap();
+
+            let mut iv = [0u8; 16];
+            iv[..12].copy_from_slice(&nonce);
+            iv[12..].copy_from_slice(&counter.to_be_bytes());
+            let mut theirs = msg.clone();
+            if !theirs.is_empty() {
+                EncryptingKey::ctr(aws_aes_key(&key))
+                    .unwrap()
+                    .less_safe_encrypt(&mut theirs, EncryptionContext::Iv128(iv.into()))
+                    .unwrap();
+            }
+            prop_assert_eq!(ours, theirs);
+        }
+
+        #[test]
+        fn chacha20_header_protection_mask(key in any::<[u8; 32]>(), sample in any::<[u8; 16]>()) {
+            let (counter, nonce) = sample.split_at(4);
+            let mut ours = [0u8; 5];
+            ChaCha20::new(key)
+                .apply_keystream(
+                    nonce.try_into().unwrap(),
+                    u32::from_le_bytes(counter.try_into().unwrap()),
+                    &mut ours,
+                )
+                .unwrap();
+
+            let theirs = quic::HeaderProtectionKey::new(&quic::CHACHA20, &key)
+                .unwrap()
+                .new_mask(&sample)
+                .unwrap();
+            prop_assert_eq!(ours, theirs);
+        }
+
+        // ChaCha20-Poly1305's ciphertext is the plaintext XORed with the
+        // keystream from block 1, which checks long, ragged outputs.
+        #[test]
+        fn chacha20_keystream(
+            key in any::<[u8; 32]>(),
+            nonce in any::<[u8; 12]>(),
+            msg in prop::collection::vec(any::<u8>(), 0..1100),
+        ) {
+            let mut ours = msg.clone();
+            ChaCha20::new(key).apply_keystream(&nonce, 1, &mut ours).unwrap();
+
+            let mut theirs = msg.clone();
+            let _tag = LessSafeKey::new(UnboundKey::new(&CHACHA20_POLY1305, &key).unwrap())
+                .seal_in_place_separate_tag(
+                    Nonce::assume_unique_for_key(nonce),
+                    Aad::empty(),
+                    &mut theirs,
+                )
+                .unwrap();
+            prop_assert_eq!(ours, theirs);
+        }
+    }
+}

@@ -52,7 +52,7 @@ but there is also a public API for general-purpose use.
 - 32-bit `arm` (tested on `armv7-unknown-linux-gnueabihf`, and built for
   `armv7-linux-androideabi`) runs [libcrux]'s verified portable Rust instead,
   and needs no CPU features. It does not yet offer P-384, RSA key generation,
-  SHA-3, or SHAKE, and an Ed25519 public key that is not a curve point is
+  the unauthenticated ciphers, SHA-3, or SHAKE, and an Ed25519 public key that is not a curve point is
   refused when verifying rather than when decoding.
 
 ## Building and Testing
@@ -130,6 +130,12 @@ We are grateful to:
 
 - [x] AES-GCM
 - [x] chacha20-poly1305 and xchacha20-poly1305
+
+### Unauthenticated ciphers
+
+- [x] AES block encryption, for QUIC header protection and DTLS 1.3 record number protection
+- [x] AES-CTR, for SRTP
+- [x] ChaCha20, for QUIC header protection and DTLS 1.3 record number protection
 
 ## Assorted technical details
 

@@ -3,6 +3,8 @@ use std::io::BufReader;
 
 use rind::Error;
 use rind::aead::{AesGcm, ChaCha20Poly1305, XChaCha20Poly1305};
+#[cfg(not(target_arch = "arm"))]
+use rind::cipher::ChaCha20;
 use rind::hashing::hmac::Hmac;
 use rind::hashing::{Sha256, Sha384, Sha512};
 use rind::key_agreement::{mlkem768, p256, x25519};
@@ -70,6 +72,8 @@ struct Test {
     aad: Vec<u8>,
     #[serde(default, with = "hex::serde")]
     iv: Vec<u8>,
+    #[serde(default, rename(deserialize = "initialCounter"), with = "hex::serde")]
+    initial_counter: Vec<u8>,
     #[serde(default, with = "hex::serde")]
     seed: Vec<u8>,
     #[serde(default, with = "hex::serde")]
@@ -777,6 +781,43 @@ fn test_chacha20poly1305() {
             if test.result == ExpectedResult::Valid {
                 assert_eq!(ct, test.ct);
                 assert_eq!(&tag, &test.tag[..]);
+            }
+        }
+    }
+}
+
+#[test]
+#[cfg(not(target_arch = "arm"))]
+fn test_chacha20() {
+    let data_file =
+        File::open("../thirdparty/wycheproof/testvectors_v1/chacha20_counter_test.json")
+            .expect("failed to open data file");
+
+    let reader = BufReader::new(data_file);
+    let tests: TestFile = serde_json::from_reader(reader).expect("invalid test JSON");
+    let mut summary = Summary::new();
+
+    for group in tests.groups {
+        summary.group(&group);
+
+        for test in group.tests {
+            summary.start(&test);
+
+            if test.iv.len() != 12 {
+                summary.skipped("only the 96-bit nonce variant is exposed");
+                continue;
+            }
+
+            let ctx = ChaCha20::new(test.key.try_into().unwrap());
+            let counter = u32::from_le_bytes(test.initial_counter.try_into().unwrap());
+
+            let mut buf = test.msg.clone();
+            let result = ctx.apply_keystream(&test.iv.try_into().unwrap(), counter, &mut buf);
+
+            match (test.result, result) {
+                (ExpectedResult::Valid, Ok(())) => assert_eq!(buf, test.ct),
+                (ExpectedResult::Invalid, Err(Error::WrongLength)) => assert_eq!(buf, test.msg),
+                (_, result) => panic!("expected {:?} got {:?}", test.result, result),
             }
         }
     }

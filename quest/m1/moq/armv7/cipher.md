@@ -25,4 +25,3 @@ Guidance:
 ## Required
 
 - [SHA-1 and HMAC-SHA1](/quest/m1/moq/sha1.md) - the API and vectors this matches
-- [Raw ciphers](/quest/m1/moq/cipher.md) - the API and vectors this matches
