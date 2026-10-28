@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use aws_lc_rs::{digest, hmac, rand, signature};
 use http::Method;
+use object_store::ClientOptions;
 use object_store::aws::{AmazonS3Builder, AwsAuthorizer, AwsCredential};
 use object_store::azure::MicrosoftAzureBuilder;
 use object_store::client::{
@@ -18,7 +19,6 @@ use object_store::client::{
 use object_store::gcp::GoogleCloudStorageBuilder;
 use object_store::path::Path;
 use object_store::signer::Signer as _;
-use object_store::ClientOptions;
 use rustls_pki_types::PrivateKeyDer;
 use rustls_pki_types::pem::PemObject;
 
@@ -164,7 +164,9 @@ fn aws_rsa_key(pem: &[u8]) -> signature::RsaKeyPair {
         PrivateKeyDer::Pkcs8(key) => {
             signature::RsaKeyPair::from_pkcs8(key.secret_pkcs8_der()).unwrap()
         }
-        PrivateKeyDer::Pkcs1(key) => signature::RsaKeyPair::from_der(key.secret_pkcs1_der()).unwrap(),
+        PrivateKeyDer::Pkcs1(key) => {
+            signature::RsaKeyPair::from_der(key.secret_pkcs1_der()).unwrap()
+        }
         _ => panic!("not an RSA key"),
     }
 }
