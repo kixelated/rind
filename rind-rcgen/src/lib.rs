@@ -1,3 +1,7 @@
+// The example below is compile only: on aarch64, cranelift miscompiles
+// hashbrown's NEON scan in a panic=abort doctest dropping `CertificateParams`.
+// tests/rustls.rs runs the same steps.
+
 //! <h1 align="center">rind-rcgen</h1>
 //! <img width="40%" align="right" src="https://raw.githubusercontent.com/kixelated/rind/main/admin/picture.png">
 //!
@@ -6,8 +10,6 @@
 //! Build rcgen with `default-features = false` so it compiles no other crypto backend.
 //! rcgen then needs each certificate's serial number set explicitly.
 //!
-// Compile only: on aarch64, cranelift miscompiles hashbrown's NEON scan in a
-// panic=abort doctest dropping `CertificateParams`. tests/rustls.rs runs this.
 //! ```rust,no_run
 //! let key = rind_rcgen::KeyPair::generate().unwrap();
 //!
