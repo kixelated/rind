@@ -168,6 +168,9 @@ fn record_protection() {
 #[cfg(not(target_arch = "arm"))]
 #[test]
 fn quic_protection() {
+    use rustls::Side;
+    use rustls::quic::{Keys, Version};
+
     for suite in [
         rind_rustls::suites::TLS13_AES_128_GCM_SHA256,
         rind_rustls::suites::TLS13_AES_256_GCM_SHA384,
@@ -176,45 +179,48 @@ fn quic_protection() {
         let SupportedCipherSuite::Tls13(suite) = suite else {
             unreachable!()
         };
+        let label = suite.common.suite;
         let quic = suite.quic.unwrap();
-        // Each key consumes its own copy.
-        let key = || {
-            let key = AeadKey::from([0x42; 32]);
-            secret(key.as_ref());
-            key
-        };
-        let iv = || Iv::new([0x24; 12]);
+
+        // Initial keys come from a public connection ID, but deriving them from
+        // a secret one is the only public path to packet and header keys at
+        // each suite's own key length.
+        let secret_id = [0x42; 20];
+        secret(&secret_id);
+        let client = Keys::initial(Version::V1, suite, quic, &secret_id, Side::Client);
+        let server = Keys::initial(Version::V1, suite, quic, &secret_id, Side::Server);
+        let (send, recv) = (client.local, server.remote);
 
         let header = b"header";
         let mut packet = *b"payload";
-        let tag = quic
-            .packet_key(key(), iv())
+        let tag = send
+            .packet
             .encrypt_in_place(7, header, &mut packet)
             .unwrap();
         public(&packet);
         public(tag.as_ref());
 
         let mut sealed = [&packet[..], tag.as_ref()].concat();
-        let opened = quic
-            .packet_key(key(), iv())
+        let opened = recv
+            .packet
             .decrypt_in_place(7, header, &mut sealed)
             .unwrap();
         public(opened);
-        assert_eq!(opened, b"payload", "{:?}", suite.common.suite);
+        assert_eq!(opened, b"payload", "{label:?}");
 
         let sample = [0x11; 16];
         let (mut first, mut packet_number) = (0xc3, [1, 2, 3, 4]);
-        quic.header_protection_key(key())
+        send.header
             .encrypt_in_place(&sample, &mut first, &mut packet_number)
             .unwrap();
         public(&first);
         public(&packet_number);
-        quic.header_protection_key(key())
+        recv.header
             .decrypt_in_place(&sample, &mut first, &mut packet_number)
             .unwrap();
         public(&first);
         public(&packet_number);
-        assert_eq!((first, packet_number), (0xc3, [1, 2, 3, 4]));
+        assert_eq!((first, packet_number), (0xc3, [1, 2, 3, 4]), "{label:?}");
     }
 }
 
