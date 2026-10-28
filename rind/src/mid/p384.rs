@@ -111,7 +111,7 @@ impl PrivateKey {
     pub fn diffie_hellman(self, peer: &PublicKey) -> Result<SharedSecret, Error> {
         let _entry = low::Entry::new_secret();
         let result = JacobianMontPoint::multiply_w5(&self.scalar, &peer.precomp_w5).as_affine();
-        match result.on_curve() {
+        match low::ct::into_public(result.on_curve()) {
             true => Ok(SharedSecret(util::u64x6_to_big_endian(
                 &result.x().demont().0,
             ))),
@@ -309,7 +309,8 @@ impl AffineMontPoint {
 
         let lhs = self.y().mont_sqr();
 
-        lhs.public_eq(&rhs)
+        // Constant time, since `diffie_hellman` checks a secret point.
+        low::bignum_eq(&lhs.0, &rhs.0)
     }
 
     fn as_bytes_uncompressed(&self) -> [u8; PublicKey::BYTES] {
