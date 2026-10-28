@@ -4,6 +4,7 @@ members = [
   "rind",
   "rind-bench",
   "rind-cpuid",
+  "rind-rcgen",
   "rind-rustls",
   "fuzz"
 ]
