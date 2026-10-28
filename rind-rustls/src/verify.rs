@@ -42,7 +42,9 @@ pub(crate) static ALGORITHMS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorit
     ],
 };
 
-// rind does not yet build P-384 on 32-bit ARM.
+// rind does not yet build P-384 on 32-bit ARM. TLS 1.3 verifies with a scheme's
+// first entry, so `ECDSA_NISTP384_SHA384` is not offered rather than mapped to
+// P-256.
 #[cfg(target_arch = "arm")]
 pub(crate) static ALGORITHMS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms {
     all: &[
@@ -59,7 +61,6 @@ pub(crate) static ALGORITHMS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorit
     ],
     mapping: &[
         (SignatureScheme::ECDSA_NISTP256_SHA256, &[ECDSA_P256_SHA256]),
-        (SignatureScheme::ECDSA_NISTP384_SHA384, &[ECDSA_P256_SHA384]),
         (SignatureScheme::ED25519, &[ED25519]),
         (SignatureScheme::RSA_PSS_SHA512, &[RSA_PSS_SHA512]),
         (SignatureScheme::RSA_PSS_SHA384, &[RSA_PSS_SHA384]),
@@ -276,6 +277,20 @@ mod tests {
                     .is_ok()
             );
         };
+    }
+
+    // TLS 1.3 binds each ECDSA scheme to a curve and verifies with the first
+    // entry only, so that entry must be for the scheme's curve.
+    #[test]
+    fn test_ecdsa_scheme_curves() {
+        for (scheme, algorithms) in ALGORITHMS.mapping {
+            let curve = match scheme {
+                SignatureScheme::ECDSA_NISTP256_SHA256 => alg_id::ECDSA_P256,
+                SignatureScheme::ECDSA_NISTP384_SHA384 => alg_id::ECDSA_P384,
+                _ => continue,
+            };
+            assert_eq!(algorithms[0].public_key_alg_id(), curve, "{scheme:?}");
+        }
     }
 
     #[test]
