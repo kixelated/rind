@@ -50,8 +50,10 @@ Targets, refused rather than falling back:
   board publishing a few Mbps, so portable AEAD speed is enough; importing
   aws-lc's armv7 assembly and porting its C was rejected as far more
   unverified code for throughput the role does not need.
-- armv7 covers every operation the other arches do, so no adapter or MoQ
-  feature carries a per-target exclusion (maintainer, 2026-10-27).
+- armv7 runs every operation the `rind-*` adapters and MoQ use, behind the
+  same API, so no adapter or MoQ feature carries a per-target exclusion.
+  Operations with no consumer, SHA-3 and SHAKE, are not built there
+  (maintainer, 2026-10-27).
 - Every other target fails to compile. wasm32 does not build rind; nothing in
   MoQ needs native crypto there.
 
@@ -68,8 +70,7 @@ RustCrypto dependency.
 
 - [CPU check](/quest/m1/moq/cpu.md) - a public check naming the missing CPU feature, so MoQ refuses at startup
 - [HKDF](/quest/m1/moq/hkdf.md) - HKDF-SHA256/384 in rind's API for QUIC tokens, stateless resets, and moq-e2ee
-- [Raw ciphers](/quest/m1/moq/cipher.md) - the AES block, ChaCha20, and AES-CTR for QUIC and DTLS header protection and SRTP
-- [armv7 on libcrux](/quest/m1/moq/armv7/README.md) - armv7 Android and Linux run every operation the other arches do
+- [armv7 on libcrux](/quest/m1/moq/armv7/README.md) - armv7 Android and Linux run every operation the adapters and MoQ use
 - [rind-rustls covers MoQ](/quest/m1/moq/rustls.md) - TLS 1.2 and 1.3, every key type MoQ loads, and rustls's QUIC keys
 - [rind-jsonwebtoken](/quest/m1/moq/jsonwebtoken.md) - jsonwebtoken 11's `CryptoProvider` for every algorithm moq-auth accepts
 - [rind-rcgen](/quest/m1/moq/rcgen.md) - rcgen's `SigningKey` for self-signed and DTLS certificates

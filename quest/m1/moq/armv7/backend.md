@@ -5,9 +5,9 @@
 `cargo build` and `cargo test` of rind succeed for
 `armv7-unknown-linux-gnueabihf` (run under emulation in CI) and
 `cargo build` for `armv7-linux-androideabi`, on a backend made of libcrux's
-verified portable Rust: AES-GCM, ChaCha20-Poly1305, SHA-2, HMAC, HKDF, X25519,
-Ed25519, ECDSA P-256, RSA-PSS, and ML-KEM-768. Every other target still fails
-to compile.
+verified portable Rust: AES-GCM, ChaCha20-Poly1305, XChaCha20-Poly1305, SHA-2,
+HMAC, HKDF, X25519, Ed25519, ECDSA P-256, RSA-PSS, and ML-KEM-768. Every other
+target still fails to compile.
 
 ## Plan
 
@@ -20,10 +20,10 @@ unverified code for throughput the role does not need.
 Guidance:
 
 - Swap the backend at graviola's `low` layer where possible, so `mid` and
-  `high` stay shared and the API is the same on every arch. Where libcrux's
-  boundary sits higher (a whole AEAD or signature rather than a field
-  operation), choose the lowest layer that keeps the API identical, and say
-  why in the PR.
+  `high` stay shared and every operation armv7 builds keeps the other arches'
+  API. Where libcrux's boundary sits higher (a whole AEAD or signature rather
+  than a field operation), choose the lowest layer that keeps that API, and
+  say why in the PR.
 - No C: check `cargo tree -e normal,build -i cc --target <armv7 target>` holds
   nothing from rind's graph, since some libcrux crates have optional C or
   intrinsics features.

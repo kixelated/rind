@@ -21,7 +21,3 @@ Guidance:
   RFC 3711 and RFC 7714 vectors.
 
 Public API: the new crate.
-
-## Required
-
-- [Raw ciphers](/quest/m1/moq/cipher.md) - AES-CTR for SRTP AES-CM

@@ -123,6 +123,12 @@ We are grateful to:
 - [x] AES-GCM
 - [x] chacha20-poly1305 and xchacha20-poly1305
 
+### Unauthenticated ciphers
+
+- [x] AES block encryption, for QUIC header protection and DTLS 1.3 record number protection
+- [x] AES-CTR, for SRTP
+- [x] ChaCha20, for QUIC header protection and DTLS 1.3 record number protection
+
 ## Assorted technical details
 
 ### RSA
