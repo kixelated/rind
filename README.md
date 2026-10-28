@@ -104,6 +104,7 @@ We are grateful to:
 
 ### Hashing
 
+- [x] SHA1, for legacy protocols only (not usable for signatures)
 - [x] SHA256
 - [x] SHA384 & SHA512
 - [x] SHA3-256, SHA3-512, SHAKE128, and SHAKE256
@@ -185,7 +186,7 @@ have some different options depending on CPU features:
 - We have a basic Keccak-f using scalar instructions on aarch64.
 
 ### Symmetric cryptography
-SHA256 has straightforward implementations using hashing intrinsics
+SHA1 and SHA256 have straightforward implementations using hashing intrinsics
 (aka "SHA-NI" on x86_64, "sha" extension on aarch64) with runtime fallback
 on x86_64 to a pure Rust version if needed.
 

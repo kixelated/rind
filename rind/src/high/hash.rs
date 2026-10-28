@@ -4,13 +4,15 @@
 use core::ops::{Deref, DerefMut};
 
 use crate::low::ct_equal;
-use crate::mid::sha2;
+use crate::mid::{sha1, sha2};
 
 /// Output from a hash function.
 ///
 /// This has one variant per supported hash function.
 #[derive(Clone, Debug)]
 pub enum HashOutput {
+    /// Output from SHA1
+    Sha1([u8; sha1::Sha1Context::OUTPUT_SZ]),
     /// Output from SHA256
     Sha256([u8; sha2::Sha256Context::OUTPUT_SZ]),
     /// Output from SHA384
@@ -43,6 +45,7 @@ impl HashOutput {
 impl PartialEq for HashOutput {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
+            (Self::Sha1(s), Self::Sha1(o)) => ct_equal(s, o),
             (Self::Sha256(s), Self::Sha256(o)) => ct_equal(s, o),
             (Self::Sha384(s), Self::Sha384(o)) => ct_equal(s, o),
             (Self::Sha512(s), Self::Sha512(o)) => ct_equal(s, o),
@@ -54,6 +57,7 @@ impl PartialEq for HashOutput {
 impl AsRef<[u8]> for HashOutput {
     fn as_ref(&self) -> &[u8] {
         match self {
+            Self::Sha1(v) => v,
             Self::Sha256(v) => v,
             Self::Sha384(v) => v,
             Self::Sha512(v) => v,
@@ -64,6 +68,7 @@ impl AsRef<[u8]> for HashOutput {
 impl AsMut<[u8]> for HashOutput {
     fn as_mut(&mut self) -> &mut [u8] {
         match self {
+            Self::Sha1(v) => v,
             Self::Sha256(v) => v,
             Self::Sha384(v) => v,
             Self::Sha512(v) => v,
@@ -121,6 +126,11 @@ pub trait Hash {
     fn zeroed_output() -> HashOutput;
 }
 
+/// A [`Hash`] whose collision resistance holds, so signatures may use it.
+///
+/// This excludes [`LegacySha1`].
+pub trait SignatureHash: Hash {}
+
 /// A generic trait over supported hash function contexts.
 ///
 /// These may be cloned: the semantics of that forks the
@@ -134,6 +144,50 @@ pub trait HashContext: Clone {
 
     /// Complete the computation.
     fn finish(self) -> HashOutput;
+}
+
+/// This is SHA1, for legacy protocols only.
+///
+/// SHA1 is standardized in [FIPS180](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf).
+/// Its collision resistance is broken, so it is not a [`SignatureHash`].
+/// HMAC-SHA1 does not rely on collision resistance, and remains
+/// required by STUN (RFC 8489) and SRTP (RFC 3711).
+#[derive(Clone)]
+pub struct LegacySha1;
+
+impl Hash for LegacySha1 {
+    type Context = Sha1Context;
+
+    fn new() -> Self::Context {
+        Sha1Context(sha1::Sha1Context::new())
+    }
+
+    fn hash(bytes: &[u8]) -> HashOutput {
+        let mut ctx = Self::new();
+        ctx.update(bytes);
+        ctx.finish()
+    }
+
+    fn zeroed_block() -> HashBlock {
+        HashBlock::new(sha1::Sha1Context::BLOCK_SZ)
+    }
+
+    fn zeroed_output() -> HashOutput {
+        HashOutput::Sha1([0u8; sha1::Sha1Context::OUTPUT_SZ])
+    }
+}
+
+#[derive(Clone)]
+pub struct Sha1Context(sha1::Sha1Context);
+
+impl HashContext for Sha1Context {
+    fn update(&mut self, bytes: &[u8]) {
+        self.0.update(bytes)
+    }
+
+    fn finish(self) -> HashOutput {
+        HashOutput::Sha1(self.0.finish())
+    }
 }
 
 /// This is SHA256.
@@ -163,6 +217,8 @@ impl Hash for Sha256 {
         HashOutput::Sha256([0u8; sha2::Sha256Context::OUTPUT_SZ])
     }
 }
+
+impl SignatureHash for Sha256 {}
 
 #[derive(Clone)]
 pub struct Sha256Context(sha2::Sha256Context);
@@ -205,6 +261,8 @@ impl Hash for Sha384 {
     }
 }
 
+impl SignatureHash for Sha384 {}
+
 #[derive(Clone)]
 pub struct Sha384Context(sha2::Sha384Context);
 
@@ -246,6 +304,8 @@ impl Hash for Sha512 {
     }
 }
 
+impl SignatureHash for Sha512 {}
+
 #[derive(Clone)]
 pub struct Sha512Context(sha2::Sha512Context);
 
@@ -270,6 +330,7 @@ mod tests {
         #[derive(Debug)]
         enum Kind {
             None,
+            Sha1,
             Sha256,
             Sha384,
             Sha512,
@@ -295,6 +356,7 @@ mod tests {
         impl CavpSink for Cavp {
             fn on_meta(&mut self, meta: &str) {
                 self.kind = match meta {
+                    "L = 20" => Kind::Sha1,
                     "L = 32" => Kind::Sha256,
                     "L = 48" => Kind::Sha384,
                     "L = 64" => Kind::Sha512,
@@ -311,6 +373,11 @@ mod tests {
                     }
                     "MD" => match self.kind {
                         Kind::None => {}
+                        Kind::Sha1 => {
+                            let result = LegacySha1::hash(&self.message);
+                            let wanted = value.bytes();
+                            assert!(result.ct_equal(&wanted));
+                        }
                         Kind::Sha256 => {
                             let result = Sha256::hash(&self.message);
                             let wanted = value.bytes();
@@ -334,6 +401,10 @@ mod tests {
             }
         }
 
+        process_cavp(
+            "../thirdparty/cavp-sha1/SHA1ShortMsg.rsp",
+            &mut Cavp::default(),
+        );
         process_cavp(
             "../thirdparty/cavp/sha2/SHA256ShortMsg.rsp",
             &mut Cavp::default(),
@@ -365,6 +436,7 @@ mod tests {
         #[derive(Debug)]
         enum Kind {
             None,
+            Sha1,
             Sha256,
             Sha384,
             Sha512,
@@ -388,6 +460,7 @@ mod tests {
         impl CavpSink for Cavp {
             fn on_meta(&mut self, meta: &str) {
                 self.kind = match meta {
+                    "L = 20" => Kind::Sha1,
                     "L = 32" => Kind::Sha256,
                     "L = 48" => Kind::Sha384,
                     "L = 64" => Kind::Sha512,
@@ -401,6 +474,10 @@ mod tests {
                     "COUNT" => {}
                     "MD" => match self.kind {
                         Kind::None => {}
+                        Kind::Sha1 => {
+                            self.seed = monte_carlo_1000::<LegacySha1>(&self.seed);
+                            assert_eq!(self.seed, value.bytes());
+                        }
                         Kind::Sha256 => {
                             self.seed = monte_carlo_1000::<Sha256>(&self.seed);
                             assert_eq!(self.seed, value.bytes());
@@ -436,6 +513,10 @@ mod tests {
         }
 
         if std::env::var_os("SLOW_TESTS").is_some() {
+            process_cavp(
+                "../thirdparty/cavp-sha1/SHA1Monte.rsp",
+                &mut Cavp::default(),
+            );
             process_cavp(
                 "../thirdparty/cavp/sha2/SHA256Monte.rsp",
                 &mut Cavp::default(),
