@@ -171,7 +171,10 @@ pub mod signing {
 
 /// Cryptographic hash functions.
 pub mod hashing {
-    pub use super::high::hash::{Hash, HashContext, HashOutput, Sha256, Sha384, Sha512};
+    pub use super::high::hash::{
+        Hash, HashContext, HashOutput, LegacySha1, Sha256, Sha384, Sha512, SignatureHash,
+    };
+    pub use super::high::hkdf;
     pub use super::high::hmac;
     pub use super::mid::sha2;
     #[cfg(not(target_arch = "arm"))]
@@ -192,6 +195,21 @@ pub mod aead {
 pub mod cipher {
     pub use super::mid::aes::{Aes, AesCtr};
     pub use super::mid::chacha20::ChaCha20;
+}
+
+/// CPU support.
+///
+/// Every operation panics on a CPU missing a feature rind requires. Check at
+/// startup to refuse cleanly instead:
+///
+/// ```
+/// if let Err(missing) = rind::cpu::check() {
+///     eprintln!("{missing}");
+///     std::process::exit(1);
+/// }
+/// ```
+pub mod cpu {
+    pub use crate::low::cpu::{MissingFeature, check};
 }
 
 /// Cryptographic-quality random source

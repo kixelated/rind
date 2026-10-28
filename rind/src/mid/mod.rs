@@ -40,6 +40,7 @@ cfg_if::cfg_if! {
 }
 
 pub(super) mod rng;
+pub(super) mod sha1;
 pub mod sha2;
 pub(super) mod util;
 pub(super) mod x25519;

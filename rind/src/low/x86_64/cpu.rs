@@ -130,14 +130,17 @@ macro_rules! have_cpu_feature {
     ("vpclmulqdq") => {
         crate::low::x86_64::cpu::test_toggle("vpclmulqdq", is_x86_feature_detected!("vpclmulqdq"))
     };
-    ("bmi1") => {
-        crate::low::x86_64::cpu::test_toggle("bmi1", is_x86_feature_detected!("bmi1"))
-    };
     ("bmi2") => {
         crate::low::x86_64::cpu::test_toggle("bmi2", is_x86_feature_detected!("bmi2"))
     };
     ("adx") => {
         crate::low::x86_64::cpu::test_toggle("adx", is_x86_feature_detected!("adx"))
+    };
+    ("popcnt") => {
+        crate::low::x86_64::cpu::test_toggle("popcnt", is_x86_feature_detected!("popcnt"))
+    };
+    ("ssse3") => {
+        crate::low::x86_64::cpu::test_toggle("ssse3", is_x86_feature_detected!("ssse3"))
     };
     ("avx") => {
         crate::low::x86_64::cpu::test_toggle("avx", is_x86_feature_detected!("avx"))
@@ -204,6 +207,21 @@ impl HaveAvx512ForMlKem {
     }
 }
 
+/// Token type reflecting the check for CPU features needed for SHA1 using SHA-NI
+///
+/// A value of this type is proof that the CPU dynamic feature check has happened.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct HaveSha1(());
+
+impl HaveSha1 {
+    pub(crate) fn check() -> Option<Self> {
+        match have_cpu_feature!("sha") {
+            true => Some(Self(())),
+            false => None,
+        }
+    }
+}
+
 /// Token type reflecting the check for CPU features needed for SHA256 using SHA-NI
 ///
 /// A value of this type is proof that the CPU dynamic feature check has happened.
@@ -219,20 +237,6 @@ impl HaveSha256 {
     }
 }
 
-/// Token type reflecting the check for the BMI2 CPU feature
-///
-/// A value of this type is proof that the CPU dynamic feature check has happened.
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct HaveBmi2(());
-
-impl HaveBmi2 {
-    pub(crate) fn check() -> Option<Self> {
-        match have_cpu_feature!("bmi2") {
-            true => Some(Self(())),
-            false => None,
-        }
-    }
-}
 #[cfg(not(debug_assertions))]
 pub(crate) fn test_toggle(_id: &str, detected: bool) -> bool {
     detected
@@ -248,36 +252,45 @@ pub(crate) fn test_toggle(id: &str, detected: bool) -> bool {
     }
 }
 
-pub(crate) fn verify_cpu_features() {
-    // these are the cpu features we require unconditionally.
-    // this limits the library to x86_64 processors released after approx 2013.
-
-    // mandatory feature requirements
-    // our aes-gcm
-    assert!(have_cpu_feature!("aes"), "rind requires aes CPU support");
-    assert!(
-        have_cpu_feature!("pclmulqdq"),
-        "rind requires pclmulqdq CPU support"
-    );
-
-    // s2n-bignum non _alt versions
-    assert!(have_cpu_feature!("bmi1"), "rind requires bmi1 CPU support");
-
-    // see this valgrind bug: https://bugs.kde.org/show_bug.cgi?id=494162
-    assert!(
-        have_cpu_feature!("adx") || option_env!("VALGRIND_BUG_494162").is_some(),
-        "rind requires adx CPU support (rebuild with VALGRIND_BUG_494162 for valgrind compatibility)"
-    );
-
+/// Returns the first CPU feature we require unconditionally that this CPU lacks.
+///
+/// This limits the library to x86_64 processors released after approx 2014.
+/// Ordered oldest first, so the name points at the real gap. `sse3` and
+/// `sse4.1` are implied by `avx` in rustc's feature model.
+pub(crate) fn missing_cpu_feature() -> Option<&'static str> {
     // assorted intrinsic code
-    assert!(
-        is_x86_feature_detected!("avx"),
-        "rind requires avx CPU support"
-    );
-    assert!(have_cpu_feature!("avx2"), "rind requires avx2 CPU support");
-
-    // there are more features required, but (eg)
-    // ssse3 is implied by avx.
+    if !have_cpu_feature!("ssse3") {
+        return Some("ssse3");
+    }
+    // ML-KEM rejection sampling
+    if !have_cpu_feature!("popcnt") {
+        return Some("popcnt");
+    }
+    // our aes-gcm
+    if !have_cpu_feature!("aes") {
+        return Some("aes");
+    }
+    if !have_cpu_feature!("pclmulqdq") {
+        return Some("pclmulqdq");
+    }
+    // assorted intrinsic code
+    if !have_cpu_feature!("avx") {
+        return Some("avx");
+    }
+    if !have_cpu_feature!("avx2") {
+        return Some("avx2");
+    }
+    // s2n-bignum non _alt versions: mulx, and sha512's rorx
+    if !have_cpu_feature!("bmi2") {
+        return Some("bmi2");
+    }
+    // s2n-bignum non _alt versions: adcx and adox.
+    // see this valgrind bug: https://bugs.kde.org/show_bug.cgi?id=494162
+    // (build with VALGRIND_BUG_494162 set to run under valgrind)
+    if !have_cpu_feature!("adx") && option_env!("VALGRIND_BUG_494162").is_none() {
+        return Some("adx");
+    }
+    None
 }
 
 // --- Safe abstractions over common intrinsics operations ---

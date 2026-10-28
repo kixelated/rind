@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 
 /// The portable backend needs nothing beyond the base instruction set.
-pub(crate) fn verify_cpu_features() {}
+pub(crate) fn missing_cpu_feature() -> Option<&'static str> {
+    None
+}
 
 /// armv7 has no data-independent timing mode to enable.
 pub(crate) fn enter_cpu_state() -> u32 {

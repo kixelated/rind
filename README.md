@@ -47,13 +47,16 @@ but there is also a public API for general-purpose use.
 - `aarch64` requires `aes`, `sha2`, `pmull`, and `neon` CPU features.
   (This notably excludes Raspberry PI 4 and earlier, which can run the 32-bit
   `arm` build, but covers Raspberry Pi 5.)
-- `x86_64` requires `aes`, `ssse3`, `avx`, `avx2`, `adx`, `bmi2`, and `pclmulqdq` CPU features.
+- `x86_64` requires `aes`, `ssse3`, `popcnt`, `avx`, `avx2`, `adx`, `bmi2`, and `pclmulqdq` CPU features.
   (This is most x86_64 CPUs made since around ~2014.)
 - 32-bit `arm` (tested on `armv7-unknown-linux-gnueabihf`, and built for
   `armv7-linux-androideabi`) runs [libcrux]'s verified portable Rust instead,
   and needs no CPU features. It does not yet offer P-384, RSA key generation,
   the unauthenticated ciphers, SHA-3, or SHAKE, and an Ed25519 public key that is not a curve point is
   refused when verifying rather than when decoding.
+
+Every operation panics on a CPU missing one of these. Call `rind::cpu::check()`
+at startup to get an error naming the missing feature instead.
 
 ## Building and Testing
 
@@ -113,10 +116,12 @@ We are grateful to:
 
 ### Hashing
 
+- [x] SHA1, for legacy protocols only (not usable for signatures)
 - [x] SHA256
 - [x] SHA384 & SHA512
 - [x] SHA3-256, SHA3-512, SHAKE128, and SHAKE256
 - [x] HMAC
+- [x] HKDF
 - [x] HMAC-DRBG
 
 ### Key exchange
@@ -200,9 +205,10 @@ have some different options depending on CPU features:
 - We have a basic Keccak-f using scalar instructions on aarch64.
 
 ### Symmetric cryptography
-SHA256 has straightforward implementations using hashing intrinsics
+SHA1 and SHA256 have straightforward implementations using hashing intrinsics
 (aka "SHA-NI" on x86_64, "sha" extension on aarch64) with runtime fallback
-on x86_64 to a pure Rust version if needed.
+on x86_64 to a pure Rust version if needed. 32-bit `arm` always runs that pure
+Rust SHA1, since libcrux has none.
 
 SHA384/SHA512 on x86_64 has an AVX2 by-4 implementation, plus an AVX2 interleaved
 single block implementation.

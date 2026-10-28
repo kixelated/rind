@@ -23,13 +23,16 @@ mod generic {
     pub(crate) mod mlkem768;
     #[cfg(not(target_arch = "arm"))]
     pub(crate) mod poly1305;
+    #[cfg(any(target_arch = "x86_64", target_arch = "arm"))]
+    pub(super) mod sha1;
     #[cfg(target_arch = "x86_64")]
     pub(super) mod sha256;
-    #[cfg(not(target_arch = "arm"))]
+    #[cfg(target_arch = "aarch64")]
     pub(super) mod sha512;
     pub(super) mod zeroise;
 }
 
+pub(crate) mod cpu;
 mod entry;
 #[cfg(not(target_arch = "arm"))]
 mod posint;
@@ -53,7 +56,7 @@ cfg_if::cfg_if! {
     if #[cfg(target_arch = "x86_64")] {
         mod x86_64;
 
-        pub(in crate::low) use x86_64::cpu::{enter_cpu_state, zero_bytes, ct_compare_bytes, leave_cpu_state, verify_cpu_features};
+        pub(in crate::low) use x86_64::cpu::{enter_cpu_state, zero_bytes, ct_compare_bytes, leave_cpu_state, missing_cpu_feature};
         pub(crate) use x86_64::chacha20;
         pub(crate) use x86_64::aes::AesKey;
         pub(crate) use x86_64::aes_ctr;
@@ -130,8 +133,9 @@ cfg_if::cfg_if! {
         pub(crate) use x86_64::p256_montjmixadd::p256_montjmixadd;
         pub(crate) use x86_64::p384_montjadd::p384_montjadd;
         pub(crate) use x86_64::p384_montjdouble::p384_montjdouble;
+        pub(crate) use x86_64::sha1_mux::sha1_compress_blocks;
         pub(crate) use x86_64::sha256_mux::sha256_compress_blocks;
-        pub(crate) use x86_64::sha512_mux::sha512_compress_blocks;
+        pub(crate) use x86_64::sha512::sha512_compress_blocks;
         pub(crate) use x86_64::sha3_keccak_f1600::sha3_keccak_f1600;
         pub(crate) use x86_64::sha3_keccak4_f1600_shim::sha3_keccak4_f1600;
         pub(crate) use x86_64::sha3_keccak2of4_f1600::sha3_keccak2of4_f1600;
@@ -139,7 +143,7 @@ cfg_if::cfg_if! {
     } else if #[cfg(target_arch = "aarch64")] {
         mod aarch64;
 
-        pub(in crate::low) use aarch64::cpu::{enter_cpu_state, zero_bytes, ct_compare_bytes, leave_cpu_state, verify_cpu_features};
+        pub(in crate::low) use aarch64::cpu::{enter_cpu_state, zero_bytes, ct_compare_bytes, leave_cpu_state, missing_cpu_feature};
         pub(crate) use aarch64::aes::AesKey;
         pub(crate) use aarch64::aes_ctr;
         pub(crate) use aarch64::aes_gcm;
@@ -211,6 +215,7 @@ cfg_if::cfg_if! {
         pub(crate) use aarch64::p256_montjmixadd::p256_montjmixadd;
         pub(crate) use aarch64::p384_montjadd::p384_montjadd;
         pub(crate) use aarch64::p384_montjdouble::p384_montjdouble;
+        pub(crate) use aarch64::sha1::sha1_compress_blocks;
         pub(crate) use aarch64::sha256::sha256_compress_blocks;
         pub(crate) use aarch64::sha3_keccak_f1600_mux::sha3_keccak_f1600;
         pub(crate) use aarch64::sha3_keccak4_f1600_mux::sha3_keccak4_f1600;
@@ -223,11 +228,13 @@ cfg_if::cfg_if! {
     } else if #[cfg(target_arch = "arm")] {
         mod arm;
 
-        pub(in crate::low) use arm::cpu::{enter_cpu_state, zero_bytes, ct_compare_bytes, leave_cpu_state, verify_cpu_features};
+        pub(in crate::low) use arm::cpu::{enter_cpu_state, zero_bytes, ct_compare_bytes, leave_cpu_state, missing_cpu_feature};
         pub(crate) use arm::bignum_eq::bignum_eq;
         pub(crate) use arm::curve25519::{curve25519_x25519, curve25519_x25519base};
         pub(crate) use arm::posint::{PosInt, SecretPosInt};
         pub(crate) use arm::sha2::{sha256_compress_blocks, sha512_compress_blocks};
+        // libcrux has no SHA-1, so this shares x86_64's portable fallback.
+        pub(crate) use generic::sha1::sha1_compress_blocks;
     } else {
         compile_error!("This crate only supports x86_64, aarch64, or arm");
     }
