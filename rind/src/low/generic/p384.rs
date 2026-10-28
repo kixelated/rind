@@ -12,10 +12,9 @@
 //! than twice either modulus.
 
 use fiat_crypto::p384_32 as fp;
+use fiat_crypto::p384_32::fiat_p384_montgomery_domain_field_element as Fe;
 use fiat_crypto::p384_scalar_32 as fs;
-
-use fp::fiat_p384_montgomery_domain_field_element as Fe;
-use fs::fiat_p384_scalar_montgomery_domain_field_element as Fs;
+use fiat_crypto::p384_scalar_32::fiat_p384_scalar_montgomery_domain_field_element as Fs;
 
 /// z := x * y / 2^384 mod p_384
 pub(crate) fn bignum_montmul_p384(z: &mut [u64; 6], x: &[u64; 6], y: &[u64; 6]) {
