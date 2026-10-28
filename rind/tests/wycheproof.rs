@@ -783,8 +783,9 @@ fn test_chacha20poly1305() {
 
 #[test]
 fn test_chacha20() {
-    let data_file = File::open("../thirdparty/wycheproof/testvectors_v1/chacha20_counter_test.json")
-        .expect("failed to open data file");
+    let data_file =
+        File::open("../thirdparty/wycheproof/testvectors_v1/chacha20_counter_test.json")
+            .expect("failed to open data file");
 
     let reader = BufReader::new(data_file);
     let tests: TestFile = serde_json::from_reader(reader).expect("invalid test JSON");

@@ -62,16 +62,29 @@ fn _apply_8(
     let b6 = _mm_aesenclast_si128(b6, rk_last);
     let b7 = _mm_aesenclast_si128(b7, rk_last);
 
-    // SAFETY: `inout` is 128 bytes, readable and writable
+    // SAFETY: `inout` is 128 bytes and readable
+    let (p0, p1, p2, p3, p4, p5, p6, p7) = unsafe {
+        (
+            _mm_loadu_si128(inout.as_ptr().add(0).cast()),
+            _mm_loadu_si128(inout.as_ptr().add(16).cast()),
+            _mm_loadu_si128(inout.as_ptr().add(32).cast()),
+            _mm_loadu_si128(inout.as_ptr().add(48).cast()),
+            _mm_loadu_si128(inout.as_ptr().add(64).cast()),
+            _mm_loadu_si128(inout.as_ptr().add(80).cast()),
+            _mm_loadu_si128(inout.as_ptr().add(96).cast()),
+            _mm_loadu_si128(inout.as_ptr().add(112).cast()),
+        )
+    };
+
+    // SAFETY: `inout` is 128 bytes and writable
     unsafe {
-        let p = inout.as_mut_ptr();
-        _mm_storeu_si128(p.add(0).cast(), _mm_xor_si128(b0, _mm_loadu_si128(p.add(0).cast())));
-        _mm_storeu_si128(p.add(16).cast(), _mm_xor_si128(b1, _mm_loadu_si128(p.add(16).cast())));
-        _mm_storeu_si128(p.add(32).cast(), _mm_xor_si128(b2, _mm_loadu_si128(p.add(32).cast())));
-        _mm_storeu_si128(p.add(48).cast(), _mm_xor_si128(b3, _mm_loadu_si128(p.add(48).cast())));
-        _mm_storeu_si128(p.add(64).cast(), _mm_xor_si128(b4, _mm_loadu_si128(p.add(64).cast())));
-        _mm_storeu_si128(p.add(80).cast(), _mm_xor_si128(b5, _mm_loadu_si128(p.add(80).cast())));
-        _mm_storeu_si128(p.add(96).cast(), _mm_xor_si128(b6, _mm_loadu_si128(p.add(96).cast())));
-        _mm_storeu_si128(p.add(112).cast(), _mm_xor_si128(b7, _mm_loadu_si128(p.add(112).cast())));
+        _mm_storeu_si128(inout.as_mut_ptr().add(0).cast(), _mm_xor_si128(b0, p0));
+        _mm_storeu_si128(inout.as_mut_ptr().add(16).cast(), _mm_xor_si128(b1, p1));
+        _mm_storeu_si128(inout.as_mut_ptr().add(32).cast(), _mm_xor_si128(b2, p2));
+        _mm_storeu_si128(inout.as_mut_ptr().add(48).cast(), _mm_xor_si128(b3, p3));
+        _mm_storeu_si128(inout.as_mut_ptr().add(64).cast(), _mm_xor_si128(b4, p4));
+        _mm_storeu_si128(inout.as_mut_ptr().add(80).cast(), _mm_xor_si128(b5, p5));
+        _mm_storeu_si128(inout.as_mut_ptr().add(96).cast(), _mm_xor_si128(b6, p6));
+        _mm_storeu_si128(inout.as_mut_ptr().add(112).cast(), _mm_xor_si128(b7, p7));
     }
 }
