@@ -9,9 +9,14 @@ condition holds.
 
 ## Plan
 
-The release workflow needs the GitHub App and `CARGO_REGISTRY_TOKEN` secrets
-(see `.github/workflows/release.yml`). Reserve each `rind-*` crate name before
-its first release if it is not yet taken.
+The maintainer reset the numbering: every published crate starts at 0.1.0
+rather than continuing graviola's, so the first release publishes `rind` 0.1.0
+over the 0.0.0 placeholder.
+
+The release workflow authenticates as moq's GitHub App and needs the
+`APP_CLIENT_ID`, `APP_PRIVATE_KEY`, and `CARGO_REGISTRY_TOKEN` secrets (see
+`.github/workflows/release.yml`). Reserve each `rind-*` crate name before its
+first release if it is not yet taken.
 
 ## Required
 

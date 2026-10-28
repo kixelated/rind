@@ -1,6 +1,6 @@
 [package]
 name = "rind-rustls"
-version = "0.4.0"
+version = "0.1.0"
 edition = "2024"
 repository = "https://github.com/kixelated/rind"
 license = "Apache-2.0 OR ISC OR MIT-0"
@@ -10,7 +10,7 @@ rust-version = "1.85"
 readme = "README.md"
 
 [dependencies]
-rind = { version = "0.4.0", path = "../rind" }
+rind = { version = "0.1.0", path = "../rind" }
 rustls = { version = "0.23.18", default-features = false, features = ["std", "tls12"] }
 
 [dev-dependencies]
