@@ -128,7 +128,25 @@ pub trait Hash {
 
 /// A [`Hash`] whose collision resistance holds, so signatures may use it.
 ///
-/// This excludes [`LegacySha1`].
+/// This excludes [`LegacySha1`]:
+///
+/// ```
+/// use rind::hashing::Sha256;
+/// use rind::signing::ecdsa::{P256, VerifyingKey};
+///
+/// fn verify(key: &VerifyingKey<P256>) {
+///     let _ = key.verify::<Sha256>(&[b"message"], b"signature");
+/// }
+/// ```
+///
+/// ```compile_fail
+/// use rind::hashing::LegacySha1;
+/// use rind::signing::ecdsa::{P256, VerifyingKey};
+///
+/// fn verify(key: &VerifyingKey<P256>) {
+///     let _ = key.verify::<LegacySha1>(&[b"message"], b"signature");
+/// }
+/// ```
 pub trait SignatureHash: Hash {}
 
 /// A generic trait over supported hash function contexts.
