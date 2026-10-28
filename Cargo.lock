@@ -2105,7 +2105,7 @@ dependencies = [
 
 [[package]]
 name = "rind"
-version = "0.4.2"
+version = "0.1.0"
 dependencies = [
  "aws-lc-rs",
  "cfg-if",
@@ -2165,7 +2165,7 @@ dependencies = [
 
 [[package]]
 name = "rind-rustls"
-version = "0.4.0"
+version = "0.1.0"
 dependencies = [
  "env_logger",
  "http",
