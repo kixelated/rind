@@ -95,3 +95,7 @@ harness = false
 [[bench]]
 name = "ed25519"
 harness = false
+
+[[bench]]
+name = "cipher"
+harness = false
