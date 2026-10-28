@@ -15,7 +15,3 @@ other path is fine (maintainer, 2026-10-27, on #7): the one-backend rule is
 about graviola vs libcrux, not per-instruction paths.
 
 Measure at SRTP packet sizes first (see the [epic](/quest/m2/perf/README.md)).
-
-## Required
-
-- [SHA-1 and HMAC-SHA1](/quest/m1/moq/sha1.md) - the portable path this replaces
