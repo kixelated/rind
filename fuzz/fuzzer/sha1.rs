@@ -28,10 +28,8 @@ fuzz_target!(|op: Operation| {
             assert_eq!(left.as_ref(), right.as_ref());
         }
         Operation::HmacSha1 { key, steps } => {
-            let mut left = hmac::Context::with_key(&hmac::Key::new(
-                hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY,
-                &key,
-            ));
+            let mut left =
+                hmac::Context::with_key(&hmac::Key::new(hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY, &key));
             let mut right = hashing::hmac::Hmac::<hashing::LegacySha1>::new(key);
 
             for s in steps {
