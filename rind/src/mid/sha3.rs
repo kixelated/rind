@@ -7,6 +7,7 @@
 
 use core::ops::Range;
 
+use crate::low::cpu::verify_cpu_features;
 use crate::low::{Blockwise, sha3_keccak_f1600, sha3_keccak2of4_f1600, sha3_keccak4_f1600};
 
 /// A context for incremental computation of SHA3-256.
@@ -223,6 +224,7 @@ pub(crate) struct SqueezingSponge<const R: usize> {
 impl<const R: usize> SqueezingSponge<R> {
     /// Squeeze into `output`.
     pub(crate) fn squeeze(&mut self, output: &mut [u8]) {
+        verify_cpu_features();
         for chunk in output.chunks_mut(R) {
             self.squeeze_current(chunk);
             sha3_keccak_f1600(&mut self.s, &RC);
@@ -405,6 +407,7 @@ impl<const R: usize, const PAD: u8> Sponge<R, PAD> {
     }
 
     fn absorb(&mut self, bytes: &[u8]) {
+        verify_cpu_features();
         let bytes = self.buffer.add_leading(bytes);
 
         if let Some(block) = self.buffer.take() {
@@ -421,6 +424,7 @@ impl<const R: usize, const PAD: u8> Sponge<R, PAD> {
 
     #[must_use]
     fn absorb_final(mut self) -> SqueezingSponge<R> {
+        verify_cpu_features();
         match R - self.buffer.used() {
             1 => {
                 self.buffer.add_leading(&[PAD | 0x80]);

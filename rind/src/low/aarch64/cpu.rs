@@ -204,14 +204,21 @@ impl HaveSha3 {
     }
 }
 
-pub(crate) fn verify_cpu_features() {
-    assert!(have_cpu_feature!("neon"), "rind requires neon CPU support");
-    assert!(have_cpu_feature!("aes"), "rind requires aes CPU support");
-    assert!(
-        have_cpu_feature!("pmull"),
-        "rind requires pmull CPU support"
-    );
-    assert!(have_cpu_feature!("sha2"), "rind requires sha2 CPU support");
+/// Returns the first CPU feature we require unconditionally that this CPU lacks.
+pub(crate) fn missing_cpu_feature() -> Option<&'static str> {
+    if !have_cpu_feature!("neon") {
+        return Some("neon");
+    }
+    if !have_cpu_feature!("aes") {
+        return Some("aes");
+    }
+    if !have_cpu_feature!("pmull") {
+        return Some("pmull");
+    }
+    if !have_cpu_feature!("sha2") {
+        return Some("sha2");
+    }
+    None
 }
 
 mod dit {

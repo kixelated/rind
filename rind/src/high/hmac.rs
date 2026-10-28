@@ -76,7 +76,7 @@ impl<H: Hash> Hmac<H> {
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
-    use crate::high::hash::{Sha256, Sha384, Sha512};
+    use crate::high::hash::{LegacySha1, Sha256, Sha384, Sha512};
     use crate::test::*;
 
     #[test]
@@ -98,10 +98,38 @@ mod tests {
     }
 
     #[test]
+    fn secret_key_and_message() {
+        // Under `admin/ctgrind`, nothing may branch on or index by the key or
+        // message. Keys longer than a block are hashed first.
+        fn check<H: Hash>() {
+            for key_len in [16, 200] {
+                let key = vec![0x5a; key_len];
+                let message = [0xa5; 300];
+
+                let mut h = Hmac::<H>::new(&key);
+                h.update(message);
+                let wanted = h.finish();
+
+                crate::low::ct::secret_slice(&key);
+                crate::low::ct::secret_slice(&message);
+                let mut h = Hmac::<H>::new(&key);
+                h.update(message);
+                assert_eq!(crate::low::ct::into_public(h.finish()), wanted);
+            }
+        }
+
+        check::<LegacySha1>();
+        check::<Sha256>();
+        check::<Sha384>();
+        check::<Sha512>();
+    }
+
+    #[test]
     fn cavp() {
         #[derive(Debug)]
         enum Kind {
             None,
+            Sha1,
             Sha256,
             Sha384,
             Sha512,
@@ -127,7 +155,8 @@ mod tests {
         impl CavpSink for Cavp {
             fn on_meta(&mut self, meta: &str) {
                 self.kind = match meta {
-                    "L=20" | "L=28" => Kind::None,
+                    "L=20" => Kind::Sha1,
+                    "L=28" => Kind::None,
                     "L=32" => Kind::Sha256,
                     "L=48" => Kind::Sha384,
                     "L=64" => Kind::Sha512,
@@ -143,6 +172,21 @@ mod tests {
                     "Msg" => self.message = value.bytes(),
                     "Mac" => match self.kind {
                         Kind::None => {}
+                        Kind::Sha1 => {
+                            let mut h = Hmac::<LegacySha1>::new(&self.key);
+                            h.update(&self.message);
+                            let tag = h.finish();
+
+                            let wanted = value.bytes();
+
+                            match wanted.len() {
+                                20 => assert!(tag.ct_equal(&wanted)),
+                                16 => assert!(tag.truncated_ct_equal::<16>(&wanted)),
+                                12 => assert!(tag.truncated_ct_equal::<12>(&wanted)),
+                                10 => assert!(tag.truncated_ct_equal::<10>(&wanted)),
+                                len => todo!("unhandled tag len {len}"),
+                            }
+                        }
                         Kind::Sha256 => {
                             let mut h = Hmac::<Sha256>::new(&self.key);
                             h.update(&self.message);
