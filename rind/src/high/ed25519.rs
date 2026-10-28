@@ -49,6 +49,9 @@ impl Ed25519VerifyingKey {
     }
 
     /// Decode from the 32-byte Ed25519 public key encoding.
+    ///
+    /// On 32-bit ARM, an encoding that is not a curve point is refused
+    /// by [`Self::verify()`] rather than here.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
         let _entry = Entry::new_public();
         ed25519::VerifyingKey::from_bytes(bytes).map(Self)
@@ -264,9 +267,18 @@ mod tests {
             0x05, 0xee, 0x0d, 0x9e,
         ];
         assert!(Ed25519VerifyingKey::from_bytes(GOOD).is_ok());
+        #[cfg(not(target_arch = "arm"))]
         assert_eq!(
             Ed25519VerifyingKey::from_bytes(&[0xff; 32]).err(),
             Some(Error::NotOnCurve)
+        );
+        #[cfg(target_arch = "arm")]
+        assert_eq!(
+            Ed25519VerifyingKey::from_bytes(&[0xff; 32])
+                .unwrap()
+                .verify(&[0; 64], b"")
+                .err(),
+            Some(Error::BadSignature)
         );
         assert_eq!(
             Ed25519VerifyingKey::from_bytes(&[0; 31]).err(),

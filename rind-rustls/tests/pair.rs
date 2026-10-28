@@ -65,6 +65,7 @@ fn all_key_exchanges() {
     for other in OtherProvider::OTHERS {
         test_key_exchange(&rind_rustls::kx::X25519, *other, KeyType::Rsa2048);
         test_key_exchange(&rind_rustls::kx::P256, *other, KeyType::Rsa2048);
+        #[cfg(not(target_arch = "arm"))]
         test_key_exchange(&rind_rustls::kx::P384, *other, KeyType::Rsa2048);
     }
 }
@@ -191,11 +192,13 @@ enum KeyType {
     Rsa3072,
     Rsa4096,
     EcdsaP256,
+    #[cfg(not(target_arch = "arm"))]
     EcdsaP384,
     Ed25519,
 }
 
 impl KeyType {
+    #[cfg(not(target_arch = "arm"))]
     const ALL: &[Self] = &[
         Self::Rsa2048,
         Self::Rsa3072,
@@ -204,8 +207,19 @@ impl KeyType {
         Self::EcdsaP384,
         Self::Ed25519,
     ];
+    #[cfg(target_arch = "arm")]
+    const ALL: &[Self] = &[
+        Self::Rsa2048,
+        Self::Rsa3072,
+        Self::Rsa4096,
+        Self::EcdsaP256,
+        Self::Ed25519,
+    ];
     const RSA: &[Self] = &[Self::Rsa2048, Self::Rsa3072, Self::Rsa4096];
+    #[cfg(not(target_arch = "arm"))]
     const ECDSA: &[Self] = &[Self::EcdsaP256, Self::EcdsaP384];
+    #[cfg(target_arch = "arm")]
+    const ECDSA: &[Self] = &[Self::EcdsaP256];
 
     fn slug(self) -> &'static str {
         match self {
@@ -213,6 +227,7 @@ impl KeyType {
             Self::Rsa3072 => "rsa-3072",
             Self::Rsa4096 => "rsa-4096",
             Self::EcdsaP256 => "ecdsa-p256",
+            #[cfg(not(target_arch = "arm"))]
             Self::EcdsaP384 => "ecdsa-p384",
             Self::Ed25519 => "ed25519",
         }

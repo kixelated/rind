@@ -12,6 +12,7 @@ portable path runs at about 615 MiB/s on 64 KB, against RustCrypto's 726 MiB/s
 and aws-lc-rs's 1.18 GiB/s. aws-lc computes the message schedule with AVX2,
 which every CPU rind accepts has. Runtime selection between SHA-NI and the
 other path is fine (maintainer, 2026-10-27, on #7): the one-backend rule is
-about graviola vs libcrux, not per-instruction paths.
+about graviola vs libcrux, not per-instruction paths. armv7 also runs the
+portable compression, so keep it there.
 
 Measure at SRTP packet sizes first (see the [epic](/quest/m2/perf/README.md)).

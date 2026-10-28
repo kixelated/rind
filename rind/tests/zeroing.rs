@@ -67,6 +67,7 @@ fn ecdsa_p256() {
 }
 
 #[test]
+#[cfg(not(target_arch = "arm"))]
 fn ecdsa_p384() {
     use rind::signing::ecdsa::*;
     let ecdsa =
@@ -107,6 +108,7 @@ fn ecdh_p256() {
 }
 
 #[test]
+#[cfg(not(target_arch = "arm"))]
 fn ecdh_p384() {
     use rind::key_agreement::p384::PrivateKey;
     let p384 = PrivateKey::new_random().unwrap();
@@ -134,6 +136,7 @@ fn aes_gcm() {
 }
 
 #[test]
+#[cfg(not(target_arch = "arm"))]
 fn cipher() {
     use rind::cipher::{Aes, AesCtr, ChaCha20};
     for len in [16, 32] {

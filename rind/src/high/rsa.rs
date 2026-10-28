@@ -1,6 +1,7 @@
 // Written for Graviola by Joe Birr-Pixton, 2024.
 // SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 
+#[cfg(not(target_arch = "arm"))]
 pub use rsa_priv::KeySize;
 
 use crate::Error;
@@ -235,8 +236,9 @@ impl VerifyingKey {
 ///
 /// You can generate a new key using [`SigningKey::generate()`], and then
 /// serialize it using [`SigningKey::to_pkcs1_der()`] or [`SigningKey::to_pkcs8_der()`].
+/// 32-bit ARM does not yet support key generation.
 ///
-/// ```
+/// ```ignore-arm
 /// use rind::signing::rsa::{KeySize, SigningKey};
 /// use tempfile::TempDir;
 /// let key = SigningKey::generate(KeySize::Rsa2048)?;
@@ -263,6 +265,7 @@ impl SigningKey {
     /// # Warning
     /// Unlike other private key operations in rind, RSA key generation is not side-channel safe.
     /// Avoid generating keys in untrusted multi-tenant or physical environments.
+    #[cfg(not(target_arch = "arm"))]
     pub fn generate(size: KeySize) -> Result<Self, Error> {
         let _entry = Entry::new_secret();
         rsa_priv::RsaPrivateKey::generate(size, &mut SystemRandom, &mut SystemRandom)
@@ -691,6 +694,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_arch = "arm"))]
     fn key_generation_smoke_test() {
         let mut sizes = vec![2048, 3072];
 
