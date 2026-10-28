@@ -38,11 +38,10 @@ Targets, refused rather than falling back:
 
 - Exactly one backend compiles per arch, never both in one binary
   (maintainer, 2026-10-26).
-- x86_64 and aarch64 run graviola's backend. x86_64 needs aes, ssse3, avx,
-  avx2, adx, bmi2, and pclmulqdq; aarch64 needs aes, sha2, pmull, and neon.
-- rind exposes a CPU check that names the missing feature
-  ([CPU check](/quest/m1/moq/cpu.md)), so MoQ fails at startup instead of
-  panicking on its first handshake. Hosts missing a feature are refused, as are
+- x86_64 and aarch64 run graviola's backend. x86_64 needs aes, ssse3, popcnt,
+  avx, avx2, adx, bmi2, and pclmulqdq; aarch64 needs aes, sha2, pmull, and neon.
+- `rind::cpu::check()` names the missing feature, so MoQ fails at startup
+  instead of panicking on its first handshake. Hosts missing a feature are refused, as are
   aarch64 boards without crypto extensions (Raspberry Pi 4, CM4, Zero 2 W),
   which run the armv7 build instead.
 - armv7 (Android and Linux gnueabihf) runs libcrux's verified portable Rust
@@ -66,7 +65,6 @@ RustCrypto dependency.
 
 ## Required
 
-- [CPU check](/quest/m1/moq/cpu.md) - a public check naming the missing CPU feature, so MoQ refuses at startup
 - [HKDF](/quest/m1/moq/hkdf.md) - HKDF-SHA256/384 in rind's API for QUIC tokens, stateless resets, and moq-e2ee
 - [SHA-1 and HMAC-SHA1](/quest/m1/moq/sha1.md) - for STUN MESSAGE-INTEGRITY and SRTP AES-CM-HMAC-SHA1-80
 - [Raw ciphers](/quest/m1/moq/cipher.md) - the AES block, ChaCha20, and AES-CTR for QUIC and DTLS header protection and SRTP

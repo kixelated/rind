@@ -20,7 +20,6 @@ configured. The token can publish new crates, so release-plz creates each
 
 ## Required
 
-- [CPU check](/quest/m1/moq/cpu.md) - part of the release
 - [HKDF](/quest/m1/moq/hkdf.md) - part of the release
 - [SHA-1 and HMAC-SHA1](/quest/m1/moq/sha1.md) - part of the release
 - [Raw ciphers](/quest/m1/moq/cipher.md) - part of the release

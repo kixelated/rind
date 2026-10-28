@@ -179,6 +179,21 @@ pub mod aead {
     pub use super::mid::xchacha20poly1305::XChaCha20Poly1305;
 }
 
+/// CPU support.
+///
+/// Every operation panics on a CPU missing a feature rind requires. Check at
+/// startup to refuse cleanly instead:
+///
+/// ```
+/// if let Err(missing) = rind::cpu::check() {
+///     eprintln!("{missing}");
+///     std::process::exit(1);
+/// }
+/// ```
+pub mod cpu {
+    pub use crate::low::cpu::{MissingFeature, check};
+}
+
 /// Cryptographic-quality random source
 pub mod random {
     /// Fills the entirety of `out` with cryptographic-quality random bytes.

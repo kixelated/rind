@@ -465,21 +465,16 @@ fn sha512_compress_block(state: &mut [u64; 8], block: &[u8]) {
     state[7] = state[7].wrapping_add(h);
 }
 
-pub(in crate::low) fn sha512_compress_blocks(
-    state: &mut [u64; 8],
-    blocks: &[u8],
-    _token: super::cpu::HaveBmi2,
-) {
+pub(crate) fn sha512_compress_blocks(state: &mut [u64; 8], blocks: &[u8]) {
     let (iter4, remainder) = blocks.as_chunks::<512>();
     for block4 in iter4 {
-        // SAFETY: `_token` proves caller checked cpu features for `bmi2`;
-        // `avx` and `avx2` required by crate.
+        // SAFETY: this crate requires the `avx`, `avx2` and `bmi2` cpu features
         unsafe { sha512_compress_4_blocks(state, block4.as_ptr().cast()) };
     }
 
     let (chunks, _) = remainder.as_chunks::<128>();
     for block in chunks {
-        // SAFETY: caller checks cpu features for `bmi2`; `avx` and `avx2` required by crate.
+        // SAFETY: this crate requires the `avx`, `avx2` and `bmi2` cpu features
         unsafe { sha512_compress_block(state, block) }
     }
 }
