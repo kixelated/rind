@@ -18,7 +18,7 @@ fuzz_target!(|op: Operation| {
                 &plain,
             );
             let left = {
-                let k = graviola::aead::ChaCha20Poly1305::new(key);
+                let k = rind::aead::ChaCha20Poly1305::new(key);
                 let mut cipher = plain.clone();
                 let mut tag = [0u8; 16];
                 k.encrypt(&nonce, &aad, &mut cipher, &mut tag);
@@ -39,7 +39,7 @@ fuzz_target!(|op: Operation| {
         } => {
             let right = baseline_encrypt(&aws_lc_rs::aead::AES_128_GCM, &key, &nonce, &aad, &plain);
             let left = {
-                let k = graviola::aead::AesGcm::new(&key);
+                let k = rind::aead::AesGcm::new(&key);
                 let mut cipher = plain.clone();
                 let mut tag = [0u8; 16];
                 k.encrypt(&nonce, &aad, &mut cipher, &mut tag);
@@ -60,7 +60,7 @@ fuzz_target!(|op: Operation| {
         } => {
             let right = baseline_encrypt(&aws_lc_rs::aead::AES_256_GCM, &key, &nonce, &aad, &plain);
             let left = {
-                let k = graviola::aead::AesGcm::new(&key);
+                let k = rind::aead::AesGcm::new(&key);
                 let mut cipher = plain.clone();
                 let mut tag = [0u8; 16];
                 k.encrypt(&nonce, &aad, &mut cipher, &mut tag);

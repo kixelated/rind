@@ -1,10 +1,10 @@
 [workspace]
 resolver = "2"
 members = [
-  "graviola",
-  "graviola-bench",
-  "graviola-cpuid",
-  "rustls-graviola",
+  "rind",
+  "rind-bench",
+  "rind-cpuid",
+  "rind-rustls",
   "fuzz"
 ]
 

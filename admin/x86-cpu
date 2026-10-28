@@ -51,7 +51,7 @@ if mode == "sde-scan":
     for i, (flag, name) in enumerate(KNOWN_CPUS):
         env["CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER"] = "sde {} --".format(flag)
         out = subprocess.check_output(
-            ["cargo", "run", "--bin", "graviola-cpuid"], env=env, encoding="utf-8"
+            ["cargo", "run", "--bin", "rind-cpuid"], env=env, encoding="utf-8"
         )
         js = json.loads(out)
         json.dump(
@@ -90,11 +90,11 @@ elif mode == "markdown-table":
         )
 
 
-# GRAVIOLA_MINIMUM = "Skylake"
+# RIND_MINIMUM = "Skylake"
 # past_minimum = False
 #
 # for flag, name in KNOWN_CPUS:
-#     if not past_minimum and name == GRAVIOLA_MINIMUM:
+#     if not past_minimum and name == RIND_MINIMUM:
 #         past_minimum = True
 #     if past_minimum:
 #         print(f"""      - name: Check {name}

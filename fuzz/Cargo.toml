@@ -1,5 +1,5 @@
 [package]
-name = "graviola-fuzz"
+name = "rind-fuzz"
 version = "0.0.0"
 publish = false
 edition = "2021"
@@ -11,8 +11,8 @@ cargo-fuzz = true
 libfuzzer-sys = { version = "0.4", features = ["arbitrary-derive"] }
 aws-lc-rs = { version = "1.16", features = ["non-fips"], default-features = false }
 
-[dependencies.graviola]
-path = "../graviola"
+[dependencies.rind]
+path = "../rind"
 
 [[bin]]
 name = "sha2"

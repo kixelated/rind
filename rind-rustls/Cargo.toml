@@ -1,0 +1,28 @@
+[package]
+name = "rind-rustls"
+version = "0.4.0"
+edition = "2024"
+repository = "https://github.com/kixelated/rind"
+license = "Apache-2.0 OR ISC OR MIT-0"
+description = "rustls CryptoProvider backed by rind"
+categories = ["network-programming", "cryptography"]
+rust-version = "1.85"
+readme = "README.md"
+
+[dependencies]
+rind = { version = "0.4.0", path = "../rind" }
+rustls = { version = "0.23.18", default-features = false, features = ["std", "tls12"] }
+
+[dev-dependencies]
+env_logger = "0.11"
+http = "1"
+http-body-util = "0.1"
+hyper = { version = "1", default-features = false }
+hyper-rustls = { version = "0.27", default-features = false, features = ["native-tokio", "http1", "tls12", "logging"] }
+hyper-util = { version = "0.1", default-features = false, features = ["server-auto"] }
+rustls = { version = "0.23.23", default-features = false, features = ["aws-lc-rs", "ring"] }
+tokio = { version = "1.0", features = ["io-std", "macros", "net", "rt-multi-thread"] }
+tokio-rustls = { version = "0.26", default-features = false }
+
+[features]
+default = []

@@ -2,6 +2,8 @@ name: x86-cpu
 
 on:
   push:
+    branches:
+      - main
   pull_request:
   schedule:
     - cron: "0 18 * * *"
@@ -31,7 +33,7 @@ jobs:
 
       - name: Set up Intel SDE
         run: |
-          echo "PATH=$(pwd)/thirdparty/intel-sde:$PATH" >> $GITHUB_ENV
+          echo "PATH=$(pwd)/thirdparty/intel-sde:$PATH" >> "$GITHUB_ENV"
 
       - name: Install ${{ matrix.rustc }} toolchain
         uses: dtolnay/rust-toolchain@master

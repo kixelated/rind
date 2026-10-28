@@ -2,6 +2,8 @@ name: build
 
 on:
   push:
+    branches:
+      - main
   pull_request:
   schedule:
     - cron: "0 18 * * *"
@@ -49,14 +51,14 @@ jobs:
           target: ${{ matrix.cross }}
 
       - name: Build (debug)
-        run: cargo build -p graviola
+        run: cargo build -p rind
       - name: Run tests (debug)
         run: cargo test
       - name: Run tests (debug, --no-default-features)
         run: cargo test --no-default-features
 
       - name: Build (release)
-        run: cargo build -p graviola --release
+        run: cargo build -p rind --release
       - name: Run tests (release)
         run: env SLOW_TESTS=1 cargo test --release
 
@@ -64,6 +66,6 @@ jobs:
         if: runner.arch == 'X64'
         run: |
           # test software fallbacks for sha256 and sha512
-          env GRAVIOLA_CPU_DISABLE_sha=1 GRAVIOLA_CPU_DISABLE_bmi2=1 cargo test
+          env RIND_CPU_DISABLE_sha=1 RIND_CPU_DISABLE_bmi2=1 cargo test
           # test avx2/aesni aes-gcm & ML-KEM without avx512
-          env GRAVIOLA_CPU_DISABLE_avx512bw=1 GRAVIOLA_CPU_DISABLE_avx512f=1 GRAVIOLA_CPU_DISABLE_vaes=1 cargo test
+          env RIND_CPU_DISABLE_avx512bw=1 RIND_CPU_DISABLE_avx512f=1 RIND_CPU_DISABLE_vaes=1 cargo test
