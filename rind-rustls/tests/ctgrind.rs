@@ -121,16 +121,16 @@ fn tls12_prf() {
 #[test]
 fn record_protection() {
     for suite in rind_rustls::suites::ALL_CIPHER_SUITES {
-        let key = AeadKey::from([0x42; 32]);
+        // Each direction consumes its own copy of the key.
+        let (key, decrypt_key) = (AeadKey::from([0x42; 32]), AeadKey::from([0x42; 32]));
         secret(key.as_ref());
+        secret(decrypt_key.as_ref());
         let iv = [0x24; 12];
 
         let (mut encrypter, mut decrypter) = match suite {
             SupportedCipherSuite::Tls13(suite) => (
                 suite.aead_alg.encrypter(key, Iv::new(iv)),
-                suite
-                    .aead_alg
-                    .decrypter(AeadKey::from([0x42; 32]), Iv::new(iv)),
+                suite.aead_alg.decrypter(decrypt_key, Iv::new(iv)),
             ),
             SupportedCipherSuite::Tls12(suite) => {
                 let shape = suite.aead_alg.key_block_shape();
@@ -138,7 +138,7 @@ fn record_protection() {
                 let explicit = &explicit[..shape.explicit_nonce_len];
                 (
                     suite.aead_alg.encrypter(key, fixed, explicit),
-                    suite.aead_alg.decrypter(AeadKey::from([0x42; 32]), fixed),
+                    suite.aead_alg.decrypter(decrypt_key, fixed),
                 )
             }
         };
