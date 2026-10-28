@@ -169,6 +169,7 @@ pub mod hashing {
     pub use super::high::hash::{
         Hash, HashContext, HashOutput, LegacySha1, Sha256, Sha384, Sha512, SignatureHash,
     };
+    pub use super::high::hkdf;
     pub use super::high::hmac;
     pub use super::mid::sha2;
     pub use super::mid::sha3;

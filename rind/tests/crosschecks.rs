@@ -218,3 +218,86 @@ mod cipher {
         }
     }
 }
+
+mod hkdf {
+    use aws_lc_rs::hkdf::{self, HKDF_SHA256, HKDF_SHA384, HKDF_SHA512, KeyType};
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+    use rind::Error;
+    use rind::hashing::hkdf::Prk;
+    use rind::hashing::{Hash, Sha256, Sha384, Sha512};
+
+    struct Len(usize);
+
+    impl KeyType for Len {
+        fn len(&self) -> usize {
+            self.0
+        }
+    }
+
+    fn check<H: Hash>(
+        alg: hkdf::Algorithm,
+        salt: &[u8],
+        ikm: &[u8],
+        info: &[Vec<u8>],
+        len: usize,
+    ) -> Result<(), TestCaseError> {
+        let info: Vec<&[u8]> = info.iter().map(Vec::as_slice).collect();
+
+        let mut ours = vec![0u8; len];
+        let result = Prk::<H>::extract(salt, ikm).expand(&info, &mut ours);
+
+        let prk = hkdf::Salt::new(alg, salt).extract(ikm);
+        match prk.expand(&info, Len(len)) {
+            Ok(okm) => {
+                result.unwrap();
+                let mut theirs = vec![0u8; len];
+                okm.fill(&mut theirs).unwrap();
+                prop_assert_eq!(ours, theirs);
+            }
+            Err(_) => {
+                prop_assert_eq!(result, Err(Error::WrongLength));
+                prop_assert!(ours.iter().all(|b| *b == 0));
+            }
+        }
+        Ok(())
+    }
+
+    // Lengths up to a few blocks, or either side of the 255-block limit.
+    fn out_len(hash_len: usize) -> impl Strategy<Value = usize> {
+        prop_oneof![0..200usize, (255 * hash_len - 70)..(255 * hash_len + 70)]
+    }
+
+    // Salts either side of the block size, and info split into parts.
+    proptest! {
+        #[test]
+        fn sha256(
+            salt in vec(any::<u8>(), 0..200),
+            ikm in vec(any::<u8>(), 0..200),
+            info in vec(vec(any::<u8>(), 0..100), 0..4),
+            len in out_len(32),
+        ) {
+            check::<Sha256>(HKDF_SHA256, &salt, &ikm, &info, len)?;
+        }
+
+        #[test]
+        fn sha384(
+            salt in vec(any::<u8>(), 0..200),
+            ikm in vec(any::<u8>(), 0..200),
+            info in vec(vec(any::<u8>(), 0..100), 0..4),
+            len in out_len(48),
+        ) {
+            check::<Sha384>(HKDF_SHA384, &salt, &ikm, &info, len)?;
+        }
+
+        #[test]
+        fn sha512(
+            salt in vec(any::<u8>(), 0..200),
+            ikm in vec(any::<u8>(), 0..200),
+            info in vec(vec(any::<u8>(), 0..100), 0..4),
+            len in out_len(64),
+        ) {
+            check::<Sha512>(HKDF_SHA512, &salt, &ikm, &info, len)?;
+        }
+    }
+}
