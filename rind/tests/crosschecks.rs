@@ -1,4 +1,7 @@
-use aws_lc_rs::{rsa::KeyPair, signature::Ed25519KeyPair};
+use aws_lc_rs::{digest, hmac, rsa::KeyPair, signature::Ed25519KeyPair};
+use proptest::collection::vec;
+use proptest::prelude::*;
+use rind::hashing::{Hash, HashContext, LegacySha1, hmac::Hmac};
 use rind::signing::{
     eddsa::Ed25519SigningKey,
     rsa::{KeySize, SigningKey},
@@ -65,6 +68,40 @@ fn ed25519_key_generation() {
             key_enc,
             "aws-lc-rs varied our ed25519 key encoding"
         );
+    }
+}
+
+proptest! {
+    #[test]
+    fn sha1_matches_aws_lc_rs(
+        message in vec(any::<u8>(), 0..1024),
+        split in any::<prop::sample::Index>(),
+    ) {
+        // Two updates split anywhere exercise the partial-block buffering.
+        let split = split.index(message.len() + 1);
+        let mut ctx = LegacySha1::new();
+        ctx.update(&message[..split]);
+        ctx.update(&message[split..]);
+
+        let got = ctx.finish();
+        let wanted = digest::digest(&digest::SHA1_FOR_LEGACY_USE_ONLY, &message);
+        prop_assert_eq!(got.as_ref(), wanted.as_ref());
+    }
+
+    #[test]
+    fn hmac_sha1_matches_aws_lc_rs(
+        key in vec(any::<u8>(), 0..200),
+        message in vec(any::<u8>(), 0..1024),
+    ) {
+        let mut ctx = Hmac::<LegacySha1>::new(&key);
+        ctx.update(&message);
+        let got = ctx.finish();
+
+        let wanted = hmac::sign(
+            &hmac::Key::new(hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY, &key),
+            &message,
+        );
+        prop_assert_eq!(got.as_ref(), wanted.as_ref());
     }
 }
 
