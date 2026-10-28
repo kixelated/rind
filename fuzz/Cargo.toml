@@ -15,6 +15,13 @@ aws-lc-rs = { version = "1.16", features = ["non-fips"], default-features = fals
 path = "../rind"
 
 [[bin]]
+name = "sha1"
+path = "fuzzer/sha1.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "sha2"
 path = "fuzzer/sha2.rs"
 test = false

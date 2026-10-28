@@ -21,6 +21,8 @@ mod generic {
     pub(crate) mod mlkem768;
     pub(crate) mod poly1305;
     #[cfg(target_arch = "x86_64")]
+    pub(super) mod sha1;
+    #[cfg(target_arch = "x86_64")]
     pub(super) mod sha256;
     #[cfg(target_arch = "aarch64")]
     pub(super) mod sha512;
@@ -124,6 +126,7 @@ cfg_if::cfg_if! {
         pub(crate) use x86_64::p256_montjmixadd::p256_montjmixadd;
         pub(crate) use x86_64::p384_montjadd::p384_montjadd;
         pub(crate) use x86_64::p384_montjdouble::p384_montjdouble;
+        pub(crate) use x86_64::sha1_mux::sha1_compress_blocks;
         pub(crate) use x86_64::sha256_mux::sha256_compress_blocks;
         pub(crate) use x86_64::sha512::sha512_compress_blocks;
         pub(crate) use x86_64::sha3_keccak_f1600::sha3_keccak_f1600;
@@ -205,6 +208,7 @@ cfg_if::cfg_if! {
         pub(crate) use aarch64::p256_montjmixadd::p256_montjmixadd;
         pub(crate) use aarch64::p384_montjadd::p384_montjadd;
         pub(crate) use aarch64::p384_montjdouble::p384_montjdouble;
+        pub(crate) use aarch64::sha1::sha1_compress_blocks;
         pub(crate) use aarch64::sha256::sha256_compress_blocks;
         pub(crate) use aarch64::sha3_keccak_f1600_mux::sha3_keccak_f1600;
         pub(crate) use aarch64::sha3_keccak4_f1600_mux::sha3_keccak4_f1600;

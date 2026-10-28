@@ -5,7 +5,7 @@ use super::asn1::{self, Type};
 use super::curve::{
     Curve, MAX_SCALAR_LEN, MAX_UNCOMPRESSED_PUBLIC_KEY_LEN, PrivateKey, PublicKey, Scalar,
 };
-use super::hash::{Hash, HashContext};
+use super::hash::{Hash, HashContext, SignatureHash};
 use super::hmac_drbg::HmacDrbg;
 use super::pkcs8;
 use crate::error::{Error, KeyFormatError};
@@ -164,7 +164,7 @@ impl<C: Curve> SigningKey<C> {
     /// `signature` is the output buffer; `Error::WrongLength` is returned
     /// if it is not long enough.  The used prefix of this buffer is returned
     /// on success.
-    pub fn sign<'a, H: Hash>(
+    pub fn sign<'a, H: SignatureHash>(
         &self,
         message: &[&[u8]],
         signature: &'a mut [u8],
@@ -179,7 +179,7 @@ impl<C: Curve> SigningKey<C> {
     ///
     /// This calls [`Self::sign()`] and then does a straightforward conversion
     /// from fixed length to ASN.1 -- see that function's documentation for more.
-    pub fn sign_asn1<'a, H: Hash>(
+    pub fn sign_asn1<'a, H: SignatureHash>(
         &self,
         message: &[&[u8]],
         asn1_signature: &'a mut [u8],
@@ -285,7 +285,11 @@ impl<C: Curve> VerifyingKey<C> {
     ///
     /// Returns `Ok(())` when the signature is valid, or an error if not (typically --
     /// but not limited to -- `Error::BadSignature`).
-    pub fn verify<H: Hash>(&self, message: &[&[u8]], signature: &[u8]) -> Result<(), Error> {
+    pub fn verify<H: SignatureHash>(
+        &self,
+        message: &[&[u8]],
+        signature: &[u8],
+    ) -> Result<(), Error> {
         let _entry = Entry::new_public();
         if signature.len() != C::Scalar::LEN_BYTES * 2 {
             return Err(Error::WrongLength);
@@ -315,7 +319,11 @@ impl<C: Curve> VerifyingKey<C> {
     ///
     /// This does a straightforward conversion from ASN.1 to fixed length,
     /// and then calls [`Self::verify()`] -- see the documentation for more.
-    pub fn verify_asn1<H: Hash>(&self, message: &[&[u8]], signature: &[u8]) -> Result<(), Error> {
+    pub fn verify_asn1<H: SignatureHash>(
+        &self,
+        message: &[&[u8]],
+        signature: &[u8],
+    ) -> Result<(), Error> {
         let _entry = Entry::new_public();
         let sig =
             asn1::pkix::EcdsaSigValue::from_bytes(signature).map_err(|_| Error::BadSignature)?;

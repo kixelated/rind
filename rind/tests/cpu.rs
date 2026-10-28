@@ -26,7 +26,7 @@ fn missing_feature_is_named() {
 
     // Hashing checks the CPU apart from `Entry`, so each hash family is
     // covered beside an `Entry` operation.
-    const OPERATIONS: &[&str] = &["aes-gcm", "sha256", "sha384", "sha512", "sha3-256"];
+    const OPERATIONS: &[&str] = &["aes-gcm", "sha1", "sha256", "sha384", "sha512", "sha3-256"];
 
     // Set in the child process this test spawns once per feature and
     // operation, since the toggle is process-wide and would fail every other
@@ -36,9 +36,12 @@ fn missing_feature_is_named() {
     // The child reports both refusals as output and lets the operation's
     // panic end it, since a `panic = "abort"` build cannot catch it.
     if let Some(operation) = std::env::var_os(CHILD) {
+        use rind::hashing::Hash;
+
         println!("check: {}", rind::cpu::check().unwrap_err());
         match operation.to_str().unwrap() {
             "aes-gcm" => drop(rind::aead::AesGcm::new(&[0; 16])),
+            "sha1" => drop(rind::hashing::LegacySha1::hash(b"")),
             "sha256" => drop(rind::hashing::sha2::Sha256Context::new().finish()),
             "sha384" => drop(rind::hashing::sha2::Sha384Context::new().finish()),
             "sha512" => drop(rind::hashing::sha2::Sha512Context::new().finish()),

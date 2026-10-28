@@ -5,6 +5,7 @@ members = [
   "rind-bench",
   "rind-cpuid",
   "rind-object-store",
+  "rind-rcgen",
   "rind-rustls",
   "rind-jsonwebtoken",
   "fuzz"
