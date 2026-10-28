@@ -8,6 +8,11 @@ use libcrux_hacl_rs::bignum::bignum64;
 use super::rsa_pub::{MAX_PUBLIC_MODULUS_BYTES, RsaPublicKey};
 use crate::error::Error;
 use crate::low;
+use crate::mid::rng::RandomSource;
+
+#[path = "rsa_priv/generate.rs"]
+mod generate;
+pub use generate::KeySize;
 
 /// `public` comes first so its (non-secret) bytes form a prefix.
 #[repr(C)]
@@ -60,6 +65,14 @@ impl RsaPrivateKey {
             dq: dq.into(),
             iqmp: iqmp.into(),
         })
+    }
+
+    pub(crate) fn generate(
+        size: KeySize,
+        candidate_source: &mut dyn RandomSource,
+        witness_source: &mut dyn RandomSource,
+    ) -> Result<Self, Error> {
+        generate::generate_key(size, candidate_source, witness_source)
     }
 
     pub(crate) fn public_key(&self) -> RsaPublicKey {

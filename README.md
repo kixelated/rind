@@ -51,7 +51,7 @@ but there is also a public API for general-purpose use.
   (This is most x86_64 CPUs made since around ~2014.)
 - 32-bit `arm` (tested on `armv7-unknown-linux-gnueabihf`, and built for
   `armv7-linux-androideabi`) runs [libcrux]'s verified portable Rust instead,
-  and needs no CPU features. It does not yet offer P-384, RSA key generation,
+  and needs no CPU features. It does not yet offer P-384,
   the unauthenticated ciphers, SHA-3, or SHAKE, and an Ed25519 public key that is not a curve point is
   refused when verifying rather than when decoding.
 
