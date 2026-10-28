@@ -1,5 +1,7 @@
 use crypto::SupportedKxGroup;
-use rind::key_agreement::{p256, p384, x25519};
+#[cfg(not(target_arch = "arm"))]
+use rind::key_agreement::p384;
+use rind::key_agreement::{p256, x25519};
 use rustls::crypto;
 use rustls::ffdhe_groups::FfdheGroup;
 
@@ -7,11 +9,22 @@ mod hybrid;
 mod mlkem;
 
 /// All key exchange algorithms, in order of preference.
+#[cfg(not(target_arch = "arm"))]
 pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[
     X25519MLKEM768,
     &X25519 as &dyn SupportedKxGroup,
     &P256 as &dyn SupportedKxGroup,
     &P384 as &dyn SupportedKxGroup,
+];
+
+/// All key exchange algorithms, in order of preference.
+///
+/// rind does not yet build P-384 on 32-bit ARM.
+#[cfg(target_arch = "arm")]
+pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[
+    X25519MLKEM768,
+    &X25519 as &dyn SupportedKxGroup,
+    &P256 as &dyn SupportedKxGroup,
 ];
 
 /// Key exchange using X25519.
@@ -124,9 +137,11 @@ impl crypto::ActiveKeyExchange for ActiveP256 {
 /// Key exchange using P384.
 ///
 /// Also known as secp384r1 or NISTP384.
+#[cfg(not(target_arch = "arm"))]
 #[derive(Debug)]
 pub struct P384;
 
+#[cfg(not(target_arch = "arm"))]
 impl SupportedKxGroup for P384 {
     fn start(&self) -> Result<Box<dyn crypto::ActiveKeyExchange>, rustls::Error> {
         let priv_key = p384::PrivateKey::new_random()
@@ -148,11 +163,13 @@ impl SupportedKxGroup for P384 {
     }
 }
 
+#[cfg(not(target_arch = "arm"))]
 struct ActiveP384 {
     priv_key: p384::PrivateKey,
     pub_key_bytes: [u8; 97],
 }
 
+#[cfg(not(target_arch = "arm"))]
 impl crypto::ActiveKeyExchange for ActiveP384 {
     fn complete(self: Box<Self>, peer: &[u8]) -> Result<crypto::SharedSecret, rustls::Error> {
         let their_pub = p384::PublicKey::from_x962_uncompressed(peer)
@@ -240,6 +257,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_arch = "arm"))]
     fn test_kx_p384() {
         // Create a private key and verify its metadata.
         let key = P384;

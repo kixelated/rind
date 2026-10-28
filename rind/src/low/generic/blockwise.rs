@@ -19,6 +19,7 @@ impl<const N: usize> Blockwise<N> {
         self.used
     }
 
+    #[cfg(not(target_arch = "arm"))]
     pub(crate) fn add(&mut self, bytes: &[u8]) {
         if self.used == 0 {
             self.add_trailing(bytes);
@@ -49,6 +50,7 @@ impl<const N: usize> Blockwise<N> {
         }
     }
 
+    #[cfg(not(target_arch = "arm"))]
     pub(crate) fn peek_remaining(&self) -> Option<&[u8]> {
         if self.used > 0 {
             Some(&self.buffer[..self.used])

@@ -503,8 +503,9 @@ impl<'a> Integer<'a> {
             return Err(Error::IntegerOutOfRange);
         }
 
-        let mut bytes = [0u8; 8];
-        bytes[8 - self.twos_complement.len()..].copy_from_slice(self.twos_complement);
+        let mut bytes = [0u8; size_of::<usize>()];
+        bytes[size_of::<usize>() - self.twos_complement.len()..]
+            .copy_from_slice(self.twos_complement);
         Ok(usize::from_be_bytes(bytes))
     }
 
@@ -955,14 +956,15 @@ mod tests {
             Integer::new(&usize::MIN.to_be_bytes()).as_usize().unwrap(),
             usize::MIN,
         );
+        const W: usize = size_of::<usize>();
         assert_eq!(
-            Integer::new_positive(&mut [0x00; 8], &[0xff; 7])
+            Integer::new_positive(&mut [0x00; W], &[0xff; W - 1])
                 .as_usize()
                 .unwrap(),
-            0x00ffffff_ffffffff
+            usize::MAX >> 8
         );
         assert_eq!(
-            Integer::new_positive(&mut [0x00; 9], &[0xff; 8])
+            Integer::new_positive(&mut [0x00; W + 1], &[0xff; W])
                 .as_usize()
                 .unwrap_err(),
             Error::IntegerOutOfRange
@@ -1093,6 +1095,7 @@ mod tests {
 
     #[allow(clippy::enum_clike_unportable_variant)]
     #[test]
+    #[cfg(target_pointer_width = "64")]
     fn test_enum() {
         asn1_enum! {
             Enum ::= INTEGER {
@@ -1185,11 +1188,13 @@ mod tests {
         assert_eq!(encoded_length_for(65536), 5 + 65536);
         assert_eq!(encoded_length_for(16777215), 5 + 16777215);
         assert_eq!(encoded_length_for(16777216), 6 + 16777216);
+        #[cfg(target_pointer_width = "64")]
         assert_eq!(encoded_length_for(4294967295), 6 + 4294967295);
     }
 
     #[test]
     #[should_panic]
+    #[cfg(target_pointer_width = "64")]
     fn test_encode_len_limit() {
         let _ = encoded_length_for(4294967296);
     }

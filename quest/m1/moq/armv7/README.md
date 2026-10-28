@@ -24,13 +24,14 @@ Settled with the maintainer (2026-10-26 and 2026-10-27):
   same API, so no adapter or MoQ feature carries a per-target exclusion
   (maintainer, 2026-10-27). Where libcrux lacks one, rind adds it over
   libcrux's constant-time primitives:
-  - RSA PKCS#1 v1.5 signing and verification, as padding over the same HACL
-    RSA operations RSA-PSS uses, and RSA key generation;
+  - RSA key generation (PKCS#1 v1.5 signing and verification already share
+    graviola's padding over the HACL bignum operations armv7's RSA uses);
   - ECDSA P-384 signing, verification, and key generation over libcrux-p384's
     field and scalar arithmetic, with RFC 6979 nonces and constant-time
     inversion;
-  - SHA-1, and the raw AES block, ChaCha20, and AES-CTR that QUIC header
-    protection and SRTP need.
+  - the raw AES block, ChaCha20, and AES-CTR that QUIC header protection and
+    SRTP need. SHA-1, which libcrux also lacks, runs rind's portable
+    compression.
 
   These keep moq-auth's RS* and ES384 tokens, moq-cli's default GCS storage,
   and RSA or P-384 TLS keys working on the armv7 release.
@@ -47,7 +48,6 @@ Settled with the maintainer (2026-10-26 and 2026-10-27):
 
 ## Required
 
-- [libcrux backend](/quest/m1/moq/armv7/backend.md) - armv7 builds and passes rind's tests on libcrux's primitives
-- [RSA PKCS#1 v1.5 and key generation](/quest/m1/moq/armv7/rsa.md) - over the HACL RSA operations RSA-PSS uses
+- [RSA key generation](/quest/m1/moq/armv7/rsa.md) - over the HACL bignum armv7's RSA signing uses
 - [ECDSA P-384](/quest/m1/moq/armv7/p384.md) - signing, verification, and key generation over libcrux-p384's arithmetic
-- [SHA-1 and raw ciphers](/quest/m1/moq/armv7/cipher.md) - SHA-1, HMAC-SHA1, the AES block, ChaCha20, and AES-CTR on armv7
+- [Raw ciphers](/quest/m1/moq/armv7/cipher.md) - the AES block, ChaCha20, and AES-CTR on armv7

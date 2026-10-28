@@ -24,5 +24,4 @@ Guidance:
 ## Required
 
 - [armv7 on libcrux](/quest/m1/moq/armv7/README.md) - the backend these must also run on
-- [rind-rustls covers MoQ](/quest/m1/moq/rustls.md) - adapter under test
 - [rind-str0m](/quest/m1/moq/str0m.md) - adapter under test

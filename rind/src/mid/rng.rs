@@ -1,7 +1,7 @@
 // Written for Graviola by Joe Birr-Pixton, 2024.
 // SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 
-#[cfg(test)]
+#[cfg(all(test, not(target_arch = "arm")))]
 use core::mem;
 
 use crate::Error;
@@ -49,14 +49,14 @@ impl RandomSource for SliceRandomSource<'_> {
 /// Then the second is used for all subsequent requests.
 ///
 /// Intended only for testing.
-#[cfg(test)]
+#[cfg(all(test, not(target_arch = "arm")))]
 pub(crate) enum ChainRandomSource<'a> {
     First(&'a mut dyn RandomSource, &'a mut dyn RandomSource),
     Rest(&'a mut dyn RandomSource),
     Dead,
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_arch = "arm")))]
 #[cfg_attr(coverage_nightly, coverage(off))]
 impl RandomSource for ChainRandomSource<'_> {
     fn fill(&mut self, out: &mut [u8]) -> Result<(), Error> {
