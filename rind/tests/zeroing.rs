@@ -125,6 +125,16 @@ fn aes_gcm() {
 }
 
 #[test]
+fn cipher() {
+    use rind::cipher::{Aes, AesCtr, ChaCha20};
+    for len in [16, 32] {
+        check_zeroed_on_drop(Box::pin(Aes::new(&[0xffu8; 32][..len]).unwrap()));
+        check_zeroed_on_drop(Box::pin(AesCtr::new(&[0xffu8; 32][..len]).unwrap()));
+    }
+    check_zeroed_on_drop(Box::pin(ChaCha20::new([0xffu8; 32])));
+}
+
+#[test]
 fn chacha20_poly1305() {
     use rind::aead::ChaCha20Poly1305;
 
