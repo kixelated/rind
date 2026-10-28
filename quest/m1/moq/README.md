@@ -73,7 +73,6 @@ RustCrypto dependency.
 - [SHA-1 and HMAC-SHA1](/quest/m1/moq/sha1.md) - for STUN MESSAGE-INTEGRITY and SRTP AES-CM-HMAC-SHA1-80
 - [armv7 on libcrux](/quest/m1/moq/armv7/README.md) - armv7 Android and Linux run every operation the adapters and MoQ use
 - [rind-rustls covers MoQ](/quest/m1/moq/rustls.md) - TLS 1.2 and 1.3, every key type MoQ loads, and rustls's QUIC keys
-- [rind-jsonwebtoken](/quest/m1/moq/jsonwebtoken.md) - jsonwebtoken 11's `CryptoProvider` for every algorithm moq-auth accepts
 - [rind-rcgen](/quest/m1/moq/rcgen.md) - rcgen's `SigningKey` for self-signed and DTLS certificates
 - [rind-object-store](/quest/m1/moq/object-store.md) - object_store's `CryptoProvider` for S3, Azure, and GCS
 - [rind-str0m](/quest/m1/moq/str0m.md) - str0m's SRTP, fingerprints, and STUN integrity
