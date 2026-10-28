@@ -51,3 +51,4 @@ Settled with the maintainer (2026-10-26 and 2026-10-27):
 - [RSA key generation](/quest/m1/moq/armv7/rsa.md) - over the HACL bignum armv7's RSA signing uses
 - [ECDSA P-384](/quest/m1/moq/armv7/p384.md) - signing, verification, and key generation over libcrux-p384's arithmetic
 - [Raw ciphers](/quest/m1/moq/armv7/cipher.md) - the AES block, ChaCha20, and AES-CTR on armv7
+- [ctgrind on armv7](/quest/m1/moq/armv7/ctgrind.md) - the constant-time check runs on the armv7 build
