@@ -21,7 +21,3 @@ has to come from a safe zeroing of graviola's `Hmac` state, or from a
 
 MoQ derives once per token or per track, not per packet, so measure the
 callers first (see the [epic](/quest/m2/perf/README.md)).
-
-## Required
-
-- [HKDF](/quest/m1/moq/hkdf.md) - the `Prk` API this speeds up
