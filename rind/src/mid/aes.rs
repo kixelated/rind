@@ -64,26 +64,25 @@ impl AesCtr {
         }
         low::ct::secret_slice(inout);
 
-        // Every chunk, including a short final one, takes the pipelined
-        // eight-block path: the unused blocks cost less than encrypting the
-        // tail one serial block at a time.
+        // A short final chunk also takes the pipelined eight-block path: the
+        // unused blocks cost less than encrypting it one serial block at a
+        // time. Counters past the last used block may wrap; they are discarded.
+        let (by8, tail) = inout.as_chunks_mut::<128>();
         let mut counter = counter;
-        let mut keystream = [0u8; 128];
-        for chunk in inout.chunks_mut(128) {
-            for block in keystream.as_chunks_mut::<16>().0 {
-                block[..12].copy_from_slice(nonce);
-                block[12..].copy_from_slice(&counter.to_be_bytes());
-                // wraps only past the last block used
-                counter = counter.wrapping_add(1);
-            }
-            self.0.encrypt_8_blocks(&mut keystream);
-
-            for (b, k) in chunk.iter_mut().zip(keystream.iter()) {
-                *b ^= *k;
-            }
+        for chunk in by8 {
+            low::aes_ctr::apply_8(&self.0, nonce, counter, chunk);
+            counter = counter.wrapping_add(8);
         }
 
-        zeroise(&mut keystream);
+        if !tail.is_empty() {
+            let mut buf = [0u8; 128];
+            buf[..tail.len()].copy_from_slice(tail);
+            low::aes_ctr::apply_8(&self.0, nonce, counter, &mut buf);
+            tail.copy_from_slice(&buf[..tail.len()]);
+            // the unused part is bare keystream
+            zeroise(&mut buf);
+        }
+
         low::ct::public_slice(inout);
         Ok(())
     }
