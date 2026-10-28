@@ -28,18 +28,11 @@ fn missing_feature_is_named() {
     // toggle is process-wide and would fail every other test in this one.
     const CHILD: &str = "RIND_TEST_MISSING_CPU_FEATURE";
 
-    if let Ok(feature) = std::env::var(CHILD) {
-        let expected = format!(
-            "rind requires {feature} CPU support on {}",
-            std::env::consts::ARCH
-        );
-        assert_eq!(rind::cpu::check().unwrap_err().to_string(), expected);
-
-        let panic = std::panic::catch_unwind(|| {
-            rind::aead::AesGcm::new(&[0; 16]);
-        })
-        .unwrap_err();
-        assert_eq!(panic.downcast_ref::<String>(), Some(&expected));
+    // The child reports both refusals as output and lets the operation's
+    // panic end it, since a `panic = "abort"` build cannot catch it.
+    if std::env::var_os(CHILD).is_some() {
+        println!("check: {}", rind::cpu::check().unwrap_err());
+        rind::aead::AesGcm::new(&[0; 16]);
         return;
     }
 
@@ -51,15 +44,29 @@ fn missing_feature_is_named() {
 
         let output = std::process::Command::new(std::env::current_exe().unwrap())
             .args(["--exact", "missing_feature_is_named", "--nocapture"])
-            .env(CHILD, feature)
+            .env(CHILD, "1")
             .env(format!("RIND_CPU_DISABLE_{feature}"), "1")
             .output()
             .unwrap();
-        assert!(
-            output.status.success(),
-            "{feature}: {}{}",
+        let text = format!(
+            "{}{}",
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
+        );
+
+        let expected = format!(
+            "rind requires {feature} CPU support on {}",
+            std::env::consts::ARCH
+        );
+        assert!(!output.status.success(), "{feature}: {text}");
+        assert!(
+            text.contains(&format!("check: {expected}\n")),
+            "{feature}: {text}"
+        );
+        // The panic message follows its `panicked at <location>:` line.
+        assert!(
+            text.contains(&format!(":\n{expected}\n")),
+            "{feature}: {text}"
         );
     }
 }
