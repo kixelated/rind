@@ -17,7 +17,3 @@ Guidance: handshake tests for every suite and group against dimpl on its
 aws-lc-rs provider, for both DTLS versions.
 
 Public API: the new crate.
-
-## Required
-
-- [Raw ciphers](/quest/m1/moq/cipher.md) - the AES block and ChaCha20 for record number protection

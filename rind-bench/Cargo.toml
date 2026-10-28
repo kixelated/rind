@@ -99,3 +99,7 @@ harness = false
 [[bench]]
 name = "hkdf"
 harness = false
+
+[[bench]]
+name = "cipher"
+harness = false
