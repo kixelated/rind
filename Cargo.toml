@@ -14,3 +14,8 @@ members = [
 [profile.bench]
 lto = "thin"
 debug = true
+
+# fiat-crypto's plain arithmetic is proven never to overflow, but debug builds
+# still branch on overflow flags derived from secrets, which ctgrind refuses.
+[profile.dev.package.fiat-crypto]
+overflow-checks = false

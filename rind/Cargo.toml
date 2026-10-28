@@ -19,8 +19,10 @@ getrandom = "0.4"
 crabgrind = { version = "0.4", optional = true }
 
 # armv7's backend: libcrux's verified portable Rust, with no C or
-# intrinsics features enabled.
+# intrinsics features enabled, and fiat-crypto's for P-384, which libcrux
+# exports only as ECDH.
 [target.'cfg(target_arch = "arm")'.dependencies]
+fiat-crypto = { version = "0.3", default-features = false }
 libcrux-aes = { version = "0.0.10", default-features = false }
 libcrux-chacha20poly1305 = "0.0.10"
 libcrux-ed25519 = { version = "0.0.10", default-features = false }
@@ -32,6 +34,8 @@ libcrux-traits = "0.0.9"
 
 [dev-dependencies]
 aws-lc-rs = { version = "1.16", default-features = false, features = ["alloc", "prebuilt-nasm", "non-fips"] }
+# Checks armv7's P-384 arithmetic against s2n-bignum's on the other arches.
+fiat-crypto = { version = "0.3", default-features = false }
 hex = { version = "0.4", features = ["serde"] }
 proptest = "1.5.0"
 serde = { version = "1", features = ["derive"] }
