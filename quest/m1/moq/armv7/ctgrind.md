@@ -29,4 +29,5 @@ Guidance:
 - Extend `admin/ctgrind` with the armv7 runner rather than a second script.
 - A finding inside libcrux is reported upstream, and rind works around it
   only if the fix is in rind's own code.
-- Mark the CI job required on `main` once it is stable.
+- Once it is stable and runs on every PR, mark the CI job required on `main`;
+  a nightly-only job stays optional, since it never runs on a PR's head.
