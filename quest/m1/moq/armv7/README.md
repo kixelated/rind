@@ -3,25 +3,27 @@
 ## Goal
 
 rind builds for `armv7-linux-androideabi` and `armv7-unknown-linux-gnueabihf`
-on a libcrux backend that runs every operation the x86_64 and aarch64 backend
-does, behind the same public API, so no adapter or MoQ feature carries a
-per-target exclusion.
+on a libcrux backend that runs every operation the `rind-*` adapters and MoQ
+use, behind the same public API as the x86_64 and aarch64 backend, so no
+adapter or MoQ feature carries a per-target exclusion. Operations with no
+consumer, SHA-3 and SHAKE, are not built there.
 
 ## Plan
 
 Settled with the maintainer (2026-10-26 and 2026-10-27):
 
 - armv7 (Android and Linux gnueabihf) runs libcrux's verified portable Rust:
-  AES-GCM, ChaCha20-Poly1305, SHA-2, HMAC, HKDF, X25519, Ed25519, ECDSA P-256,
-  RSA-PSS, ML-KEM-768. armv7 is a phone client or a small board publishing a
-  few Mbps, so portable AEAD speed is enough; importing aws-lc's armv7
-  assembly and porting its C was rejected as far more unverified code for
-  throughput the role does not need. libcrux is 0.0.x and only armv7 depends
-  on it.
+  AES-GCM, ChaCha20-Poly1305, XChaCha20-Poly1305, SHA-2, HMAC, HKDF, X25519,
+  Ed25519, ECDSA P-256, RSA-PSS, ML-KEM-768. armv7 is a phone client or a
+  small board publishing a few Mbps, so portable AEAD speed is enough;
+  importing aws-lc's armv7 assembly and porting its C was rejected as far more
+  unverified code for throughput the role does not need. libcrux is 0.0.x and
+  only armv7 depends on it.
 - Exactly one backend compiles per arch, never both in one binary.
-- armv7 covers every operation the other arches do, so no adapter or MoQ
-  feature carries a per-target exclusion (maintainer, 2026-10-27). Where
-  libcrux lacks one, rind adds it over libcrux's constant-time primitives:
+- armv7 runs every operation the `rind-*` adapters and MoQ use, behind the
+  same API, so no adapter or MoQ feature carries a per-target exclusion
+  (maintainer, 2026-10-27). Where libcrux lacks one, rind adds it over
+  libcrux's constant-time primitives:
   - RSA PKCS#1 v1.5 signing and verification, as padding over the same HACL
     RSA operations RSA-PSS uses, and RSA key generation;
   - ECDSA P-384 signing, verification, and key generation over libcrux-p384's
@@ -34,12 +36,14 @@ Settled with the maintainer (2026-10-26 and 2026-10-27):
   and RSA or P-384 TLS keys working on the armv7 release.
 - Raspberry Pi 4, CM4, and Zero 2 W lack aarch64 crypto extensions, so they
   run this armv7 build.
-
-Open question for the backend quest: graviola's API also offers operations MoQ
-does not use, such as XChaCha20-Poly1305, SHA-3, and SHAKE. "Every operation
-the other arches do"
-reads as all of them; recommend covering the whole public API so rind's API
-is identical on every arch, and ask the maintainer before excluding any.
+- Operations with no consumer, SHA-3 and SHAKE, are not built on armv7 and
+  fail to compile there, because no adapter or MoQ uses them (maintainer,
+  2026-10-27). Add one when a consumer needs it. XChaCha20-Poly1305 is built,
+  because `rind-rustls`'s `Ticketer` encrypts session tickets with it.
+- On armv7, `Ed25519VerifyingKey::from_bytes` accepts any 32 bytes, and a key
+  that is not a valid curve point is refused only by `verify()`, because
+  libcrux exports no point decoding. Accepted and documented on `from_bytes`
+  (maintainer, 2026-10-27); a signature never verifies against such a key.
 
 ## Required
 
