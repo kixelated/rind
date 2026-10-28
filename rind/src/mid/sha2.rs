@@ -13,7 +13,8 @@ use crate::low::Blockwise;
 pub struct Sha256Context {
     h: [u32; 8],
     blockwise: Blockwise<{ Self::BLOCK_SZ }>,
-    nblocks: usize,
+    // u64 so 32-bit targets can hash past 4 GiB.
+    nblocks: u64,
 }
 
 impl Sha256Context {
@@ -56,17 +57,15 @@ impl Sha256Context {
     pub fn finish(mut self) -> [u8; Self::OUTPUT_SZ] {
         let bytes = self
             .nblocks
-            .checked_mul(Self::BLOCK_SZ)
-            .and_then(|bytes| bytes.checked_add(self.blockwise.used()))
+            .checked_mul(Self::BLOCK_SZ as u64)
+            .and_then(|bytes| bytes.checked_add(self.blockwise.used() as u64))
             .unwrap();
 
         let bits = bytes
             .checked_mul(8)
             .expect("excess data processed by hash function");
 
-        let last_blocks = self
-            .blockwise
-            .md_pad_with_length(&(bits as u64).to_be_bytes());
+        let last_blocks = self.blockwise.md_pad_with_length(&bits.to_be_bytes());
         self.update_blocks(last_blocks.as_ref());
 
         let mut r = [0u8; Self::OUTPUT_SZ];
@@ -81,7 +80,9 @@ impl Sha256Context {
         debug_assert!(blocks.len().is_multiple_of(Self::BLOCK_SZ));
         if !blocks.is_empty() {
             crate::low::sha256_compress_blocks(&mut self.h, blocks);
-            self.nblocks = self.nblocks.saturating_add(blocks.len() / Self::BLOCK_SZ);
+            self.nblocks = self
+                .nblocks
+                .saturating_add((blocks.len() / Self::BLOCK_SZ) as u64);
         }
     }
 
@@ -140,7 +141,8 @@ impl Sha384Context {
 pub struct Sha512Context {
     h: [u64; 8],
     blockwise: Blockwise<{ Self::BLOCK_SZ }>,
-    nblocks: usize,
+    // u64 so 32-bit targets can hash past 4 GiB.
+    nblocks: u64,
 }
 
 impl Sha512Context {
@@ -189,8 +191,8 @@ impl Sha512Context {
     pub fn finish(mut self) -> [u8; Self::OUTPUT_SZ] {
         let bytes = self
             .nblocks
-            .checked_mul(Self::BLOCK_SZ)
-            .and_then(|bytes| bytes.checked_add(self.blockwise.used()))
+            .checked_mul(Self::BLOCK_SZ as u64)
+            .and_then(|bytes| bytes.checked_add(self.blockwise.used() as u64))
             .unwrap();
 
         let bits = (bytes as u128)
@@ -212,7 +214,9 @@ impl Sha512Context {
         debug_assert!(blocks.len().is_multiple_of(Self::BLOCK_SZ));
         if !blocks.is_empty() {
             crate::low::sha512_compress_blocks(&mut self.h, blocks);
-            self.nblocks = self.nblocks.saturating_add(blocks.len() / Self::BLOCK_SZ);
+            self.nblocks = self
+                .nblocks
+                .saturating_add((blocks.len() / Self::BLOCK_SZ) as u64);
         }
     }
 
@@ -239,6 +243,23 @@ mod tests {
         ctx.update(b"hello");
         assert_eq!(&ctx.finish(),
                    b"\x9b\x71\xd2\x24\xbd\x62\xf3\x78\x5d\x96\xd4\x6a\xd3\xea\x3d\x73\x31\x9b\xfb\xc2\x89\x0c\xaa\xda\xe2\xdf\xf7\x25\x19\x67\x3c\xa7\x23\x23\xc3\xd9\x9b\xa5\xc1\x1d\x7c\x7a\xcc\x6e\x14\xb8\xc5\xda\x0c\x46\x63\x47\x5c\x2e\x5c\x3a\xde\xf4\x6f\x73\xbc\xde\xc0\x43");
+    }
+
+    // The bit length overflows a 32-bit usize at 512 MiB, and the byte count
+    // at 4 GiB.
+    #[test]
+    fn length_past_32_bit_usize() {
+        for bytes in [1u64 << 29, 1 << 32] {
+            let mut ctx = Sha256Context::new();
+            ctx.nblocks = bytes / Sha256Context::BLOCK_SZ as u64;
+            ctx.update(b"x");
+            ctx.finish();
+
+            let mut ctx = Sha512Context::new();
+            ctx.nblocks = bytes / Sha512Context::BLOCK_SZ as u64;
+            ctx.update(b"x");
+            ctx.finish();
+        }
     }
 
     #[test]
