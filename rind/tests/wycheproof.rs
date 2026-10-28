@@ -6,7 +6,7 @@ use rind::aead::{AesGcm, ChaCha20Poly1305, XChaCha20Poly1305};
 use rind::cipher::ChaCha20;
 use rind::hashing::hkdf::Prk;
 use rind::hashing::hmac::Hmac;
-use rind::hashing::{Hash, Sha256, Sha384, Sha512};
+use rind::hashing::{Hash, LegacySha1, Sha256, Sha384, Sha512};
 use rind::key_agreement::{mlkem768, p256, p384, x25519};
 use rind::signing::{ecdsa, eddsa, rsa};
 use serde::Deserialize;
@@ -166,6 +166,40 @@ impl Drop for Summary {
 }
 
 #[test]
+fn hmac_sha1_tests() {
+    let data_file = File::open("../thirdparty/wycheproof/testvectors_v1/hmac_sha1_test.json")
+        .expect("failed to open data file");
+
+    let reader = BufReader::new(data_file);
+    let tests: TestFile = serde_json::from_reader(reader).expect("invalid test JSON");
+    let mut summary = Summary::new();
+
+    for group in tests.groups {
+        summary.group(&group);
+        for test in group.tests {
+            summary.start(&test);
+
+            let mut ctx = Hmac::<LegacySha1>::new(test.key);
+            ctx.update(test.msg);
+            let result = match test.tag.len() {
+                20 => ctx.verify(&test.tag),
+                10 => match ctx.finish().truncated_ct_equal::<10>(&test.tag) {
+                    true => Ok(()),
+                    false => Err(Error::BadSignature),
+                },
+                _ => todo!("unhandled truncated hmac"),
+            };
+
+            match (test.result, result) {
+                (ExpectedResult::Valid, Ok(())) => {}
+                (ExpectedResult::Invalid, Err(Error::BadSignature)) => {}
+                _ => panic!("expected {:?} got {:?}", test.result, result),
+            }
+        }
+    }
+}
+
+#[test]
 fn hmac_sha256_tests() {
     let data_file = File::open("../thirdparty/wycheproof/testvectors_v1/hmac_sha256_test.json")
         .expect("failed to open data file");
@@ -294,6 +328,7 @@ fn hkdf_tests() {
         }
     }
 
+    check::<LegacySha1>("../thirdparty/wycheproof/testvectors_v1/hkdf_sha1_test.json");
     check::<Sha256>("../thirdparty/wycheproof/testvectors_v1/hkdf_sha256_test.json");
     check::<Sha384>("../thirdparty/wycheproof/testvectors_v1/hkdf_sha384_test.json");
     check::<Sha512>("../thirdparty/wycheproof/testvectors_v1/hkdf_sha512_test.json");

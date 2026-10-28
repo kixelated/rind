@@ -69,7 +69,6 @@ RustCrypto dependency.
 ## Required
 
 - [CPU check](/quest/m1/moq/cpu.md) - a public check naming the missing CPU feature, so MoQ refuses at startup
-- [SHA-1 and HMAC-SHA1](/quest/m1/moq/sha1.md) - for STUN MESSAGE-INTEGRITY and SRTP AES-CM-HMAC-SHA1-80
 - [armv7 on libcrux](/quest/m1/moq/armv7/README.md) - armv7 Android and Linux run every operation the adapters and MoQ use
 - [rind-rustls covers MoQ](/quest/m1/moq/rustls.md) - TLS 1.2 and 1.3, every key type MoQ loads, and rustls's QUIC keys
 - [rind-str0m](/quest/m1/moq/str0m.md) - str0m's SRTP, fingerprints, and STUN integrity

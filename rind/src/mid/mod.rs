@@ -14,6 +14,7 @@ pub(super) mod p384;
 pub(super) mod rng;
 pub(super) mod rsa_priv;
 pub(super) mod rsa_pub;
+pub(super) mod sha1;
 pub mod sha2;
 pub mod sha3;
 pub(super) mod util;
