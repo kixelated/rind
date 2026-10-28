@@ -113,7 +113,6 @@ proptest! {
     }
 }
 
-#[cfg(not(target_arch = "arm"))]
 mod cipher {
     use aws_lc_rs::aead::{Aad, CHACHA20_POLY1305, LessSafeKey, Nonce, UnboundKey, quic};
     use aws_lc_rs::cipher::{AES_128, AES_256, EncryptingKey, EncryptionContext, UnboundCipherKey};

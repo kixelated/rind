@@ -3,7 +3,6 @@ use std::io::BufReader;
 
 use rind::Error;
 use rind::aead::{AesGcm, ChaCha20Poly1305, XChaCha20Poly1305};
-#[cfg(not(target_arch = "arm"))]
 use rind::cipher::ChaCha20;
 use rind::hashing::hkdf::Prk;
 use rind::hashing::hmac::Hmac;
@@ -73,7 +72,6 @@ struct Test {
     aad: Vec<u8>,
     #[serde(default, with = "hex::serde")]
     iv: Vec<u8>,
-    #[cfg(not(target_arch = "arm"))]
     #[serde(default, rename(deserialize = "initialCounter"), with = "hex::serde")]
     initial_counter: Vec<u8>,
     #[serde(default, with = "hex::serde")]
@@ -865,7 +863,6 @@ fn test_chacha20poly1305() {
 }
 
 #[test]
-#[cfg(not(target_arch = "arm"))]
 fn test_chacha20() {
     let data_file =
         File::open("../thirdparty/wycheproof/testvectors_v1/chacha20_counter_test.json")
