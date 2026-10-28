@@ -179,6 +179,14 @@ pub mod aead {
     pub use super::mid::xchacha20poly1305::XChaCha20Poly1305;
 }
 
+/// Unauthenticated ciphers, for protocols that specify one alongside their own integrity protection.
+///
+/// Prefer [`aead`] unless a protocol requires one of these.
+pub mod cipher {
+    pub use super::mid::aes::{Aes, AesCtr};
+    pub use super::mid::chacha20::ChaCha20;
+}
+
 /// CPU support.
 ///
 /// Every operation panics on a CPU missing a feature rind requires. Check at

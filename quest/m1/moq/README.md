@@ -67,7 +67,6 @@ RustCrypto dependency.
 
 - [HKDF](/quest/m1/moq/hkdf.md) - HKDF-SHA256/384 in rind's API for QUIC tokens, stateless resets, and moq-e2ee
 - [SHA-1 and HMAC-SHA1](/quest/m1/moq/sha1.md) - for STUN MESSAGE-INTEGRITY and SRTP AES-CM-HMAC-SHA1-80
-- [Raw ciphers](/quest/m1/moq/cipher.md) - the AES block, ChaCha20, and AES-CTR for QUIC and DTLS header protection and SRTP
 - [armv7 on libcrux](/quest/m1/moq/armv7/README.md) - armv7 Android and Linux run every operation the other arches do
 - [rind-rustls covers MoQ](/quest/m1/moq/rustls.md) - TLS 1.2 and 1.3, every key type MoQ loads, and rustls's QUIC keys
 - [rind-jsonwebtoken](/quest/m1/moq/jsonwebtoken.md) - jsonwebtoken 11's `CryptoProvider` for every algorithm moq-auth accepts
