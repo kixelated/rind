@@ -16,6 +16,8 @@ use rustls::crypto::CryptoProvider;
 mod aead;
 mod hash;
 mod hmac;
+// QUIC header protection needs `rind::cipher`, which 32-bit ARM does not build yet.
+#[cfg(not(target_arch = "arm"))]
 mod quic;
 mod sign;
 mod verify;

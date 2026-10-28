@@ -1,6 +1,8 @@
 //! QUIC handshakes between rind and other providers, checking that each side's
 //! packet and header protection keys open what the other side seals.
 
+#![cfg(not(target_arch = "arm"))]
+
 use std::sync::Arc;
 
 use rustls::crypto::{CryptoProvider, aws_lc_rs, ring};

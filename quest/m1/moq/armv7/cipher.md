@@ -12,8 +12,9 @@ Settled (maintainer, 2026-10-27): libcrux lacks these, so rind adds them over
 libcrux's constant-time primitives rather than excluding WebRTC or QUIC header
 protection from armv7.
 
-Until this lands, armv7 compiles out `rind::cipher` and its tests with
-`cfg(not(target_arch = "arm"))`; remove those gates here.
+Until this lands, armv7 compiles out `rind::cipher`, its tests, and
+rind-rustls's QUIC support (`quic: None` on the TLS 1.3 suites, and
+`tests/quic.rs`) with `cfg(not(target_arch = "arm"))`; remove those gates here.
 
 Guidance:
 
