@@ -3,7 +3,9 @@
 
 #![deny(unsafe_code)]
 
+pub(super) mod aes;
 pub(super) mod aes_gcm;
+pub(super) mod chacha20;
 pub(super) mod chacha20poly1305;
 pub(super) mod ed25519;
 pub mod mlkem768;

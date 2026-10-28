@@ -34,6 +34,13 @@ impl AesKey {
         }
     }
 
+    /// Encrypts eight consecutive blocks in place, pipelined.
+    pub(crate) fn encrypt_8_blocks(&self, inout: &mut [u8; 128]) {
+        let (rk_first, rks, rk_last) = self.round_keys();
+        // SAFETY: this crate requires the `aes` & `avx` cpu features
+        unsafe { aes_8_blocks(rk_first, rks, rk_last, inout) }
+    }
+
     pub(crate) fn round_keys(&self) -> (__m128i, &[__m128i], __m128i) {
         match self {
             Self::Aes128(a128) => (
@@ -310,6 +317,79 @@ fn aes256_block(round_keys: &[__m128i; 15], block_inout: &mut [u8; 16]) {
     let block = _mm_aesenclast_si128(block, round_keys[14]);
     // SAFETY: `block_inout` is 16 bytes and writeable
     unsafe { _mm_storeu_si128(block_inout.as_mut_ptr().cast(), block) };
+}
+
+#[target_feature(enable = "aes,avx")]
+fn aes_8_blocks(rk_first: __m128i, rks: &[__m128i], rk_last: __m128i, inout: &mut [u8; 128]) {
+    // SAFETY: `inout` is 128 bytes and readable
+    let (b0, b1, b2, b3, b4, b5, b6, b7) = unsafe {
+        (
+            _mm_loadu_si128(inout.as_ptr().add(0).cast()),
+            _mm_loadu_si128(inout.as_ptr().add(16).cast()),
+            _mm_loadu_si128(inout.as_ptr().add(32).cast()),
+            _mm_loadu_si128(inout.as_ptr().add(48).cast()),
+            _mm_loadu_si128(inout.as_ptr().add(64).cast()),
+            _mm_loadu_si128(inout.as_ptr().add(80).cast()),
+            _mm_loadu_si128(inout.as_ptr().add(96).cast()),
+            _mm_loadu_si128(inout.as_ptr().add(112).cast()),
+        )
+    };
+
+    let mut b0 = _mm_xor_si128(b0, rk_first);
+    let mut b1 = _mm_xor_si128(b1, rk_first);
+    let mut b2 = _mm_xor_si128(b2, rk_first);
+    let mut b3 = _mm_xor_si128(b3, rk_first);
+    let mut b4 = _mm_xor_si128(b4, rk_first);
+    let mut b5 = _mm_xor_si128(b5, rk_first);
+    let mut b6 = _mm_xor_si128(b6, rk_first);
+    let mut b7 = _mm_xor_si128(b7, rk_first);
+
+    for rk in rks {
+        b0 = _mm_aesenc_si128(b0, *rk);
+        b1 = _mm_aesenc_si128(b1, *rk);
+        b2 = _mm_aesenc_si128(b2, *rk);
+        b3 = _mm_aesenc_si128(b3, *rk);
+        b4 = _mm_aesenc_si128(b4, *rk);
+        b5 = _mm_aesenc_si128(b5, *rk);
+        b6 = _mm_aesenc_si128(b6, *rk);
+        b7 = _mm_aesenc_si128(b7, *rk);
+    }
+
+    // SAFETY: `inout` is 128 bytes and writable
+    unsafe {
+        _mm_storeu_si128(
+            inout.as_mut_ptr().add(0).cast(),
+            _mm_aesenclast_si128(b0, rk_last),
+        );
+        _mm_storeu_si128(
+            inout.as_mut_ptr().add(16).cast(),
+            _mm_aesenclast_si128(b1, rk_last),
+        );
+        _mm_storeu_si128(
+            inout.as_mut_ptr().add(32).cast(),
+            _mm_aesenclast_si128(b2, rk_last),
+        );
+        _mm_storeu_si128(
+            inout.as_mut_ptr().add(48).cast(),
+            _mm_aesenclast_si128(b3, rk_last),
+        );
+        _mm_storeu_si128(
+            inout.as_mut_ptr().add(64).cast(),
+            _mm_aesenclast_si128(b4, rk_last),
+        );
+        _mm_storeu_si128(
+            inout.as_mut_ptr().add(80).cast(),
+            _mm_aesenclast_si128(b5, rk_last),
+        );
+        _mm_storeu_si128(
+            inout.as_mut_ptr().add(96).cast(),
+            _mm_aesenclast_si128(b6, rk_last),
+        );
+        _mm_storeu_si128(
+            inout.as_mut_ptr().add(112).cast(),
+            _mm_aesenclast_si128(b7, rk_last),
+        );
+    }
 }
 
 #[cfg(test)]

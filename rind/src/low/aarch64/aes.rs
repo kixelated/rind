@@ -36,6 +36,46 @@ impl AesKey {
             Self::Aes256(a256) => a256.encrypt_block(inout),
         }
     }
+
+    /// Encrypts eight consecutive blocks in place, pipelined.
+    pub(crate) fn encrypt_8_blocks(&self, inout: &mut [u8; 128]) {
+        // SAFETY: this crate requires the `aes` & `neon` cpu features
+        unsafe { aes_8_blocks(self, inout) }
+    }
+}
+
+#[target_feature(enable = "aes,neon")]
+fn aes_8_blocks(key: &AesKey, inout: &mut [u8; 128]) {
+    // SAFETY: `inout` is 128 bytes and readable
+    let (b0, b1, b2, b3, b4, b5, b6, b7) = unsafe {
+        (
+            vld1q_u8(inout.as_ptr().add(0)),
+            vld1q_u8(inout.as_ptr().add(16)),
+            vld1q_u8(inout.as_ptr().add(32)),
+            vld1q_u8(inout.as_ptr().add(48)),
+            vld1q_u8(inout.as_ptr().add(64)),
+            vld1q_u8(inout.as_ptr().add(80)),
+            vld1q_u8(inout.as_ptr().add(96)),
+            vld1q_u8(inout.as_ptr().add(112)),
+        )
+    };
+
+    let (b0, b1, b2, b3, b4, b5, b6, b7) = match key {
+        AesKey::Aes128(a128) => _aes128_8_blocks(a128.round_keys(), b0, b1, b2, b3, b4, b5, b6, b7),
+        AesKey::Aes256(a256) => _aes256_8_blocks(a256.round_keys(), b0, b1, b2, b3, b4, b5, b6, b7),
+    };
+
+    // SAFETY: `inout` is 128 bytes and writable
+    unsafe {
+        vst1q_u8(inout.as_mut_ptr().add(0), b0);
+        vst1q_u8(inout.as_mut_ptr().add(16), b1);
+        vst1q_u8(inout.as_mut_ptr().add(32), b2);
+        vst1q_u8(inout.as_mut_ptr().add(48), b3);
+        vst1q_u8(inout.as_mut_ptr().add(64), b4);
+        vst1q_u8(inout.as_mut_ptr().add(80), b5);
+        vst1q_u8(inout.as_mut_ptr().add(96), b6);
+        vst1q_u8(inout.as_mut_ptr().add(112), b7);
+    }
 }
 
 impl Drop for AesKey {
