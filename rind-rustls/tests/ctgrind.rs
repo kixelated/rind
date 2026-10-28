@@ -164,6 +164,60 @@ fn record_protection() {
     }
 }
 
+// rind-rustls offers no QUIC protection on 32-bit ARM.
+#[cfg(not(target_arch = "arm"))]
+#[test]
+fn quic_protection() {
+    for suite in [
+        rind_rustls::suites::TLS13_AES_128_GCM_SHA256,
+        rind_rustls::suites::TLS13_AES_256_GCM_SHA384,
+        rind_rustls::suites::TLS13_CHACHA20_POLY1305_SHA256,
+    ] {
+        let SupportedCipherSuite::Tls13(suite) = suite else {
+            unreachable!()
+        };
+        let quic = suite.quic.unwrap();
+        // Each key consumes its own copy.
+        let key = || {
+            let key = AeadKey::from([0x42; 32]);
+            secret(key.as_ref());
+            key
+        };
+        let iv = || Iv::new([0x24; 12]);
+
+        let header = b"header";
+        let mut packet = *b"payload";
+        let tag = quic
+            .packet_key(key(), iv())
+            .encrypt_in_place(7, header, &mut packet)
+            .unwrap();
+        public(&packet);
+        public(tag.as_ref());
+
+        let mut sealed = [&packet[..], tag.as_ref()].concat();
+        let opened = quic
+            .packet_key(key(), iv())
+            .decrypt_in_place(7, header, &mut sealed)
+            .unwrap();
+        public(opened);
+        assert_eq!(opened, b"payload", "{:?}", suite.common.suite);
+
+        let sample = [0x11; 16];
+        let (mut first, mut packet_number) = (0xc3, [1, 2, 3, 4]);
+        quic.header_protection_key(key())
+            .encrypt_in_place(&sample, &mut first, &mut packet_number)
+            .unwrap();
+        public(&first);
+        public(&packet_number);
+        quic.header_protection_key(key())
+            .decrypt_in_place(&sample, &mut first, &mut packet_number)
+            .unwrap();
+        public(&first);
+        public(&packet_number);
+        assert_eq!((first, packet_number), (0xc3, [1, 2, 3, 4]));
+    }
+}
+
 #[test]
 fn signing() {
     let provider = rind_rustls::default_provider();
