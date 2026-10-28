@@ -124,9 +124,9 @@ We are grateful to:
 
 ### Unauthenticated ciphers
 
-- [x] AES block encryption, for QUIC and DTLS 1.3 header protection
+- [x] AES block encryption, for QUIC header protection and DTLS 1.3 record number protection
 - [x] AES-CTR, for SRTP
-- [x] ChaCha20, for QUIC and DTLS 1.3 header protection
+- [x] ChaCha20, for QUIC header protection and DTLS 1.3 record number protection
 
 ## Assorted technical details
 
