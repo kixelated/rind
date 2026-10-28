@@ -2634,6 +2634,7 @@ name = "rind-rustls"
 version = "0.1.0"
 dependencies = [
  "env_logger",
+ "hex",
  "http",
  "http-body-util",
  "hyper",

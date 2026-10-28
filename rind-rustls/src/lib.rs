@@ -16,6 +16,7 @@ use rustls::crypto::CryptoProvider;
 mod aead;
 mod hash;
 mod hmac;
+mod quic;
 mod sign;
 mod verify;
 
