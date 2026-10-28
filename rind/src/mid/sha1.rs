@@ -7,6 +7,7 @@
 //! matters, such as in signatures.
 
 use crate::low::Blockwise;
+use crate::low::cpu::verify_cpu_features;
 
 /// A context for incremental computation of SHA1.
 #[derive(Clone)]
@@ -77,6 +78,7 @@ impl Sha1Context {
     fn update_blocks(&mut self, blocks: &[u8]) {
         debug_assert!(blocks.len().is_multiple_of(Self::BLOCK_SZ));
         if !blocks.is_empty() {
+            verify_cpu_features();
             crate::low::sha1_compress_blocks(&mut self.h, blocks);
             self.nblocks = self.nblocks.saturating_add(blocks.len() / Self::BLOCK_SZ);
         }

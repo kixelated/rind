@@ -38,11 +38,10 @@ Targets, refused rather than falling back:
 
 - Exactly one backend compiles per arch, never both in one binary
   (maintainer, 2026-10-26).
-- x86_64 and aarch64 run graviola's backend. x86_64 needs aes, ssse3, avx,
-  avx2, adx, bmi2, and pclmulqdq; aarch64 needs aes, sha2, pmull, and neon.
-- rind exposes a CPU check that names the missing feature
-  ([CPU check](/quest/m1/moq/cpu.md)), so MoQ fails at startup instead of
-  panicking on its first handshake. Hosts missing a feature are refused, as are
+- x86_64 and aarch64 run graviola's backend. x86_64 needs aes, ssse3, popcnt,
+  avx, avx2, adx, bmi2, and pclmulqdq; aarch64 needs aes, sha2, pmull, and neon.
+- `rind::cpu::check()` names the missing feature, so MoQ fails at startup
+  instead of panicking on its first handshake. Hosts missing a feature are refused, as are
   aarch64 boards without crypto extensions (Raspberry Pi 4, CM4, Zero 2 W),
   which run the armv7 build instead.
 - armv7 (Android and Linux gnueabihf) runs libcrux's verified portable Rust
@@ -68,7 +67,6 @@ RustCrypto dependency.
 
 ## Required
 
-- [CPU check](/quest/m1/moq/cpu.md) - a public check naming the missing CPU feature, so MoQ refuses at startup
 - [armv7 on libcrux](/quest/m1/moq/armv7/README.md) - armv7 Android and Linux run every operation the adapters and MoQ use
 - [rind-rustls covers MoQ](/quest/m1/moq/rustls.md) - TLS 1.2 and 1.3, every key type MoQ loads, and rustls's QUIC keys
 - [rind-str0m](/quest/m1/moq/str0m.md) - str0m's SRTP, fingerprints, and STUN integrity

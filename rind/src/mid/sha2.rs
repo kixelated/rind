@@ -7,6 +7,7 @@
 //! These are all described in [FIPS180](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf).
 
 use crate::low::Blockwise;
+use crate::low::cpu::verify_cpu_features;
 
 /// A context for incremental computation of SHA256.
 #[derive(Clone)]
@@ -80,6 +81,7 @@ impl Sha256Context {
     fn update_blocks(&mut self, blocks: &[u8]) {
         debug_assert!(blocks.len().is_multiple_of(Self::BLOCK_SZ));
         if !blocks.is_empty() {
+            verify_cpu_features();
             crate::low::sha256_compress_blocks(&mut self.h, blocks);
             self.nblocks = self.nblocks.saturating_add(blocks.len() / Self::BLOCK_SZ);
         }
@@ -211,6 +213,7 @@ impl Sha512Context {
     fn update_blocks(&mut self, blocks: &[u8]) {
         debug_assert!(blocks.len().is_multiple_of(Self::BLOCK_SZ));
         if !blocks.is_empty() {
+            verify_cpu_features();
             crate::low::sha512_compress_blocks(&mut self.h, blocks);
             self.nblocks = self.nblocks.saturating_add(blocks.len() / Self::BLOCK_SZ);
         }
