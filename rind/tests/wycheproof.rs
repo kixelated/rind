@@ -72,6 +72,7 @@ struct Test {
     aad: Vec<u8>,
     #[serde(default, with = "hex::serde")]
     iv: Vec<u8>,
+    #[cfg(not(target_arch = "arm"))]
     #[serde(default, rename(deserialize = "initialCounter"), with = "hex::serde")]
     initial_counter: Vec<u8>,
     #[serde(default, with = "hex::serde")]
