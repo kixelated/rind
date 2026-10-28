@@ -114,6 +114,15 @@ fn ecdh_p384() {
 }
 
 #[test]
+fn hkdf() {
+    use rind::hashing::hkdf::Prk;
+    use rind::hashing::{Sha256, Sha512};
+
+    check_zeroed_on_drop(Box::pin(Prk::<Sha256>::extract(b"salt", b"ikm")));
+    check_zeroed_on_drop(Box::pin(Prk::<Sha512>::extract(b"salt", b"ikm")));
+}
+
+#[test]
 fn aes_gcm() {
     use rind::aead::AesGcm;
 
