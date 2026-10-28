@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 
 use core::fmt;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 /// A CPU feature rind requires that this CPU lacks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -29,7 +30,19 @@ pub fn check() -> Result<(), MissingFeature> {
 
 /// Panics with [`check`]'s error rather than run instructions this CPU lacks.
 pub(crate) fn verify_cpu_features() {
-    if let Err(missing) = check() {
-        panic!("{missing}");
+    // Every operation calls this, and a single-block one costs little more
+    // than testing each feature, so a pass is remembered.
+    static VERIFIED: AtomicBool = AtomicBool::new(false);
+
+    #[cold]
+    fn verify() {
+        if let Err(missing) = check() {
+            panic!("{missing}");
+        }
+        VERIFIED.store(true, Ordering::Relaxed);
+    }
+
+    if !VERIFIED.load(Ordering::Relaxed) {
+        verify();
     }
 }
