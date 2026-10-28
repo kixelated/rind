@@ -1,0 +1,24 @@
+[package]
+name = "rind-object-store"
+version = "0.1.0"
+edition = "2024"
+repository = "https://github.com/kixelated/rind"
+license = "Apache-2.0 OR ISC OR MIT-0"
+description = "object_store CryptoProvider backed by rind"
+categories = ["cryptography"]
+rust-version = "1.89"
+readme = "README.md"
+
+[dependencies]
+# object_store exposes its CryptoProvider only with a cloud backend enabled;
+# gcp-base is the one that adds no dependencies beyond the shared cloud-base.
+object_store = { version = "0.14", default-features = false, features = ["gcp-base"] }
+rind = { version = "0.1.0", path = "../rind" }
+rustls-pki-types = { version = "1.9", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+aws-lc-rs = { version = "1.16", default-features = false, features = ["alloc", "prebuilt-nasm", "non-fips"] }
+async-trait = "0.1"
+http = "1"
+object_store = { version = "0.14", default-features = false, features = ["aws-base", "azure-base", "gcp-base"] }
+tokio = { version = "1", features = ["macros", "rt"] }

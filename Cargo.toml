@@ -4,7 +4,9 @@ members = [
   "rind",
   "rind-bench",
   "rind-cpuid",
+  "rind-object-store",
   "rind-rustls",
+  "rind-jsonwebtoken",
   "fuzz"
 ]
 
