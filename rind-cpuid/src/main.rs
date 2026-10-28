@@ -21,7 +21,7 @@ fn main() {
     let vaes = is_x86_feature_detected!("vaes");
     let vpclmulqdq = is_x86_feature_detected!("vpclmulqdq");
 
-    let compatible = aes && pclmulqdq && bmi1 && bmi2 && adx && avx && avx2 && ssse3;
+    let compatible = rind::cpu::check().is_ok();
     let avx512_aes_gcm = avx512f && avx512bw && avx512vl && vaes && vpclmulqdq;
 
     println!(
@@ -60,7 +60,7 @@ fn main() {
     let sha2 = is_aarch64_feature_detected!("sha2");
     let sha3 = is_aarch64_feature_detected!("sha3");
 
-    let compatible = aes && neon && pmull && sha2;
+    let compatible = rind::cpu::check().is_ok();
 
     println!(
         "{{ \"cpuid\": {{ \"aes\": {}, \"dit\": {}, \"neon\": {}, \"pmull\": {}, \
