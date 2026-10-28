@@ -16,11 +16,13 @@ protection from armv7.
 Guidance:
 
 - The AES block and ChaCha20 should come from the same libcrux code its
-  AES-GCM and ChaCha20-Poly1305 use, not a second implementation.
+  AES-GCM and ChaCha20-Poly1305 use, not a second implementation. As
+  published, libcrux-aes 0.0.10 keeps its AES block and CTR modules private,
+  and libcrux-chacha20poly1305 0.0.10 keeps HACL*'s ChaCha20 private, so this
+  needs libcrux to export them first. libcrux has no SHA-1.
 - Run the vectors the graviola-backend quests added for these, under qemu.
 
 ## Required
 
-- [libcrux backend](/quest/m1/moq/armv7/backend.md) - the armv7 backend this extends
 - [SHA-1 and HMAC-SHA1](/quest/m1/moq/sha1.md) - the API and vectors this matches
 - [Raw ciphers](/quest/m1/moq/cipher.md) - the API and vectors this matches

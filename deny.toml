@@ -14,8 +14,8 @@ ignore = [
     "RUSTSEC-2023-0071",
 
     # proc-macro-error2 is unmaintained (proc-macro, build-time only). Pulled
-    # by hax-lib-macros under libcrux-ml-kem, which only rind-bench uses.
-    # Revisit when rind takes libcrux as a dependency for armv7.
+    # by hax-lib-macros under libcrux's `cfg(hax)` dependencies, which only
+    # hax's verification toolchain compiles; no build of rind does.
     "RUSTSEC-2026-0173",
 ]
 

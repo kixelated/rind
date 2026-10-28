@@ -5,7 +5,7 @@ use rind::Error;
 use rind::aead::{AesGcm, ChaCha20Poly1305, XChaCha20Poly1305};
 use rind::hashing::hmac::Hmac;
 use rind::hashing::{Sha256, Sha384, Sha512};
-use rind::key_agreement::{mlkem768, p256, p384, x25519};
+use rind::key_agreement::{mlkem768, p256, x25519};
 use rind::signing::{ecdsa, eddsa, rsa};
 use serde::Deserialize;
 
@@ -310,6 +310,7 @@ fn test_verify_ecdsa_p256() {
 }
 
 #[test]
+#[cfg(not(target_arch = "arm"))]
 fn test_verify_ecdsa_p384() {
     for file in [
         "ecdsa_secp384r1_sha256_test.json",
@@ -408,7 +409,10 @@ fn test_ecdh_p256() {
 }
 
 #[test]
+#[cfg(not(target_arch = "arm"))]
 fn test_ecdh_p384() {
+    use rind::key_agreement::p384;
+
     let data_file =
         File::open("../thirdparty/wycheproof/testvectors_v1/ecdh_secp384r1_ecpoint_test.json")
             .expect("failed to open data file");

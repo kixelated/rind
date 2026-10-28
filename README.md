@@ -42,12 +42,18 @@ but there is also a public API for general-purpose use.
 
 ## Limitations
 
-`aarch64` and `x86_64` architectures only.
+`aarch64`, `x86_64`, and 32-bit `arm` architectures only.
 
 - `aarch64` requires `aes`, `sha2`, `pmull`, and `neon` CPU features.
-  (This notably excludes Raspberry PI 4 and earlier, but covers Raspberry Pi 5.)
+  (This notably excludes Raspberry PI 4 and earlier, which can run the 32-bit
+  `arm` build, but covers Raspberry Pi 5.)
 - `x86_64` requires `aes`, `ssse3`, `avx`, `avx2`, `adx`, `bmi2`, and `pclmulqdq` CPU features.
   (This is most x86_64 CPUs made since around ~2014.)
+- 32-bit `arm` (tested on `armv7-unknown-linux-gnueabihf`, and built for
+  `armv7-linux-androideabi`) runs [libcrux]'s verified portable Rust instead,
+  and needs no CPU features. It does not yet offer P-384, RSA key generation,
+  SHA-3, or SHAKE, and an Ed25519 public key that is not a curve point is
+  refused when verifying rather than when decoding.
 
 ## Building and Testing
 
@@ -83,9 +89,12 @@ We are grateful to:
     - SHA-3 Keccak-f
     - Big integer arithmetic
 - [wycheproof]: collated test vectors for all algorithms.
+- [libcrux]: formally verified portable Rust (from HACL\*) for the 32-bit
+  `arm` backend.
 
 [s2n-bignum]: https://github.com/awslabs/s2n-bignum
 [wycheproof]: https://github.com/C2SP/wycheproof
+[libcrux]: https://github.com/cryspen/libcrux
 [SLOTHY]: https://github.com/slothy-optimizer/slothy
 [performance]: https://jbp.io/rind/
 [rind-rustls]: https://crates.io/crates/rind-rustls

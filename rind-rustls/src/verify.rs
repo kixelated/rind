@@ -6,6 +6,7 @@ use rustls::pki_types::{
     AlgorithmIdentifier, InvalidSignature, SignatureVerificationAlgorithm, alg_id,
 };
 
+#[cfg(not(target_arch = "arm"))]
 pub(crate) static ALGORITHMS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms {
     all: &[
         ECDSA_P256_SHA512,
@@ -41,6 +42,34 @@ pub(crate) static ALGORITHMS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorit
     ],
 };
 
+// rind does not yet build P-384 on 32-bit ARM.
+#[cfg(target_arch = "arm")]
+pub(crate) static ALGORITHMS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms {
+    all: &[
+        ECDSA_P256_SHA512,
+        ECDSA_P256_SHA384,
+        ECDSA_P256_SHA256,
+        ED25519,
+        RSA_PSS_SHA512,
+        RSA_PSS_SHA384,
+        RSA_PSS_SHA256,
+        RSA_PKCS1_SHA512,
+        RSA_PKCS1_SHA384,
+        RSA_PKCS1_SHA256,
+    ],
+    mapping: &[
+        (SignatureScheme::ECDSA_NISTP256_SHA256, &[ECDSA_P256_SHA256]),
+        (SignatureScheme::ECDSA_NISTP384_SHA384, &[ECDSA_P256_SHA384]),
+        (SignatureScheme::ED25519, &[ED25519]),
+        (SignatureScheme::RSA_PSS_SHA512, &[RSA_PSS_SHA512]),
+        (SignatureScheme::RSA_PSS_SHA384, &[RSA_PSS_SHA384]),
+        (SignatureScheme::RSA_PSS_SHA256, &[RSA_PSS_SHA256]),
+        (SignatureScheme::RSA_PKCS1_SHA512, &[RSA_PKCS1_SHA512]),
+        (SignatureScheme::RSA_PKCS1_SHA384, &[RSA_PKCS1_SHA384]),
+        (SignatureScheme::RSA_PKCS1_SHA256, &[RSA_PKCS1_SHA256]),
+    ],
+};
+
 static ECDSA_P256_SHA256: &dyn SignatureVerificationAlgorithm = &EcdsaP256Verify {
     signature_alg_id: alg_id::ECDSA_SHA256,
     verify: |key, signature, message| key.verify_asn1::<hashing::Sha256>(&[message], signature),
@@ -56,16 +85,19 @@ static ECDSA_P256_SHA512: &dyn SignatureVerificationAlgorithm = &EcdsaP256Verify
     verify: |key, signature, message| key.verify_asn1::<hashing::Sha512>(&[message], signature),
 };
 
+#[cfg(not(target_arch = "arm"))]
 static ECDSA_P384_SHA256: &dyn SignatureVerificationAlgorithm = &EcdsaP384Verify {
     signature_alg_id: alg_id::ECDSA_SHA256,
     verify: |key, signature, message| key.verify_asn1::<hashing::Sha256>(&[message], signature),
 };
 
+#[cfg(not(target_arch = "arm"))]
 static ECDSA_P384_SHA384: &dyn SignatureVerificationAlgorithm = &EcdsaP384Verify {
     signature_alg_id: alg_id::ECDSA_SHA384,
     verify: |key, signature, message| key.verify_asn1::<hashing::Sha384>(&[message], signature),
 };
 
+#[cfg(not(target_arch = "arm"))]
 static ECDSA_P384_SHA512: &dyn SignatureVerificationAlgorithm = &EcdsaP384Verify {
     signature_alg_id: alg_id::ECDSA_SHA512,
     verify: |key, signature, message| key.verify_asn1::<hashing::Sha512>(&[message], signature),
@@ -162,12 +194,14 @@ impl SignatureVerificationAlgorithm for EcdsaP256Verify {
 }
 
 #[derive(Debug)]
+#[cfg(not(target_arch = "arm"))]
 struct EcdsaP384Verify {
     signature_alg_id: AlgorithmIdentifier,
     #[allow(clippy::type_complexity)]
     verify: fn(&ecdsa::VerifyingKey<ecdsa::P384>, &[u8], &[u8]) -> Result<(), rind::Error>,
 }
 
+#[cfg(not(target_arch = "arm"))]
 impl SignatureVerificationAlgorithm for EcdsaP384Verify {
     fn public_key_alg_id(&self) -> AlgorithmIdentifier {
         alg_id::ECDSA_P384
@@ -273,6 +307,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_arch = "arm"))]
     fn test_ecdsap384_verify() {
         let signing_key = Arc::new(
             ecdsa::SigningKey::<ecdsa::P384>::from_pkcs8_der(include_bytes!(

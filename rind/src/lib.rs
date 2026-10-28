@@ -138,6 +138,7 @@ pub mod key_agreement {
     /// ```
     ///
     /// See [SEC1](https://www.secg.org/sec1-v2.pdf) for one definition.
+    #[cfg(not(target_arch = "arm"))]
     pub mod p384 {
         pub use crate::mid::p384::{PrivateKey, PublicKey, SharedSecret, StaticPrivateKey};
     }
@@ -149,12 +150,16 @@ pub mod key_agreement {
 pub mod signing {
     /// RSA signatures.
     pub mod rsa {
-        pub use crate::high::rsa::{KeySize, SigningKey, VerifyingKey};
+        #[cfg(not(target_arch = "arm"))]
+        pub use crate::high::rsa::KeySize;
+        pub use crate::high::rsa::{SigningKey, VerifyingKey};
     }
 
     /// ECDSA signatures.
     pub mod ecdsa {
-        pub use crate::high::curve::{Curve, P256, P384};
+        #[cfg(not(target_arch = "arm"))]
+        pub use crate::high::curve::P384;
+        pub use crate::high::curve::{Curve, P256};
         pub use crate::high::ecdsa::{SigningKey, VerifyingKey};
     }
 
@@ -169,6 +174,7 @@ pub mod hashing {
     pub use super::high::hash::{Hash, HashContext, HashOutput, Sha256, Sha384, Sha512};
     pub use super::high::hmac;
     pub use super::mid::sha2;
+    #[cfg(not(target_arch = "arm"))]
     pub use super::mid::sha3;
 }
 

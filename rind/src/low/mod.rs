@@ -1,6 +1,7 @@
 // Written for Graviola by Joe Birr-Pixton, 2024.
 // SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 
+#[cfg(not(target_arch = "arm"))]
 #[macro_use]
 mod macros;
 
@@ -11,33 +12,40 @@ pub mod inline_assembly_safety;
 
 mod generic {
     pub(super) mod blockwise;
+    #[cfg(not(target_arch = "arm"))]
     pub(super) mod ct_copy;
     pub(super) mod ct_equal;
-    #[cfg(test)]
+    #[cfg(all(test, not(target_arch = "arm")))]
     pub(crate) mod ghash;
     #[cfg(target_arch = "aarch64")]
     pub(crate) mod mlkem;
     #[cfg(target_arch = "aarch64")]
     pub(crate) mod mlkem768;
+    #[cfg(not(target_arch = "arm"))]
     pub(crate) mod poly1305;
     #[cfg(target_arch = "x86_64")]
     pub(super) mod sha256;
+    #[cfg(not(target_arch = "arm"))]
     pub(super) mod sha512;
     pub(super) mod zeroise;
 }
 
 mod entry;
+#[cfg(not(target_arch = "arm"))]
 mod posint;
 
 pub(crate) use entry::Entry;
 pub(crate) use generic::blockwise::Blockwise;
+#[cfg(not(target_arch = "arm"))]
 pub(crate) use generic::ct_copy::{ct_copy, ct_select_i16};
 pub(crate) use generic::ct_equal::ct_equal;
+#[cfg(not(target_arch = "arm"))]
 pub(crate) use generic::poly1305;
 pub(crate) use generic::zeroise::{zeroise, zeroise_value};
+#[cfg(not(target_arch = "arm"))]
 pub(crate) use posint::{PosInt, SecretPosInt};
 
-#[cfg(test)]
+#[cfg(all(test, not(target_arch = "arm")))]
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests;
 
@@ -210,7 +218,15 @@ cfg_if::cfg_if! {
         pub(crate) use generic::sha512::sha512_compress_blocks;
         pub(crate) use generic::mlkem::{mlkem_frombytes, mlkem_unpack};
         pub(crate) use generic::mlkem768::mlkem768_sample_poly_ntt_8x;
+    } else if #[cfg(target_arch = "arm")] {
+        mod arm;
+
+        pub(in crate::low) use arm::cpu::{enter_cpu_state, zero_bytes, ct_compare_bytes, leave_cpu_state, verify_cpu_features};
+        pub(crate) use arm::bignum_eq::bignum_eq;
+        pub(crate) use arm::curve25519::{curve25519_x25519, curve25519_x25519base};
+        pub(crate) use arm::posint::{PosInt, SecretPosInt};
+        pub(crate) use arm::sha2::{sha256_compress_blocks, sha512_compress_blocks};
     } else {
-        compile_error!("This crate only supports x86_64 or aarch64");
+        compile_error!("This crate only supports x86_64, aarch64, or arm");
     }
 }
