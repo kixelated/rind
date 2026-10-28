@@ -14,9 +14,10 @@ MESSAGE-INTEGRITY and SRTP AES-CM-HMAC-SHA1-80.
 
 Guidance:
 
-- str0m's DTLS goes through dimpl; this crate covers str0m's own provider
-  surface, and [rind-dimpl](/quest/m1/moq/dimpl.md) the DTLS one. If str0m's
-  provider trait bundles both, decide in the PR whether one crate serves both.
+- str0m's DTLS goes through dimpl, whose crypto `rind-dimpl` supplies; this
+  crate covers str0m's own provider surface. str0m's `DtlsProvider` builds a
+  dimpl `Dtls`, so it can configure `rind_dimpl::default_provider()`, which
+  needs str0m and `rind-dimpl` on the same dimpl release.
 - Test SRTP protect and unprotect against str0m's aws-lc-rs provider, and the
   RFC 3711 and RFC 7714 vectors.
 
