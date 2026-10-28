@@ -4,7 +4,7 @@
 //! Secret inputs are marked undefined, so memcheck flags any branch or memory
 //! index that depends on them. Outputs that are public by design are marked
 //! defined before the test checks them. rind itself marks the private keys it
-//! generates or parses, and the AEAD keys it is given.
+//! generates or parses, and the ticket key it is given.
 
 use crabgrind::memcheck::{self, MemState};
 use crabgrind::valgrind::{self, RunningMode};

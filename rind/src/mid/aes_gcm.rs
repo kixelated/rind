@@ -29,7 +29,6 @@ impl AesGcm {
     /// (Note: this crate does not support AES-192).
     pub fn new(key: &[u8]) -> Self {
         let _entry = Entry::new_secret();
-        low::ct::secret_slice(key);
         let key = AesKey::new(key);
         let mut h = [0u8; 16];
         key.encrypt_block(&mut h);
