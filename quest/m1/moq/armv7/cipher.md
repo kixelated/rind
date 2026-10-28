@@ -23,4 +23,3 @@ Guidance:
 
 - [libcrux backend](/quest/m1/moq/armv7/backend.md) - the armv7 backend this extends
 - [SHA-1 and HMAC-SHA1](/quest/m1/moq/sha1.md) - the API and vectors this matches
-- [Raw ciphers](/quest/m1/moq/cipher.md) - the API and vectors this matches
