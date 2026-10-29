@@ -4,7 +4,6 @@
 use crate::Error;
 use crate::high::asn1;
 use crate::mid::p256;
-#[cfg(not(target_arch = "arm"))]
 use crate::mid::p384;
 use crate::mid::rng::RandomSource;
 
@@ -217,10 +216,8 @@ impl Scalar<P256> for p256::Scalar {
 /// P-384 is also known as "NISTP384", or "secp384r1".
 ///
 /// See [SEC1](https://www.secg.org/sec1-v2.pdf) for one definition.
-#[cfg(not(target_arch = "arm"))]
 pub struct P384;
 
-#[cfg(not(target_arch = "arm"))]
 impl Curve for P384 {
     type PrivateKey = p384::StaticPrivateKey;
     type PublicKey = p384::PublicKey;
@@ -235,10 +232,8 @@ impl Curve for P384 {
     }
 }
 
-#[cfg(not(target_arch = "arm"))]
 impl private::Sealed for P384 {}
 
-#[cfg(not(target_arch = "arm"))]
 impl PrivateKey<P384> for p384::StaticPrivateKey {
     fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
         Self::from_bytes(bytes)
@@ -271,7 +266,6 @@ impl PrivateKey<P384> for p384::StaticPrivateKey {
     }
 }
 
-#[cfg(not(target_arch = "arm"))]
 impl PublicKey<P384> for p384::PublicKey {
     fn from_x962_uncompressed(bytes: &[u8]) -> Result<Self, Error> {
         Self::from_x962_uncompressed(bytes)
@@ -287,7 +281,6 @@ impl PublicKey<P384> for p384::PublicKey {
     }
 }
 
-#[cfg(not(target_arch = "arm"))]
 impl Scalar<P384> for p384::Scalar {
     const LEN_BYTES: usize = Self::BYTES;
 
@@ -322,14 +315,11 @@ mod tests {
         let mut out = [0; 64];
         assert!(key.public_key_encode_uncompressed(&mut out).is_err());
 
-        #[cfg(not(target_arch = "arm"))]
-        {
-            let key = p384::StaticPrivateKey::new_random().unwrap();
-            let mut out = [0; 47];
-            assert!(key.encode(&mut out).is_err());
-            let mut out = [0; 96];
-            assert!(key.public_key_encode_uncompressed(&mut out).is_err());
-        }
+        let key = p384::StaticPrivateKey::new_random().unwrap();
+        let mut out = [0; 47];
+        assert!(key.encode(&mut out).is_err());
+        let mut out = [0; 96];
+        assert!(key.public_key_encode_uncompressed(&mut out).is_err());
     }
 
     #[test]
@@ -369,7 +359,6 @@ mod tests {
                                 _ => {}
                             };
                         }
-                        #[cfg(not(target_arch = "arm"))]
                         "P-384" => {
                             pad(&mut self.px, 48);
                             pad(&mut self.py, 48);
@@ -513,7 +502,6 @@ mod tests {
                                 let got = res.public_key_encode_uncompressed(&mut buffer).unwrap();
                                 assert_eq!(point, got);
                             }
-                            #[cfg(not(target_arch = "arm"))]
                             "P-384" => {
                                 pad(&mut self.px, 48);
                                 pad(&mut self.py, 48);

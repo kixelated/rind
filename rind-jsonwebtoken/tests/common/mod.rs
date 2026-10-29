@@ -1,10 +1,9 @@
 use std::sync::OnceLock;
 
 use aws_lc_rs::rand::SystemRandom;
-#[cfg(not(target_arch = "arm"))]
-use aws_lc_rs::signature::ECDSA_P384_SHA384_FIXED_SIGNING;
 use aws_lc_rs::signature::{
-    ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair, EcdsaSigningAlgorithm, Ed25519KeyPair, KeyPair,
+    ECDSA_P256_SHA256_FIXED_SIGNING, ECDSA_P384_SHA384_FIXED_SIGNING, EcdsaKeyPair,
+    EcdsaSigningAlgorithm, Ed25519KeyPair, KeyPair,
 };
 use jsonwebtoken::crypto::aws_lc;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey};
@@ -74,20 +73,17 @@ pub fn all() -> Vec<Key> {
         &ECDSA_P256_SHA256_FIXED_SIGNING,
     ));
 
-    #[cfg(not(target_arch = "arm"))]
-    {
-        let p384 = ecdsa::SigningKey::<ecdsa::P384>::generate().unwrap();
-        keys.push(Key::new(
-            Algorithm::ES384,
-            "rind",
-            EncodingKey::from_ec_der(p384.to_pkcs8_der(&mut [0; 256]).unwrap()),
-            DecodingKey::from_ec_der(&p384.private_key.public_key_uncompressed()),
-        ));
-        keys.push(aws_lc_ecdsa(
-            Algorithm::ES384,
-            &ECDSA_P384_SHA384_FIXED_SIGNING,
-        ));
-    }
+    let p384 = ecdsa::SigningKey::<ecdsa::P384>::generate().unwrap();
+    keys.push(Key::new(
+        Algorithm::ES384,
+        "rind",
+        EncodingKey::from_ec_der(p384.to_pkcs8_der(&mut [0; 256]).unwrap()),
+        DecodingKey::from_ec_der(&p384.private_key.public_key_uncompressed()),
+    ));
+    keys.push(aws_lc_ecdsa(
+        Algorithm::ES384,
+        &ECDSA_P384_SHA384_FIXED_SIGNING,
+    ));
 
     let ed25519 = eddsa::Ed25519SigningKey::generate().unwrap();
     keys.push(Key::new(

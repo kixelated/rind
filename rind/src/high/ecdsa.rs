@@ -413,30 +413,24 @@ mod tests {
             Some(Error::Asn1Error(asn1::Error::UnhandledEnumValue)),
         );
 
-        #[cfg(not(target_arch = "arm"))]
-        {
-            check_sign_verify::<curve::P384>(
-                SigningKey::<curve::P384>::from_pkcs8_der(include_bytes!(
-                    "ecdsa/secp384r1.pkcs8.der"
-                ))
+        check_sign_verify::<curve::P384>(
+            SigningKey::<curve::P384>::from_pkcs8_der(include_bytes!("ecdsa/secp384r1.pkcs8.der"))
                 .unwrap()
                 .private_key,
-            );
-            check_pairwise_pkcs8::<curve::P384>(include_bytes!("ecdsa/secp384r1.pkcs8.der"));
+        );
+        check_pairwise_pkcs8::<curve::P384>(include_bytes!("ecdsa/secp384r1.pkcs8.der"));
 
-            check_sign_verify::<curve::P384>(
-                SigningKey::<curve::P384>::from_sec1_der(include_bytes!("ecdsa/secp384r1.der"))
-                    .unwrap()
-                    .private_key,
-            );
-            check_pairwise_sec1::<curve::P384>(include_bytes!("ecdsa/secp384r1.der"));
+        check_sign_verify::<curve::P384>(
+            SigningKey::<curve::P384>::from_sec1_der(include_bytes!("ecdsa/secp384r1.der"))
+                .unwrap()
+                .private_key,
+        );
+        check_pairwise_sec1::<curve::P384>(include_bytes!("ecdsa/secp384r1.der"));
 
-            assert_eq!(
-                SigningKey::<curve::P384>::from_sec1_der(include_bytes!("ecdsa/secp256r1.der"))
-                    .err(),
-                Some(Error::KeyFormatError(KeyFormatError::MismatchedSec1Curve)),
-            );
-        }
+        assert_eq!(
+            SigningKey::<curve::P384>::from_sec1_der(include_bytes!("ecdsa/secp256r1.der")).err(),
+            Some(Error::KeyFormatError(KeyFormatError::MismatchedSec1Curve)),
+        );
     }
 
     #[test]
@@ -444,11 +438,8 @@ mod tests {
         let k = SigningKey::<curve::P256>::generate().unwrap();
         check_sign_verify::<curve::P256>(k.private_key);
 
-        #[cfg(not(target_arch = "arm"))]
-        {
-            let k = SigningKey::<curve::P384>::generate().unwrap();
-            check_sign_verify::<curve::P384>(k.private_key);
-        }
+        let k = SigningKey::<curve::P384>::generate().unwrap();
+        check_sign_verify::<curve::P384>(k.private_key);
     }
 
     fn check_sign_verify<C: Curve>(private_key: C::PrivateKey) {
@@ -736,7 +727,6 @@ mod tests {
                                 };
                                 println!("PASS: {}", value.str());
                             }
-                            #[cfg(not(target_arch = "arm"))]
                             "P-384,SHA-256" | "P-384,SHA-384" | "P-384,SHA-512" => {
                                 pad(&mut self.px, 48);
                                 pad(&mut self.py, 48);

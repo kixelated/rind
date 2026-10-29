@@ -24,7 +24,7 @@ use rind::hashing::hmac::Hmac;
 use rind::hashing::{Hash, Sha256, Sha384, Sha512};
 use rind::signing::{ecdsa, eddsa, rsa};
 
-/// A jsonwebtoken [`CryptoProvider`] that signs and verifies every algorithm with rind, except ES384 on 32-bit ARM.
+/// A jsonwebtoken [`CryptoProvider`] that signs and verifies every algorithm with rind.
 pub static DEFAULT_PROVIDER: CryptoProvider = CryptoProvider {
     signer_factory: new_signer,
     verifier_factory: new_verifier,
@@ -87,8 +87,6 @@ fn new_signer(algorithm: &Algorithm, key: &EncodingKey) -> Result<Box<dyn JwtSig
             ecdsa::SigningKey::<ecdsa::P256>::from_pkcs8_der(der)
                 .map_err(|_| ErrorKind::InvalidEcdsaKey)?,
         ),
-        // rind does not yet build P-384 on 32-bit ARM, so ES384 is refused there.
-        #[cfg(not(target_arch = "arm"))]
         Algorithm::ES384 => signer(
             algorithm,
             ecdsa::SigningKey::<ecdsa::P384>::from_pkcs8_der(der)
@@ -140,7 +138,6 @@ fn new_verifier(algorithm: &Algorithm, key: &DecodingKey) -> Result<Box<dyn JwtV
             ecdsa::VerifyingKey::<ecdsa::P256>::from_x962_uncompressed(key.try_get_as_bytes()?)
                 .map_err(|_| ErrorKind::InvalidEcdsaKey)?,
         ),
-        #[cfg(not(target_arch = "arm"))]
         Algorithm::ES384 => verifier(
             algorithm,
             ecdsa::VerifyingKey::<ecdsa::P384>::from_x962_uncompressed(key.try_get_as_bytes()?)
@@ -191,14 +188,12 @@ impl Verify for ecdsa::VerifyingKey<ecdsa::P256> {
     }
 }
 
-#[cfg(not(target_arch = "arm"))]
 impl Sign for ecdsa::SigningKey<ecdsa::P384> {
     fn sign_message(&self, message: &[u8]) -> RindResult<Vec<u8>> {
         Ok(self.sign::<Sha384>(&[message], &mut [0; 96])?.to_vec())
     }
 }
 
-#[cfg(not(target_arch = "arm"))]
 impl Verify for ecdsa::VerifyingKey<ecdsa::P384> {
     fn verify_message(&self, message: &[u8], signature: &[u8]) -> RindResult<()> {
         self.verify::<Sha384>(&[message], signature)
@@ -305,7 +300,6 @@ fn ec_pub_components_from_private_key(
                 .public_key_uncompressed()
                 .to_vec(),
         ),
-        #[cfg(not(target_arch = "arm"))]
         Algorithm::ES384 => (
             EllipticCurve::P384,
             ecdsa::SigningKey::<ecdsa::P384>::from_pkcs8_der(der)
