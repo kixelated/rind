@@ -23,5 +23,8 @@ str0m-proto = { git = "https://github.com/algesten/str0m", rev = "dc317173b16fc6
 time = { version = "0.3", default-features = false, features = ["std"] }
 
 [dev-dependencies]
+# Requests reach valgrind only once `rind/__ctgrind` turns on crabgrind's default
+# features, as `admin/ctgrind` does; otherwise they build as no-ops.
+crabgrind = { version = "0.4", default-features = false }
 str0m = { git = "https://github.com/algesten/str0m", rev = "dc317173b16fc6ed86633e6b08b229c9195deb87", default-features = false }
 str0m-aws-lc-rs = { git = "https://github.com/algesten/str0m", rev = "dc317173b16fc6ed86633e6b08b229c9195deb87" }

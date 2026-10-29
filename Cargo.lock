@@ -3066,6 +3066,7 @@ dependencies = [
 name = "rind-str0m"
 version = "0.1.0"
 dependencies = [
+ "crabgrind 0.4.0",
  "dimpl",
  "rcgen",
  "rind",
