@@ -1,7 +1,3 @@
-// The example below is compile only: on aarch64, cranelift miscompiles
-// hashbrown's NEON scan in a panic=abort doctest dropping `CertificateParams`.
-// tests/rustls.rs runs the same steps.
-
 //! <h1 align="center">rind-rcgen</h1>
 //! <img width="40%" align="right" src="https://raw.githubusercontent.com/kixelated/rind/main/admin/picture.png">
 //!
