@@ -2,7 +2,7 @@ use aws_lc_rs::rsa::KeyPair;
 use aws_lc_rs::{digest, hmac, signature::Ed25519KeyPair};
 use proptest::collection::vec;
 use proptest::prelude::*;
-use rind::hashing::{Hash, HashContext, LegacySha1, hmac::Hmac};
+use rind::hashing::{Hash, HashContext, LegacySha1, Sha256, Sha384, Sha512, hmac::Hmac};
 use rind::signing::eddsa::Ed25519SigningKey;
 use rind::signing::rsa::{KeySize, SigningKey};
 
@@ -102,6 +102,31 @@ proptest! {
         );
         prop_assert_eq!(got.as_ref(), wanted.as_ref());
     }
+
+    #[test]
+    fn hmac_sha2_matches_aws_lc_rs(
+        // Up to 300 bytes spans keys below, at, and above both block sizes (64 and 128).
+        key in vec(any::<u8>(), 0..300),
+        message in vec(any::<u8>(), 0..1024),
+    ) {
+        check_hmac::<Sha256>(hmac::HMAC_SHA256, &key, &message)?;
+        check_hmac::<Sha384>(hmac::HMAC_SHA384, &key, &message)?;
+        check_hmac::<Sha512>(hmac::HMAC_SHA512, &key, &message)?;
+    }
+}
+
+fn check_hmac<H: Hash>(
+    algorithm: hmac::Algorithm,
+    key: &[u8],
+    message: &[u8],
+) -> Result<(), TestCaseError> {
+    let mut ctx = Hmac::<H>::new(key);
+    ctx.update(message);
+    let got = ctx.finish();
+
+    let wanted = hmac::sign(&hmac::Key::new(algorithm, key), message);
+    prop_assert_eq!(got.as_ref(), wanted.as_ref());
+    Ok(())
 }
 
 mod cipher {

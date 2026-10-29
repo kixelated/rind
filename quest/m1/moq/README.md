@@ -71,9 +71,7 @@ RustCrypto dependency.
 - [rind-str0m on a str0m release](/quest/m1/moq/str0m.md) - publishable once it depends on that release
 - [instant-acme 0.9 is released](/quest/m1/moq/instant-acme-release.md) - waiting on the release with a pluggable `CryptoProvider`
 - [rind-instant-acme](/quest/m1/moq/instant-acme.md) - instant-acme 0.9's `CryptoProvider`
-- [Wipe HMAC's padded key](/quest/m1/moq/hmac-key-wipe.md) - `Hmac::new` zeroes its stack copy of the key
 - [AEADs refuse over-long messages](/quest/m1/moq/aead-length.md) - `encrypt` returns an error past the algorithm's limit
-- [Coverage detects x86_64](/quest/m1/moq/coverage-arch.md) - `admin/coverage` runs its x86_64 passes in CI
 - [ctgrind covers every secret](/quest/m1/moq/ctgrind-gaps.md) - ML-KEM, ECDSA nonces, and AES key setup run under ctgrind
 - [libcrux releases its constant-time fixes](/quest/m1/moq/libcrux-ct-fixes.md) - waiting on libcrux's fixes for armv7 ctgrind's two reports
 - [Run doctests under Cranelift](/quest/m1/moq/cranelift-doctest.md) - the rcgen example runs again

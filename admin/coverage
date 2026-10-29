@@ -12,11 +12,11 @@ cargo llvm-cov clean --workspace
 
 env SLOW_TESTS=1 cargo test --locked
 
-if [ `uname -p` == "x86_64" ] ; then
-    env RIND_CPU_DISABLE_sha=1 RIND_CPU_DISABLE_avx512bw=1 RIND_CPU_DISABLE_avx512f=1 RIND_CPU_DISABLE_vaes=1 cargo test --locked
-    env CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="sde -dmr --" cargo test --locked
-fi
 case `uname -m` in
+    x86_64)
+        env RIND_CPU_DISABLE_sha=1 RIND_CPU_DISABLE_avx512bw=1 RIND_CPU_DISABLE_avx512f=1 RIND_CPU_DISABLE_vaes=1 cargo test --locked
+        env CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="sde -dmr --" cargo test --locked
+        ;;
     arm|arm64|aarch64)
         env RIND_CPU_DISABLE_sha3=1 RIND_CPU_DISABLE_dit=1 cargo test --locked
         ;;
