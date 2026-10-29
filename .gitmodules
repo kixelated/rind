@@ -7,6 +7,3 @@
 [submodule "thirdparty/cavp"]
 	path = thirdparty/cavp
 	url = https://github.com/ctz/cavp.git
-[submodule ".claude/shared"]
-	path = .claude/shared
-	url = https://github.com/kixelated/skills
