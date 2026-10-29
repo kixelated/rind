@@ -4,8 +4,8 @@
 
 The ctgrind workflow also runs rind's ctgrind tests, and the adapters', for
 `armv7-unknown-linux-gnueabihf`, and fails on any branch or memory index that
-depends on a secret, so the libcrux backend and the operations rind adds over
-it get the same constant-time check as x86_64.
+depends on a secret, so armv7's libcrux and fiat-crypto backends and the
+operations rind adds over them get the same constant-time check as x86_64.
 
 ## Plan
 

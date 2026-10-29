@@ -51,9 +51,9 @@ but there is also a public API for general-purpose use.
   (This is most x86_64 CPUs made since around ~2014.)
 - 32-bit `arm` (tested on `armv7-unknown-linux-gnueabihf`, and built for
   `armv7-linux-androideabi`) runs [libcrux]'s verified portable Rust instead,
-  and needs no CPU features. It does not yet offer P-384, SHA-3, or SHAKE,
-  and an Ed25519 public key that is not a curve point is refused when
-  verifying rather than when decoding.
+  with P-384 over [fiat-crypto]'s, and needs no CPU features. It does not yet
+  offer SHA-3 or SHAKE, and an Ed25519 public key that is not a curve point is
+  refused when verifying rather than when decoding.
 
 Every operation panics on a CPU missing one of these. Call `rind::cpu::check()`
 at startup to get an error naming the missing feature instead.
@@ -94,10 +94,13 @@ We are grateful to:
 - [wycheproof]: collated test vectors for all algorithms.
 - [libcrux]: formally verified portable Rust (from HACL\*) for the 32-bit
   `arm` backend.
+- [fiat-crypto]: formally verified P-384 field arithmetic for the 32-bit `arm`
+  backend.
 
 [s2n-bignum]: https://github.com/awslabs/s2n-bignum
 [wycheproof]: https://github.com/C2SP/wycheproof
 [libcrux]: https://github.com/cryspen/libcrux
+[fiat-crypto]: https://github.com/mit-plv/fiat-crypto
 [SLOTHY]: https://github.com/slothy-optimizer/slothy
 [performance]: https://jbp.io/rind/
 [rind-rustls]: https://crates.io/crates/rind-rustls
