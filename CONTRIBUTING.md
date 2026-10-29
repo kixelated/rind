@@ -50,7 +50,7 @@ A release-plz PR, which only bumps versions and changelogs, needs no review beyo
 Online reviewers are optional: never wait for or request one.
 Address their findings already posted on the head when merging:
 
-- If you don't agree with it, reply to the finding and move on.
+- If you don't agree with a finding, reply to it and move on.
 - If it's a relatively easy improvement, fix it, review the new head locally, and push. Update the summary if needed.
 
 # Follow-ups
