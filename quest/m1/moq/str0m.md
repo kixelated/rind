@@ -1,24 +1,24 @@
-# [M] rind-str0m
+# [XS] rind-str0m on a str0m release
 
 ## Goal
 
-A new `rind-str0m` crate supplies str0m's crypto: SRTP AES-CM-HMAC-SHA1-80
-and AEAD AES-128/256-GCM, SHA-256 fingerprints, and HMAC-SHA1, so moq-rtc
-and moq-ice run WebRTC media on rind and a browser still connects.
+`rind-str0m` depends on a str0m release from crates.io instead of a pinned
+git revision, so release-plz publishes it and moq-rtc and moq-ice run WebRTC
+media on rind.
 
 ## Plan
 
-Settled (maintainer, 2026-10-26): adapters are separate crates named
-`rind-<consumer>`. Browsers require SHA-1 and HMAC-SHA1 for STUN
-MESSAGE-INTEGRITY and SRTP AES-CM-HMAC-SHA1-80.
+`rind-str0m` supplies str0m's whole provider, DTLS included through
+`rind-dimpl`, against str0m's main branch on dimpl 0.9. Once a release
+carries that interface:
 
-Guidance:
+- Point `str0m-proto` and the `str0m` and `str0m-aws-lc-rs` dev-dependencies
+  at the release, and drop `publish = false`.
+- Remove str0m from `allow-git` in `deny.toml`.
+- Adapt to any provider change since the pinned revision.
 
-- str0m's DTLS goes through dimpl, whose crypto `rind-dimpl` supplies; this
-  crate covers str0m's own provider surface. str0m's `DtlsProvider` builds a
-  dimpl `Dtls`, so it can configure `rind_dimpl::default_provider()`, which
-  needs str0m and `rind-dimpl` on the same dimpl release.
-- Test SRTP protect and unprotect against str0m's aws-lc-rs provider, and the
-  RFC 3711 and RFC 7714 vectors.
+Public API: none beyond the release's own changes.
 
-Public API: the new crate.
+## Required
+
+- [str0m releases its dimpl 0.9 provider interface](/quest/m1/moq/str0m-release.md) - the release this switches to
