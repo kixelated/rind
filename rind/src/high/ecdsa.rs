@@ -50,15 +50,19 @@ impl<C: Curve> SigningKey<C> {
         let _entry = Entry::new_secret();
 
         let mut sec1_buf = [0u8; MAX_SCALAR_LEN + MAX_UNCOMPRESSED_PUBLIC_KEY_LEN + 128];
-        let sec1 = self.to_sec1_der_detail(None, &mut sec1_buf)?;
-
-        pkcs8::Key::construct(
-            sec1,
-            None,
-            asn1::oid::id_ecPublicKey.clone(),
-            Some(asn1::Any::ObjectId(C::oid())),
-        )
-        .encode(output)
+        let encoded = self
+            .to_sec1_der_detail(None, &mut sec1_buf)
+            .and_then(|sec1| {
+                pkcs8::Key::construct(
+                    sec1,
+                    None,
+                    asn1::oid::id_ecPublicKey.clone(),
+                    Some(asn1::Any::ObjectId(C::oid())),
+                )
+                .encode(output)
+            });
+        zeroise(&mut sec1_buf);
+        encoded
     }
 
     /// Load an ECDSA private key in SEC.1 format.
@@ -105,13 +109,13 @@ impl<C: Curve> SigningKey<C> {
         parameters: Option<asn1::ObjectId>,
         output: &'a mut [u8],
     ) -> Result<&'a [u8], Error> {
-        let mut encoded_private_key_buf = [0u8; MAX_SCALAR_LEN];
-        let encoded_private_key = self.private_key.encode(&mut encoded_private_key_buf)?;
-
         let mut encoded_public_key_buf = [0u8; MAX_UNCOMPRESSED_PUBLIC_KEY_LEN];
         let encoded_public_key = self
             .private_key
             .public_key_encode_uncompressed(&mut encoded_public_key_buf)?;
+
+        let mut encoded_private_key_buf = [0u8; MAX_SCALAR_LEN];
+        let encoded_private_key = self.private_key.encode(&mut encoded_private_key_buf)?;
 
         let ecpk = asn1::pkix::EcPrivateKey {
             version: asn1::pkix::EcPrivateKeyVer::ecPrivkeyVer1,
@@ -123,9 +127,9 @@ impl<C: Curve> SigningKey<C> {
             publicKey: asn1::BitString::new(encoded_public_key).into(),
         };
 
-        let used = ecpk
-            .encode(&mut asn1::Encoder::new(output))
-            .map_err(Error::Asn1Error)?;
+        let used = ecpk.encode(&mut asn1::Encoder::new(output));
+        zeroise(&mut encoded_private_key_buf);
+        let used = used.map_err(Error::Asn1Error)?;
 
         // The caller owns the encoding, as with the key's `as_bytes`.
         let output = output.get(..used).ok_or(Error::WrongLength)?;

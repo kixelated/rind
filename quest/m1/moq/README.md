@@ -76,5 +76,7 @@ RustCrypto dependency.
 - [AEADs refuse over-long messages](/quest/m1/moq/aead-length.md) - `encrypt` returns an error past the algorithm's limit
 - [Coverage detects x86_64](/quest/m1/moq/coverage-arch.md) - `admin/coverage` runs its x86_64 passes in CI
 - [Run doctests under Cranelift](/quest/m1/moq/cranelift-doctest.md) - the rcgen example runs again
+- [Wipe ML-KEM intermediates](/quest/m1/moq/mlkem-wipe.md) - ML-KEM-768 erases its intermediate secrets on both backends
+- [Truncated hash comparison never panics](/quest/m1/moq/truncated-ct-equal.md) - an out-of-range truncation length is refused, not asserted
 - [Verification](/quest/m1/moq/verify.md) - Wycheproof, aws-lc-rs differential tests, adapter handshakes, and benchmarks on every backend
 - [Release](/quest/m1/moq/release.md) - publish the rind release MoQ switches to
