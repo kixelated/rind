@@ -21,6 +21,9 @@ mod generic {
     pub(crate) mod mlkem;
     #[cfg(target_arch = "aarch64")]
     pub(crate) mod mlkem768;
+    // armv7's P-384, also built in tests elsewhere to check it against s2n-bignum.
+    #[cfg(any(target_arch = "arm", test))]
+    pub(crate) mod p384;
     #[cfg(not(target_arch = "arm"))]
     pub(crate) mod poly1305;
     #[cfg(any(target_arch = "x86_64", target_arch = "arm"))]
@@ -236,6 +239,15 @@ cfg_if::cfg_if! {
         pub(crate) use arm::curve25519::{curve25519_x25519, curve25519_x25519base};
         pub(crate) use arm::posint::{PosInt, SecretPosInt};
         pub(crate) use arm::sha2::{sha256_compress_blocks, sha512_compress_blocks};
+        // libcrux exports P-384 only as ECDH, so its arithmetic is fiat-crypto's.
+        #[cfg(test)]
+        pub(crate) use generic::p384::bignum_montifier;
+        pub(crate) use generic::p384::{
+            bignum_add_p384, bignum_demont, bignum_demont_p384, bignum_inv_p384,
+            bignum_jac_point_select_p384, bignum_mod_n384, bignum_modadd, bignum_modinv,
+            bignum_montmul, bignum_montmul_p384, bignum_montsqr_p384, bignum_mux,
+            bignum_neg_p384, bignum_tomont_p384, p384_montjadd, p384_montjdouble,
+        };
         // libcrux has no SHA-1, so this shares x86_64's portable fallback.
         pub(crate) use generic::sha1::sha1_compress_blocks;
     } else {

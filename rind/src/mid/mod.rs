@@ -29,7 +29,6 @@ cfg_if::cfg_if! {
         pub(super) mod ed25519;
         pub mod mlkem768;
         pub(super) mod p256;
-        pub(super) mod p384;
         pub(super) mod rsa_priv;
         pub(super) mod rsa_pub;
         pub mod sha3;
@@ -39,6 +38,7 @@ cfg_if::cfg_if! {
 
 pub(super) mod aes;
 pub(super) mod chacha20;
+pub(super) mod p384;
 pub(super) mod rng;
 pub(super) mod sha1;
 pub mod sha2;
