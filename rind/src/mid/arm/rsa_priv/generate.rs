@@ -232,7 +232,9 @@ fn invert_e(e: &Mont, m: &[u64], out: &mut [u64]) -> bool {
     for word in m.iter().rev() {
         bignum64::mod_precomp(e, &[*word, x[0]], &mut x);
     }
-    if public(bignum64::eq_mask(1, &x, &[0])) != 0 {
+    // Not `eq_mask(1, ..)`: inlined, its one-word comparison became a
+    // branch on `x`.
+    if public(low::bignum_eq(&x, &[0])) {
         return false;
     }
 
@@ -547,9 +549,13 @@ impl Sieve {
             // For odd s, s divides r exactly when r * s ^ -1 mod 2 ^ 64 is
             // at most (2 ^ 64 - 1) / s (Granlund and Montgomery, "Division
             // by invariant integers using multiplication", 1994, section 9).
+            //
+            // Each mask passes through `black_box`: inlined, `lt_mask`'s
+            // one-word comparison became a branch on the remainder.
             let mut divisible = 0;
             for (inv, limit) in SMALL_PRIME_DIVISORS[primes.clone()].iter() {
-                divisible |= !bignum64::lt_mask(1, &[*limit], &[r[0].wrapping_mul(*inv)]);
+                let (_, above) = limit.overflowing_sub(r[0].wrapping_mul(*inv));
+                divisible |= core::hint::black_box(u64::from(above).wrapping_sub(1));
             }
             if public(divisible) != 0 {
                 return false;
