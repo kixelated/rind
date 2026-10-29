@@ -8,6 +8,7 @@ members = [
   "rind-object-store",
   "rind-rcgen",
   "rind-rustls",
+  "rind-str0m",
   "rind-jsonwebtoken",
   "fuzz"
 ]
