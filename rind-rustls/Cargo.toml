@@ -14,7 +14,11 @@ rind = { version = "0.1.0", path = "../rind" }
 rustls = { version = "0.23.18", default-features = false, features = ["std", "tls12"] }
 
 [dev-dependencies]
+# Requests reach valgrind only once `rind/__ctgrind` turns on crabgrind's default
+# features, as `admin/ctgrind` does; otherwise they build as no-ops.
+crabgrind = { version = "0.4", default-features = false }
 env_logger = "0.11"
+hex = "0.4"
 http = "1"
 http-body-util = "0.1"
 hyper = { version = "1", default-features = false }

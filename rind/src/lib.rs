@@ -150,9 +150,7 @@ pub mod key_agreement {
 pub mod signing {
     /// RSA signatures.
     pub mod rsa {
-        #[cfg(not(target_arch = "arm"))]
-        pub use crate::high::rsa::KeySize;
-        pub use crate::high::rsa::{SigningKey, VerifyingKey};
+        pub use crate::high::rsa::{KeySize, SigningKey, VerifyingKey};
     }
 
     /// ECDSA signatures.
@@ -191,7 +189,6 @@ pub mod aead {
 /// Unauthenticated ciphers, for protocols that specify one alongside their own integrity protection.
 ///
 /// Prefer [`aead`] unless a protocol requires one of these.
-#[cfg(not(target_arch = "arm"))]
 pub mod cipher {
     pub use super::mid::aes::{Aes, AesCtr};
     pub use super::mid::chacha20::ChaCha20;

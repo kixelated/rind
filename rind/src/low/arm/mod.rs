@@ -5,7 +5,10 @@
 //! libcrux exposes only a few operations at this layer's granularity.  The
 //! rest are swapped in `mid`, where libcrux's whole operations fit.
 
+pub(crate) mod aes;
+pub(crate) mod aes_ctr;
 pub(crate) mod bignum_eq;
+pub(crate) mod chacha20;
 pub(crate) mod cpu;
 pub(crate) mod curve25519;
 pub(crate) mod posint;

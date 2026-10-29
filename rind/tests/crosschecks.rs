@@ -1,21 +1,17 @@
-#[cfg(not(target_arch = "arm"))]
 use aws_lc_rs::rsa::KeyPair;
 use aws_lc_rs::{digest, hmac, signature::Ed25519KeyPair};
 use proptest::collection::vec;
 use proptest::prelude::*;
 use rind::hashing::{Hash, HashContext, LegacySha1, hmac::Hmac};
 use rind::signing::eddsa::Ed25519SigningKey;
-#[cfg(not(target_arch = "arm"))]
 use rind::signing::rsa::{KeySize, SigningKey};
 
 #[test]
-#[cfg(not(target_arch = "arm"))]
 fn rsa_2048_key_generation() {
     check_key_generation(KeySize::Rsa2048);
 }
 
 #[test]
-#[cfg(not(target_arch = "arm"))]
 fn rsa_2048_key_generation_soak() {
     if std::env::var_os("SLOW_TESTS").is_some() {
         for _ in 0..512 {
@@ -25,19 +21,16 @@ fn rsa_2048_key_generation_soak() {
 }
 
 #[test]
-#[cfg(not(target_arch = "arm"))]
 fn rsa_3072_key_generation() {
     check_key_generation(KeySize::Rsa3072);
 }
 
 #[test]
-#[cfg(not(target_arch = "arm"))]
 fn rsa_4096_key_generation() {
     check_key_generation(KeySize::Rsa4096);
 }
 
 #[test]
-#[cfg(not(target_arch = "arm"))]
 fn rsa_6144_key_generation() {
     if std::env::var_os("SLOW_TESTS").is_some() {
         check_key_generation(KeySize::Rsa6144);
@@ -45,14 +38,12 @@ fn rsa_6144_key_generation() {
 }
 
 #[test]
-#[cfg(not(target_arch = "arm"))]
 fn rsa_8192_key_generation() {
     if std::env::var_os("SLOW_TESTS").is_some() {
         check_key_generation(KeySize::Rsa8192);
     }
 }
 
-#[cfg(not(target_arch = "arm"))]
 fn check_key_generation(size: KeySize) {
     let key = SigningKey::generate(size).unwrap();
     let mut buf = [0u8; 8192];
@@ -113,7 +104,6 @@ proptest! {
     }
 }
 
-#[cfg(not(target_arch = "arm"))]
 mod cipher {
     use aws_lc_rs::aead::{Aad, CHACHA20_POLY1305, LessSafeKey, Nonce, UnboundKey, quic};
     use aws_lc_rs::cipher::{AES_128, AES_256, EncryptingKey, EncryptionContext, UnboundCipherKey};
