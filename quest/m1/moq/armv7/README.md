@@ -27,8 +27,9 @@ Settled with the maintainer (2026-10-26 and 2026-10-27):
   - RSA key generation (PKCS#1 v1.5 signing and verification already share
     graviola's padding over the HACL bignum operations armv7's RSA uses);
   - the raw AES block, ChaCha20, and AES-CTR that QUIC header protection and
-    SRTP need. SHA-1, which libcrux also lacks, runs rind's portable
-    compression.
+    SRTP need, from a copy of the bitsliced AES and HACL* ChaCha20 that
+    libcrux's AEADs use but keep private. SHA-1, which libcrux also lacks,
+    runs rind's portable compression.
 
   P-384, which libcrux exports only as ECDH, runs graviola's curve code over
   fiat-crypto's verified field and group order arithmetic instead.
@@ -48,4 +49,3 @@ Settled with the maintainer (2026-10-26 and 2026-10-27):
 
 ## Required
 
-- [Raw ciphers](/quest/m1/moq/armv7/cipher.md) - the AES block, ChaCha20, and AES-CTR on armv7

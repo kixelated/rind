@@ -164,8 +164,6 @@ fn record_protection() {
     }
 }
 
-// rind-rustls offers no QUIC protection on 32-bit ARM.
-#[cfg(not(target_arch = "arm"))]
 #[test]
 fn quic_protection() {
     use rustls::Side;

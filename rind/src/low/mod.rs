@@ -232,6 +232,9 @@ cfg_if::cfg_if! {
         mod arm;
 
         pub(in crate::low) use arm::cpu::{enter_cpu_state, zero_bytes, ct_compare_bytes, leave_cpu_state, missing_cpu_feature};
+        pub(crate) use arm::aes::AesKey;
+        pub(crate) use arm::aes_ctr;
+        pub(crate) use arm::chacha20;
         pub(crate) use arm::bignum_eq::bignum_eq;
         pub(crate) use arm::curve25519::{curve25519_x25519, curve25519_x25519base};
         pub(crate) use arm::posint::{PosInt, SecretPosInt};
