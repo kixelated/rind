@@ -138,7 +138,10 @@ impl EncapKey {
     pub fn encaps_internal(self, m: Message) -> (SharedSecret, Ciphertext) {
         low::ct::secret_slice(&m.0);
         let (c, k) = portable::encapsulate(&self.0, m.0);
-        (SharedSecret(k), Ciphertext(low::ct::into_public(*c.as_slice())))
+        (
+            SharedSecret(k),
+            Ciphertext(low::ct::into_public(*c.as_slice())),
+        )
     }
 }
 
