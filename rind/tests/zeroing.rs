@@ -136,7 +136,6 @@ fn aes_gcm() {
 }
 
 #[test]
-#[cfg(not(target_arch = "arm"))]
 fn cipher() {
     use rind::cipher::{Aes, AesCtr, ChaCha20};
     for len in [16, 32] {

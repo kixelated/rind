@@ -5,9 +5,7 @@ use rustls::{
     CipherSuite, SignatureScheme, SupportedCipherSuite, Tls12CipherSuite, Tls13CipherSuite,
 };
 
-#[cfg(not(target_arch = "arm"))]
-use super::quic;
-use super::{aead, hash, hmac};
+use super::{aead, hash, hmac, quic};
 
 /// All supported cipher suites, in priority order.
 pub static ALL_CIPHER_SUITES: &[SupportedCipherSuite] = &[
@@ -32,10 +30,7 @@ pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite =
         },
         hkdf_provider: &HkdfUsingHmac(&hmac::Sha384Hmac),
         aead_alg: &aead::TlsAesGcm(32),
-        #[cfg(not(target_arch = "arm"))]
         quic: Some(&quic::AesGcm(32)),
-        #[cfg(target_arch = "arm")]
-        quic: None,
     });
 
 /// The TLS1.3 `TLS_AES_128_GCM_SHA256` cipher suite.
@@ -48,10 +43,7 @@ pub static TLS13_AES_128_GCM_SHA256: SupportedCipherSuite =
         },
         hkdf_provider: &HkdfUsingHmac(&hmac::Sha256Hmac),
         aead_alg: &aead::TlsAesGcm(16),
-        #[cfg(not(target_arch = "arm"))]
         quic: Some(&quic::AesGcm(16)),
-        #[cfg(target_arch = "arm")]
-        quic: None,
     });
 
 /// The TLS1.3 `TLS_CHACHA20_POLY1305_SHA256` cipher suite.
@@ -64,10 +56,7 @@ pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         },
         hkdf_provider: &HkdfUsingHmac(&hmac::Sha256Hmac),
         aead_alg: &aead::Chacha20Poly1305,
-        #[cfg(not(target_arch = "arm"))]
         quic: Some(&quic::ChaCha20Poly1305),
-        #[cfg(target_arch = "arm")]
-        quic: None,
     });
 
 /// The TLS1.2 `TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256` cipher suite.

@@ -17,3 +17,5 @@ quest names how to check it and is deleted once it holds.
 - [Revisit upstreaming](/quest/m3/upstream.md) - decide what rind offers back to graviola once MoQ runs on it
 - [Report cranelift's aarch64 crash](/quest/m3/cranelift-report.md) - a reproduction filed upstream, then the rcgen doc example compiles and runs
 - [dimpl checks signatures for every provider](/quest/m3/dimpl-crypto-common.md) - rind-dimpl drops dimpl's internal feature
+- [armv7 raw ciphers from libcrux](/quest/m3/libcrux-ciphers.md) - drop rind's copies once libcrux exports its AES and ChaCha20
+- [libcrux exports its raw ciphers](/quest/m3/libcrux-ciphers-exported.md) - waiting on a libcrux release that exports them
