@@ -69,8 +69,8 @@ RustCrypto dependency.
 
 - [armv7 on libcrux](/quest/m1/moq/armv7/README.md) - armv7 Android and Linux run every operation the adapters and MoQ use
 - [rind-str0m](/quest/m1/moq/str0m.md) - str0m's SRTP, fingerprints, and STUN integrity
-- [rind-dimpl](/quest/m1/moq/dimpl.md) - dimpl's DTLS 1.2 and 1.3 suites, key exchange, and record number protection
 - [instant-acme 0.9 is released](/quest/m1/moq/instant-acme-release.md) - waiting on the release with a pluggable `CryptoProvider`
 - [rind-instant-acme](/quest/m1/moq/instant-acme.md) - instant-acme 0.9's `CryptoProvider`
+- [Reject non-canonical curve points](/quest/m1/moq/x962-canonical.md) - P-256 and P-384 refuse coordinates at or above the field prime
 - [Verification](/quest/m1/moq/verify.md) - Wycheproof, aws-lc-rs differential tests, adapter handshakes, and benchmarks on every backend
 - [Release](/quest/m1/moq/release.md) - publish the rind release MoQ switches to

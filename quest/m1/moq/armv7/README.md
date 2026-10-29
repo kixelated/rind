@@ -48,5 +48,4 @@ Settled with the maintainer (2026-10-26 and 2026-10-27):
 
 ## Required
 
-- [RSA key generation](/quest/m1/moq/armv7/rsa.md) - over the HACL bignum armv7's RSA signing uses
 - [Raw ciphers](/quest/m1/moq/armv7/cipher.md) - the AES block, ChaCha20, and AES-CTR on armv7
