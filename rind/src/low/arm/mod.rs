@@ -3,7 +3,8 @@
 //! 32-bit ARM, backed by libcrux's verified portable Rust.
 //!
 //! libcrux exposes only a few operations at this layer's granularity.  The
-//! rest are swapped in `mid`, where libcrux's whole operations fit.
+//! rest are swapped in `mid`, where libcrux's whole operations fit, except
+//! P-384, whose arithmetic is fiat-crypto's in `generic::p384`.
 
 pub(crate) mod aes;
 pub(crate) mod aes_ctr;

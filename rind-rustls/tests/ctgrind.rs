@@ -232,7 +232,6 @@ fn signing() {
         "rsa-3072",
         "rsa-4096",
         "ecdsa-p256",
-        #[cfg(not(target_arch = "arm"))]
         "ecdsa-p384",
         "ed25519",
     ] {

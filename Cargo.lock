@@ -2930,6 +2930,7 @@ dependencies = [
  "aws-lc-rs",
  "cfg-if",
  "crabgrind 0.4.0",
+ "fiat-crypto",
  "getrandom 0.4.3",
  "hex",
  "libcrux-aes",

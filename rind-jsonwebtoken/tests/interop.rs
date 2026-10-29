@@ -127,7 +127,6 @@ fn malformed_keys_are_errors() {
     let verifiers = [
         (Algorithm::ES256, DecodingKey::from_ec_der(&garbage)),
         // A P-384 point is the wrong size for P-256, and the reverse.
-        #[cfg(not(target_arch = "arm"))]
         (Algorithm::ES256, common_point(Algorithm::ES384)),
         (Algorithm::ES384, common_point(Algorithm::ES256)),
         (Algorithm::EdDSA, DecodingKey::from_ed_der(&garbage)),
@@ -152,26 +151,6 @@ fn malformed_keys_are_errors() {
             "{algorithm:?}"
         );
     }
-}
-
-// rind does not yet build P-384 on 32-bit ARM.
-#[test]
-#[cfg(target_arch = "arm")]
-fn es384_is_refused() {
-    use aws_lc_rs::signature::ECDSA_P384_SHA384_FIXED_SIGNING;
-    let key = common::aws_lc_ecdsa(Algorithm::ES384, &ECDSA_P384_SHA384_FIXED_SIGNING);
-    assert_eq!(
-        (RIND.signer_factory)(&key.algorithm, &key.encoding)
-            .err()
-            .map(|e| e.into_kind()),
-        Some(ErrorKind::InvalidAlgorithm)
-    );
-    assert_eq!(
-        (RIND.verifier_factory)(&key.algorithm, &key.decoding)
-            .err()
-            .map(|e| e.into_kind()),
-        Some(ErrorKind::InvalidAlgorithm)
-    );
 }
 
 fn common_point(algorithm: Algorithm) -> DecodingKey {

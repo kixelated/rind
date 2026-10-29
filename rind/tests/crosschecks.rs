@@ -300,3 +300,71 @@ mod hkdf {
         }
     }
 }
+
+mod p384 {
+    use aws_lc_rs::agreement::{self, ECDH_P384, EphemeralPrivateKey};
+    use aws_lc_rs::rand::SystemRandom;
+    use aws_lc_rs::signature::{
+        ECDSA_P384_SHA384_ASN1, ECDSA_P384_SHA384_FIXED, ECDSA_P384_SHA384_FIXED_SIGNING,
+        EcdsaKeyPair, KeyPair, UnparsedPublicKey,
+    };
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+    use rind::hashing::Sha384;
+    use rind::key_agreement::p384::{PrivateKey, PublicKey};
+    use rind::signing::ecdsa::{P384, SigningKey, VerifyingKey};
+
+    // Each case generates keys on both sides, which is slow under emulation.
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(32))]
+
+        #[test]
+        fn ecdsa(message in vec(any::<u8>(), 0..300)) {
+            // aws-lc-rs accepts our key and derives the same public key.
+            let ours = SigningKey::<P384>::generate().unwrap();
+            let public = ours.private_key.public_key_uncompressed();
+            let theirs_from_ours = EcdsaKeyPair::from_pkcs8(
+                &ECDSA_P384_SHA384_FIXED_SIGNING,
+                ours.to_pkcs8_der(&mut [0; 256]).unwrap(),
+            )
+            .expect("aws-lc-rs rejected a P-384 key we generated");
+            prop_assert_eq!(theirs_from_ours.public_key().as_ref(), &public[..]);
+
+            // It verifies our signatures, in both encodings.
+            let theirs_verifier = |alg| UnparsedPublicKey::new(alg, public);
+            let mut buf = [0; 128];
+            let signature = ours.sign::<Sha384>(&[&message], &mut buf).unwrap();
+            theirs_verifier(&ECDSA_P384_SHA384_FIXED).verify(&message, signature).unwrap();
+            let signature = ours.sign_asn1::<Sha384>(&[&message], &mut buf).unwrap();
+            theirs_verifier(&ECDSA_P384_SHA384_ASN1).verify(&message, signature).unwrap();
+
+            // We verify its signatures, and refuse one over another message.
+            let theirs = EcdsaKeyPair::generate(&ECDSA_P384_SHA384_FIXED_SIGNING).unwrap();
+            let signature = theirs.sign(&SystemRandom::new(), &message).unwrap();
+            let verifier = VerifyingKey::<P384>::from_x962_uncompressed(theirs.public_key().as_ref())
+                .unwrap();
+            verifier.verify::<Sha384>(&[&message], signature.as_ref()).unwrap();
+            prop_assert!(verifier.verify::<Sha384>(&[&message, b"!"], signature.as_ref()).is_err());
+        }
+
+        #[test]
+        fn ecdh(_case in any::<u8>()) {
+            let ours = PrivateKey::new_random().unwrap();
+            let ours_public = ours.public_key_uncompressed();
+            let theirs = EphemeralPrivateKey::generate(&ECDH_P384, &SystemRandom::new()).unwrap();
+            let theirs_public = theirs.compute_public_key().unwrap();
+
+            let ours_secret = ours
+                .diffie_hellman(&PublicKey::from_x962_uncompressed(theirs_public.as_ref()).unwrap())
+                .unwrap();
+            let theirs_secret = agreement::agree_ephemeral(
+                theirs,
+                agreement::UnparsedPublicKey::new(&ECDH_P384, ours_public),
+                (),
+                |secret| Ok(secret.to_vec()),
+            )
+            .unwrap();
+            prop_assert_eq!(&ours_secret.0[..], &theirs_secret[..]);
+        }
+    }
+}

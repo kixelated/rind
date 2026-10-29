@@ -35,7 +35,6 @@ fn load_pkcs8(
         return Ok(Arc::new(EcdsaP256(Arc::new(ecp256))));
     }
 
-    #[cfg(not(target_arch = "arm"))]
     if let Ok(ecp384) = ecdsa::SigningKey::<ecdsa::P384>::from_pkcs8_der(key_der.secret_pkcs8_der())
     {
         return Ok(Arc::new(EcdsaP384(Arc::new(ecp384))));
@@ -64,7 +63,6 @@ fn load_sec1(
         return Ok(Arc::new(EcdsaP256(Arc::new(ecp256))));
     }
 
-    #[cfg(not(target_arch = "arm"))]
     if let Ok(ecp384) = ecdsa::SigningKey::<ecdsa::P384>::from_sec1_der(key_der.secret_sec1_der()) {
         return Ok(Arc::new(EcdsaP384(Arc::new(ecp384))));
     }
@@ -221,10 +219,8 @@ impl fmt::Debug for EcdsaP256 {
     }
 }
 
-#[cfg(not(target_arch = "arm"))]
 struct EcdsaP384(Arc<ecdsa::SigningKey<ecdsa::P384>>);
 
-#[cfg(not(target_arch = "arm"))]
 impl sign::SigningKey for EcdsaP384 {
     fn choose_scheme(
         &self,
@@ -251,7 +247,6 @@ impl sign::SigningKey for EcdsaP384 {
     }
 }
 
-#[cfg(not(target_arch = "arm"))]
 impl sign::Signer for EcdsaP384 {
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, rustls::Error> {
         let mut sig_buffer = [0u8; 128];
@@ -268,7 +263,6 @@ impl sign::Signer for EcdsaP384 {
     }
 }
 
-#[cfg(not(target_arch = "arm"))]
 impl fmt::Debug for EcdsaP384 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("EcdsaP384").finish_non_exhaustive()
@@ -358,19 +352,11 @@ mod tests {
         let ecdsap384_sec1 = pki_types::PrivateKeyDer::Sec1(pki_types::PrivateSec1KeyDer::from(
             include_bytes!("../../rind/src/high/ecdsa/secp384r1.der").to_vec(),
         ));
-        // 32-bit ARM refuses P-384 keys.
-        let p384_supported = cfg!(not(target_arch = "arm"));
-        assert_eq!(
-            provider.load_private_key(ecdsap384_sec1).is_ok(),
-            p384_supported
-        );
+        assert!(provider.load_private_key(ecdsap384_sec1).is_ok());
         let ecdsap384_pkcs8 = pki_types::PrivateKeyDer::Pkcs8(pki_types::PrivatePkcs8KeyDer::from(
             include_bytes!("../../rind/src/high/ecdsa/secp384r1.pkcs8.der").to_vec(),
         ));
-        assert_eq!(
-            provider.load_private_key(ecdsap384_pkcs8).is_ok(),
-            p384_supported
-        );
+        assert!(provider.load_private_key(ecdsap384_pkcs8).is_ok());
 
         // Error case: invalid key file
         let invalid_pkcs1 = pki_types::PrivateKeyDer::Pkcs1(pki_types::PrivatePkcs1KeyDer::from(
@@ -551,7 +537,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(target_arch = "arm"))]
     fn test_ecdsap384_signing_key() {
         let signing_key = Arc::new(
             ecdsa::SigningKey::<ecdsa::P384>::from_pkcs8_der(include_bytes!(
