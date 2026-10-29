@@ -601,7 +601,7 @@ fn test_aes_gcm() {
             let mut ct = test.msg.clone();
             let mut tag = [0u8; 16];
 
-            ctx.encrypt(&nonce, &test.aad, &mut ct, &mut tag);
+            ctx.encrypt(&nonce, &test.aad, &mut ct, &mut tag).unwrap();
 
             if test.result == ExpectedResult::Valid {
                 assert_eq!(ct, test.ct);
@@ -652,7 +652,7 @@ fn test_aes_gmac() {
             // and encrypt
             let mut tag = [0u8; 16];
 
-            ctx.encrypt(&nonce, &test.msg, &mut [], &mut tag);
+            ctx.encrypt(&nonce, &test.msg, &mut [], &mut tag).unwrap();
 
             if test.result == ExpectedResult::Valid {
                 assert_eq!(&tag, &test.tag[..]);
@@ -848,7 +848,7 @@ fn test_chacha20poly1305() {
             let mut ct = test.msg.clone();
             let mut tag = [0u8; 16];
 
-            ctx.encrypt(&nonce, &test.aad, &mut ct, &mut tag);
+            ctx.encrypt(&nonce, &test.aad, &mut ct, &mut tag).unwrap();
 
             if test.result == ExpectedResult::Valid {
                 assert_eq!(ct, test.ct);
@@ -934,7 +934,7 @@ fn test_xchacha20poly1305() {
             let mut ct = test.msg.clone();
             let mut tag = [0u8; 16];
 
-            ctx.encrypt(&nonce, &test.aad, &mut ct, &mut tag);
+            ctx.encrypt(&nonce, &test.aad, &mut ct, &mut tag).unwrap();
 
             if test.result == ExpectedResult::Valid {
                 assert_eq!(ct, test.ct);

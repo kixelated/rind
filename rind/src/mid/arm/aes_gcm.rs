@@ -4,6 +4,7 @@ use libcrux_aes::aes_gcm_128::portable::PortableAesGcm128;
 use libcrux_aes::aes_gcm_256::portable::PortableAesGcm256;
 use libcrux_traits::aead::arrayref::Aead;
 
+use super::aes::check_gcm_lengths;
 use crate::Error;
 use crate::low::{Entry, zeroise, zeroise_value};
 
@@ -50,14 +51,19 @@ impl AesGcm {
     ///
     /// On exit, `cipher_inout` contains the ciphertext of the message,
     /// and `tag_out` contains the authentication tag.
+    ///
+    /// Fails with [`Error::WrongLength`], leaving `cipher_inout` unchanged,
+    /// if the message is longer than GCM's 2^36 - 32 bytes, or `aad` is
+    /// 2^61 bytes or longer.
     pub fn encrypt(
         &self,
         nonce: &[u8; 12],
         aad: &[u8],
         cipher_inout: &mut [u8],
         tag_out: &mut [u8; 16],
-    ) {
+    ) -> Result<(), Error> {
         let _entry = Entry::new_secret();
+        check_gcm_lengths(aad.len(), cipher_inout.len())?;
         // libcrux reads and writes separate buffers.
         let mut plain = cipher_inout.to_vec();
         let result = match self.key_len {
@@ -72,8 +78,7 @@ impl AesGcm {
             _ => PortableAesGcm256::encrypt(cipher_inout, tag_out, &self.key, nonce, aad, &plain),
         };
         zeroise(&mut plain);
-        // GCM's length limits exceed a 32-bit address space.
-        result.expect("AES-GCM lengths are within limits");
+        result.map_err(|_| Error::WrongLength)
     }
 
     /// Decrypts and verifies the given message.
@@ -86,6 +91,8 @@ impl AesGcm {
     ///
     /// On success, `cipher_inout` contains the plaintext of the message,
     /// and `Ok(())` is returned.
+    /// A message past [`Self::encrypt`]'s limits fails with
+    /// `Err(Error::WrongLength)`, leaving `cipher_inout` unchanged.
     /// Otherwise, `Err(Error::DecryptFailed)` is returned and `cipher_inout`
     /// is cleared.
     pub fn decrypt(
@@ -96,6 +103,7 @@ impl AesGcm {
         tag: &[u8],
     ) -> Result<(), Error> {
         let _entry = Entry::new_secret();
+        check_gcm_lengths(aad.len(), cipher_inout.len())?;
         let result = match <&[u8; 16]>::try_from(tag) {
             Ok(tag) => {
                 let cipher = cipher_inout.to_vec();
@@ -148,7 +156,7 @@ mod tests {
     fn smoketest() {
         let t = AesGcm::new(&[0; 16]);
         let mut tag = [0u8; 16];
-        t.encrypt(&[0u8; 12], &[], &mut [], &mut tag);
+        t.encrypt(&[0u8; 12], &[], &mut [], &mut tag).unwrap();
         assert_eq!(
             &tag,
             b"\x58\xe2\xfc\xce\xfa\x7e\x30\x61\x36\x7f\x1d\x57\xa4\xe7\x45\x5a"
@@ -163,7 +171,8 @@ mod tests {
 
         let mut tag = [0u8; 16];
         let mut cipher = [b'p'; 4164];
-        t.encrypt(b"noncenonceno", b"aad", &mut cipher, &mut tag);
+        t.encrypt(b"noncenonceno", b"aad", &mut cipher, &mut tag)
+            .unwrap();
         assert_eq!(expected_cipher, cipher);
         assert_eq!(expected_tag, tag);
 
@@ -177,7 +186,8 @@ mod tests {
         let t = AesGcm::new(&[b'k'; 32]);
         let mut tag = [0u8; 16];
         let mut cipher = *b"hello";
-        t.encrypt(b"noncenonceno", b"", &mut cipher, &mut tag);
+        t.encrypt(b"noncenonceno", b"", &mut cipher, &mut tag)
+            .unwrap();
         assert_eq!(
             t.decrypt(b"noncenonceno", b"", &mut cipher, &tag[..15]),
             Err(Error::DecryptFailed)
