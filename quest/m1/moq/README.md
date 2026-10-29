@@ -72,9 +72,7 @@ RustCrypto dependency.
 - [instant-acme 0.9 is released](/quest/m1/moq/instant-acme-release.md) - waiting on the release with a pluggable `CryptoProvider`
 - [rind-instant-acme](/quest/m1/moq/instant-acme.md) - instant-acme 0.9's `CryptoProvider`
 - [ctgrind on armv7](/quest/m1/moq/armv7-ctgrind.md) - the constant-time check runs on the armv7 build
-- [Wipe HMAC's padded key](/quest/m1/moq/hmac-key-wipe.md) - `Hmac::new` zeroes its stack copy of the key
 - [AEADs refuse over-long messages](/quest/m1/moq/aead-length.md) - `encrypt` returns an error past the algorithm's limit
-- [Coverage detects x86_64](/quest/m1/moq/coverage-arch.md) - `admin/coverage` runs its x86_64 passes in CI
 - [Run doctests under Cranelift](/quest/m1/moq/cranelift-doctest.md) - the rcgen example runs again
 - [Wipe ML-KEM intermediates](/quest/m1/moq/mlkem-wipe.md) - ML-KEM-768 erases its intermediate secrets on both backends
 - [Truncated hash comparison never panics](/quest/m1/moq/truncated-ct-equal.md) - an out-of-range truncation length is refused, not asserted

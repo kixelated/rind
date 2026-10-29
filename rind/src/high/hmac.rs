@@ -7,6 +7,7 @@
 
 use super::hash::{Hash, HashContext, HashOutput};
 use crate::Error;
+use crate::low::zeroise;
 
 /// An in-progress HMAC computation, using hash function `H`.
 #[derive(Clone)]
@@ -23,8 +24,9 @@ impl<H: Hash> Hmac<H> {
         let key = key.as_ref();
         // shorten long keys
         if key.len() > key_block.len() {
-            let h_key = H::hash(key);
+            let mut h_key = H::hash(key);
             key_block[..h_key.as_ref().len()].copy_from_slice(h_key.as_ref());
+            zeroise(h_key.as_mut());
         } else {
             key_block[..key.len()].copy_from_slice(key);
         }
@@ -43,6 +45,7 @@ impl<H: Hash> Hmac<H> {
         let mut outer = H::new();
         outer.update(&key_block);
 
+        zeroise(&mut key_block);
         Self { inner, outer }
     }
 
