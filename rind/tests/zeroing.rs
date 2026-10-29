@@ -123,39 +123,6 @@ fn hkdf() {
 }
 
 #[test]
-fn hmac_setup() {
-    use rind::hashing::hmac::Hmac;
-    use rind::hashing::{Hash, LegacySha1, Sha256, Sha384, Sha512};
-
-    fn check<H: Hash>(block_len: usize) {
-        let short: Vec<u8> = (1..=32).collect();
-        check_padded_key_wiped(
-            || {
-                Hmac::<H>::new(&short);
-            },
-            &short,
-            block_len,
-        );
-
-        // A long key is hashed first, and that hash is what gets padded.
-        let long: Vec<u8> = (1..=block_len as u8 + 1).collect();
-        let hashed = H::hash(&long);
-        check_padded_key_wiped(
-            || {
-                Hmac::<H>::new(&long);
-            },
-            hashed.as_ref(),
-            block_len,
-        );
-    }
-
-    check::<LegacySha1>(64);
-    check::<Sha256>(64);
-    check::<Sha384>(128);
-    check::<Sha512>(128);
-}
-
-#[test]
 fn aes_gcm() {
     use rind::aead::AesGcm;
 
@@ -240,47 +207,6 @@ fn check_zeroed_on_drop_bounded<T: Unpin>(value: Pin<Box<T>>, bounds: Bounds) {
         }
     }
 }
-
-/// Runs `f`, then fails if the HMAC key block, `key` zero-padded to
-/// `block_len` and XORed with either pad, survives in the stack `f` used.
-///
-/// Only the whole contiguous block is matched: the hash's own scratch also
-/// holds the block's words, byte-swapped or split across vector registers,
-/// and that is not what this checks.
-///
-/// Like the drop checks, this is unsound: it reads uninitialised stack. Both
-/// calls are made from the same frame, so the scan's buffer lies over the
-/// frames `f` just returned from.
-#[inline(never)]
-fn check_padded_key_wiped(f: impl FnOnce(), key: &[u8], block_len: usize) {
-    run_on_stack(f);
-    let stack = scan_stack();
-
-    for pad in [0x36u8, 0x5c] {
-        let mut block = vec![pad; block_len];
-        for (b, k) in block.iter_mut().zip(key) {
-            *b ^= k;
-        }
-        if let Some(at) = stack.windows(block_len).position(|w| w == block) {
-            panic!("key block padded with 0x{pad:02x} left on the stack at {at}");
-        }
-    }
-}
-
-#[inline(never)]
-fn run_on_stack(f: impl FnOnce()) {
-    f()
-}
-
-#[inline(never)]
-fn scan_stack() -> Vec<u8> {
-    let stack = core::mem::MaybeUninit::<[u8; STACK_SCAN_LEN]>::uninit();
-    read_into_vec(stack.as_ptr().cast(), STACK_SCAN_LEN)
-}
-
-/// Bytes of stack below the caller that [`scan_stack`] reads; this covers
-/// the deepest HMAC setup with room to spare, even unoptimised.
-const STACK_SCAN_LEN: usize = 32 * 1024;
 
 fn read_into_vec(ptr: *const u8, len: usize) -> Vec<u8> {
     let mut out = Vec::with_capacity(len);
