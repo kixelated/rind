@@ -11,7 +11,7 @@
     # The quest CLI, which also serves the quest guide and skills the stubs in
     # .claude/skills call. Bump the rev to upgrade them.
     quest = {
-      url = "github:kixelated/quest/ed657ba9362a941b3be9bbea55120a3c5a90374c";
+      url = "github:kixelated/quest/95b7d27de5ba6e6cba42d721e3a77b0f5d965294";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.follows = "flake-utils";
     };
@@ -40,7 +40,7 @@
           };
 
           # Pinned build toolchain so `nix develop` and CI compile against the
-          # same rustc. The crates declare their own lower floors (rust-version),
+          # same rustc. The workspace declares a lower floor (rust-version),
           # which the MSRV job in lints.yml checks. No rust-toolchain.toml: it
           # would override the nightly, cranelift, and MSRV jobs' toolchains.
           rust-toolchain = pkgs.rust-bin.stable."1.98.1".minimal.override {
