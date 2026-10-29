@@ -25,8 +25,8 @@ impl PublicKey {
     /// Create an P-256 [`PublicKey`] from a byte slice.
     ///
     /// This must be exactly 65 bytes in length, using the X9.62
-    /// uncompressed encoding.  An error is returned if the point is
-    /// not on the curve.
+    /// uncompressed encoding.  An error is returned if a coordinate
+    /// is not below the field prime, or the point is not on the curve.
     pub fn from_x962_uncompressed(bytes: &[u8]) -> Result<Self, Error> {
         let _entry = low::Entry::new_public();
         match bytes.first() {
