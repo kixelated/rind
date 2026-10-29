@@ -3,7 +3,7 @@
 use libcrux_chacha20poly1305::xchacha20_poly1305;
 
 use crate::Error;
-use crate::low::{Entry, zeroise};
+use crate::low::{self, Entry, zeroise};
 
 /// A XChaCha20Poly1305 key.
 ///
@@ -15,6 +15,7 @@ pub struct XChaCha20Poly1305 {
 impl XChaCha20Poly1305 {
     /// Create a new [`XChaCha20Poly1305`] from 32 bytes of key material.
     pub fn new(key: [u8; 32]) -> Self {
+        low::ct::secret_slice(&key);
         Self { key }
     }
 
@@ -46,6 +47,8 @@ impl XChaCha20Poly1305 {
         zeroise(&mut plain);
         // `usize` is 32 bits here, so every length fits HACL's `u32`.
         result.expect("XChaCha20Poly1305 lengths are within limits");
+        low::ct::public_slice(cipher_inout);
+        low::ct::public_slice(tag_out);
     }
 
     /// Decrypts and verifies the given message.
@@ -75,7 +78,8 @@ impl XChaCha20Poly1305 {
             xchacha20_poly1305::decrypt(&self.key, cipher_inout, &sealed, aad, nonce).is_ok()
         };
 
-        if ok {
+        if low::ct::into_public(ok) {
+            low::ct::public_slice(cipher_inout);
             Ok(())
         } else {
             // avoid unauthenticated plaintext leak

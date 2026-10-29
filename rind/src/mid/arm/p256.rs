@@ -99,7 +99,7 @@ impl PrivateKey {
         secret.0.copy_from_slice(&point[..32]);
         low::zeroise(&mut d);
         low::zeroise(&mut point);
-        match ok {
+        match low::ct::into_public(ok) {
             true => Ok(secret),
             false => Err(Error::NotOnCurve),
         }
@@ -111,7 +111,7 @@ impl PrivateKey {
         let mut xy = [0u8; 64];
         let ok = libcrux_p256::dh_initiator(&mut xy, &d);
         low::zeroise(&mut d);
-        match ok {
+        match low::ct::into_public(ok) {
             true => low::ct::into_public(xy),
             false => panic!("internal fault"),
         }
@@ -222,7 +222,8 @@ impl StaticPrivateKey {
         let ok = libcrux_p256::ecdsa_sign_p256_without_hash(&mut sig, e.len() as u32, &e, &d, &k);
         low::zeroise(&mut d);
         low::zeroise(&mut k);
-        match ok {
+        let sig = low::ct::into_public(sig);
+        match low::ct::into_public(ok) {
             true => Scalar::from_bytes_checked(&sig[32..]).unwrap_or_default(),
             false => Scalar::default(),
         }

@@ -12,12 +12,11 @@
 //! References to FIPS186-5 are to:
 //! <https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.186-5.pdf>
 
-use core::ops::{Deref, Range};
+use core::ops::Range;
 
-use libcrux_hacl_rs::bignum::base::bn_mont_ctx_u64;
 use libcrux_hacl_rs::bignum::bignum64;
 
-use super::{MAX_PRIVATE_MODULUS_BYTES, MAX_PRIVATE_MODULUS_WORDS, RsaPrivateKey};
+use super::{MAX_PRIVATE_MODULUS_BYTES, MAX_PRIVATE_MODULUS_WORDS, Mont, RsaPrivateKey};
 use crate::Error;
 use crate::low::{self, PosInt, ct};
 use crate::mid::rng::RandomSource;
@@ -181,7 +180,7 @@ impl Derivation {
         // is prime. HACL* requires the base below the modulus: q < p.
         let p_2 = &mut self.p_2[..len];
         bignum64::sub(w, p, &ONE_TWO[1][..len], p_2);
-        let ctx = Mont::new(p);
+        let ctx = Mont::new_secret(p, len);
         bignum64::mod_exp_consttime_precomp(&ctx, q, w * 64, p_2, &mut self.iqmp[..len]);
 
         bignum64::mul(w, p, q, &mut self.n[..len * 2]);
@@ -369,7 +368,7 @@ fn is_prime(
 
 fn miller_rabin(w: &[u64], size: KeySize, rng: &mut dyn RandomSource) -> Result<bool, Error> {
     let len = w.len();
-    let ctx = Mont::new(w);
+    let ctx = Mont::new_secret(w, len);
 
     // See FIPS186-5 B.3.1:
     // 1. Let a be the largest integer such that 2 ^ a divides w - 1.
@@ -599,33 +598,6 @@ const SMALL_PRIME_DIVISORS: [(u64, u64); 130] = {
     }
     divisors
 };
-
-/// A HACL* Montgomery context, whose copy of the modulus is zeroed on drop.
-struct Mont(Box<[bn_mont_ctx_u64]>);
-
-impl Mont {
-    /// `n` must be odd and above one.
-    fn new(n: &[u64]) -> Self {
-        Self(bignum64::mont_ctx_init(n.len() as u32, n))
-    }
-}
-
-impl Deref for Mont {
-    type Target = [bn_mont_ctx_u64];
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl Drop for Mont {
-    fn drop(&mut self) {
-        for k in self.0.iter_mut() {
-            low::zeroise(&mut k.n);
-            low::zeroise(&mut k.r2);
-        }
-    }
-}
 
 /// One and two, at every width.
 const ONE_TWO: [[u64; MAX_PRIVATE_MODULUS_WORDS]; 2] = {
