@@ -9,7 +9,7 @@ use super::hash::{Hash, HashContext, SignatureHash};
 use super::hmac_drbg::HmacDrbg;
 use super::pkcs8;
 use crate::error::{Error, KeyFormatError};
-use crate::low::{Entry, zeroise};
+use crate::low::{Entry, ct, zeroise};
 use crate::mid::rng::{RandomSource, SystemRandom};
 
 /// An ECDSA signing key, on curve `C`.
@@ -127,7 +127,10 @@ impl<C: Curve> SigningKey<C> {
             .encode(&mut asn1::Encoder::new(output))
             .map_err(Error::Asn1Error)?;
 
-        output.get(..used).ok_or(Error::WrongLength)
+        // The caller owns the encoding, as with the key's `as_bytes`.
+        let output = output.get(..used).ok_or(Error::WrongLength)?;
+        ct::public_slice(output);
+        Ok(output)
     }
 
     /// Encode this private key's corresponding public key in SubjectPublicKeyInfo DER format.

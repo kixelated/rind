@@ -3,7 +3,7 @@
 
 use core::ops::{Deref, DerefMut};
 
-use crate::low::ct_equal;
+use crate::low::{ct, ct_equal};
 use crate::mid::{sha1, sha2};
 
 /// Output from a hash function.
@@ -24,7 +24,7 @@ pub enum HashOutput {
 impl HashOutput {
     /// Constant-time equality, `other` may not be truncated.
     pub fn ct_equal(&self, other: &[u8]) -> bool {
-        ct_equal(self.as_ref(), other)
+        ct::into_public(ct_equal(self.as_ref(), other))
     }
 
     /// Constant-time equality after truncation.
@@ -38,19 +38,19 @@ impl HashOutput {
     pub fn truncated_ct_equal<const L: usize>(&self, other: &[u8]) -> bool {
         assert_ne!(L, 0);
         assert!(L <= self.as_ref().len());
-        ct_equal(&self.as_ref()[..L], other)
+        ct::into_public(ct_equal(&self.as_ref()[..L], other))
     }
 }
 
 impl PartialEq for HashOutput {
     fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
+        ct::into_public(match (self, other) {
             (Self::Sha1(s), Self::Sha1(o)) => ct_equal(s, o),
             (Self::Sha256(s), Self::Sha256(o)) => ct_equal(s, o),
             (Self::Sha384(s), Self::Sha384(o)) => ct_equal(s, o),
             (Self::Sha512(s), Self::Sha512(o)) => ct_equal(s, o),
             _ => false,
-        }
+        })
     }
 }
 
