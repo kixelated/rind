@@ -7,7 +7,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: never
-  CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_RUNNER: valgrind --track-origins=yes --error-exitcode=99 --num-callers=40
+  CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_RUNNER: valgrind --track-origins=yes --error-exitcode=99
   CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
   CC_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-gcc
   CXX_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-g++
@@ -33,9 +33,18 @@ jobs:
           sudo dpkg --add-architecture armhf
           sudo apt-get update
           sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6:armhf valgrind:armhf
-      - name: lib
-        run: time cargo test --target armv7-unknown-linux-gnueabihf ${{ matrix.build }} -p rind --lib --features __ctgrind --no-fail-fast || true
-      - name: wycheproof
-        run: time cargo test --target armv7-unknown-linux-gnueabihf ${{ matrix.build }} -p rind --test wycheproof --no-fail-fast || true
-      - name: adapters
-        run: time cargo test --target armv7-unknown-linux-gnueabihf ${{ matrix.build }} --workspace --exclude rind --lib --test ctgrind --features rind/__ctgrind --no-fail-fast || true
+          valgrind --version
+      - name: build
+        run: |
+          T="--target armv7-unknown-linux-gnueabihf ${{ matrix.build }}"
+          time cargo test $T -p rind --lib --features __ctgrind --no-run 2>&1 | tail -1
+          time cargo test $T -p rind --test wycheproof --no-run 2>&1 | tail -1
+          time cargo test $T --workspace --exclude rind --lib --test ctgrind --features rind/__ctgrind --no-run 2>&1 | tail -1
+      # Only counts and timings: the findings are under private upstream report.
+      - name: run
+        run: |
+          T="--target armv7-unknown-linux-gnueabihf ${{ matrix.build }}"
+          q() { grep -E "^test result|^    [a-z_:]+$|ERROR SUMMARY|^real" | sed 's/==[0-9]*==//'; }
+          { time cargo test $T -p rind --lib --features __ctgrind --no-fail-fast; } 2>&1 | q || true
+          { time cargo test $T -p rind --test wycheproof --no-fail-fast; } 2>&1 | q || true
+          { time cargo test $T --workspace --exclude rind --lib --test ctgrind --features rind/__ctgrind --no-fail-fast; } 2>&1 | q || true
