@@ -1,0 +1,26 @@
+[package]
+name = "rind-dimpl"
+version = "0.1.0"
+edition = "2024"
+repository = "https://github.com/kixelated/rind"
+license = "Apache-2.0 OR ISC OR MIT-0"
+description = "dimpl CryptoProvider backed by rind"
+categories = ["network-programming", "cryptography"]
+rust-version = "1.89"
+readme = "README.md"
+
+[dependencies]
+# `_crypto-common` turns on dimpl's DTLS 1.3 check that a CertificateVerify
+# scheme's curve matches the peer's certificate (RFC 8446 section 4.4.3).
+# Without it a custom provider cannot enforce that, and it adds only the DER
+# parsers this crate already needs to read certificates.
+dimpl = { version = "0.9", default-features = false, features = ["_crypto-common"] }
+rind = { version = "0.1.0", path = "../rind" }
+x509-cert = { version = "0.3", default-features = false }
+
+[dev-dependencies]
+# Requests reach valgrind only once `rind/__ctgrind` turns on crabgrind's default
+# features, as `admin/ctgrind` does; otherwise they build as no-ops.
+crabgrind = { version = "0.4", default-features = false }
+dimpl = { version = "0.9", default-features = false, features = ["aws-lc-rs", "_crypto-common"] }
+rcgen = { version = "0.14", default-features = false, features = ["aws_lc_rs", "pem"] }

@@ -49,5 +49,4 @@ Settled with the maintainer (2026-10-26 and 2026-10-27):
 
 ## Required
 
-- [RSA key generation](/quest/m1/moq/armv7/rsa.md) - over the HACL bignum armv7's RSA signing uses
 - [ECDSA P-384](/quest/m1/moq/armv7/p384.md) - signing, verification, and key generation over libcrux-p384's arithmetic

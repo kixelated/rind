@@ -25,4 +25,3 @@ Guidance:
 
 - [armv7 on libcrux](/quest/m1/moq/armv7/README.md) - the backend these must also run on
 - [rind-str0m](/quest/m1/moq/str0m.md) - adapter under test
-- [rind-dimpl](/quest/m1/moq/dimpl.md) - adapter under test
