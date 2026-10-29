@@ -445,7 +445,6 @@ mod tests {
             ),
         );
 
-        #[cfg(not(target_arch = "arm"))]
         check::<P384>(
             "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffeffffffff0000000000000000ffffffff",
             &[
