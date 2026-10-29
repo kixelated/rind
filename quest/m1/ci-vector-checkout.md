@@ -1,9 +1,10 @@
-# [XS] CI checks out only the test vectors
+# [XS] CI checks out only the submodules it reads
 
 ## Goal
 
-CI workflows check out the `thirdparty/cavp` and `thirdparty/wycheproof`
-submodules they read, not every submodule, so no job clones s2n-bignum.
+Each CI job checks out only the submodules it reads: `thirdparty/cavp` and
+`thirdparty/wycheproof` for the tests, s2n-bignum only for the job that runs
+the `admin/parse-asm` code generators, and none for jobs that read none.
 
 ## Plan
 
@@ -13,4 +14,5 @@ that nothing `just ci` runs reads s2n-bignum; only the `admin/parse-asm`
 generators do.
 
 - Replace `submodules: true` in `.github/workflows/*.yml` with a checkout of
-  the two vector submodules, or none for jobs that read neither.
+  the submodules each job reads. The `checks` job in `lints.yml` runs
+  `admin/parse-asm/all.sh`, so it keeps s2n-bignum.
