@@ -3,6 +3,7 @@ name = "rind-fuzz"
 version = "0.0.0"
 publish = false
 edition = "2021"
+rust-version.workspace = true
 
 [package.metadata]
 cargo-fuzz = true

@@ -40,7 +40,7 @@
           };
 
           # Pinned build toolchain so `nix develop` and CI compile against the
-          # same rustc. The crates declare their own lower floors (rust-version),
+          # same rustc. The workspace declares a lower floor (rust-version),
           # which the MSRV job in lints.yml checks. No rust-toolchain.toml: it
           # would override the nightly, cranelift, and MSRV jobs' toolchains.
           rust-toolchain = pkgs.rust-bin.stable."1.98.1".minimal.override {
