@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 
 use crate::Error;
-use crate::low::{Entry, zeroise};
+use crate::low::{self, Entry, zeroise};
 
 /// A ChaCha20Poly1305 key.
 ///
@@ -13,6 +13,7 @@ pub struct ChaCha20Poly1305 {
 impl ChaCha20Poly1305 {
     /// Create a new [`ChaCha20Poly1305`] from 32 bytes of key material.
     pub fn new(key: [u8; 32]) -> Self {
+        low::ct::secret_slice(&key);
         Self { key }
     }
 
@@ -46,6 +47,8 @@ impl ChaCha20Poly1305 {
         zeroise(&mut plain);
         // `usize` is 32 bits here, so every length fits HACL's `u32`.
         result.expect("ChaCha20Poly1305 lengths are within limits");
+        low::ct::public_slice(cipher_inout);
+        low::ct::public_slice(tag_out);
     }
 
     /// Decrypts and verifies the given message.
@@ -84,7 +87,8 @@ impl ChaCha20Poly1305 {
             Err(_) => false,
         };
 
-        if ok {
+        if low::ct::into_public(ok) {
+            low::ct::public_slice(cipher_inout);
             Ok(())
         } else {
             // avoid unauthenticated plaintext leak

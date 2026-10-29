@@ -5,7 +5,7 @@ use libcrux_aes::aes_gcm_256::portable::PortableAesGcm256;
 use libcrux_traits::aead::arrayref::Aead;
 
 use crate::Error;
-use crate::low::{Entry, zeroise, zeroise_value};
+use crate::low::{self, Entry, zeroise, zeroise_value};
 
 /// An AES-GCM key.
 ///
@@ -74,6 +74,8 @@ impl AesGcm {
         zeroise(&mut plain);
         // GCM's length limits exceed a 32-bit address space.
         result.expect("AES-GCM lengths are within limits");
+        low::ct::public_slice(cipher_inout);
+        low::ct::public_slice(tag_out);
     }
 
     /// Decrypts and verifies the given message.
@@ -122,7 +124,8 @@ impl AesGcm {
             Err(_) => false,
         };
 
-        if result {
+        if low::ct::into_public(result) {
+            low::ct::public_slice(cipher_inout);
             Ok(())
         } else {
             // avoid unauthenticated plaintext leak
