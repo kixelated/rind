@@ -1,7 +1,6 @@
 // Written for Graviola by Joe Birr-Pixton, 2024.
 // SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 
-#[cfg(not(target_arch = "arm"))]
 pub use rsa_priv::KeySize;
 
 use crate::Error;
@@ -236,9 +235,8 @@ impl VerifyingKey {
 ///
 /// You can generate a new key using [`SigningKey::generate()`], and then
 /// serialize it using [`SigningKey::to_pkcs1_der()`] or [`SigningKey::to_pkcs8_der()`].
-/// 32-bit ARM does not yet support key generation.
 ///
-/// ```ignore-arm
+/// ```
 /// use rind::signing::rsa::{KeySize, SigningKey};
 /// use tempfile::TempDir;
 /// let key = SigningKey::generate(KeySize::Rsa2048)?;
@@ -265,7 +263,6 @@ impl SigningKey {
     /// # Warning
     /// Unlike other private key operations in rind, RSA key generation is not side-channel safe.
     /// Avoid generating keys in untrusted multi-tenant or physical environments.
-    #[cfg(not(target_arch = "arm"))]
     pub fn generate(size: KeySize) -> Result<Self, Error> {
         let _entry = Entry::new_secret();
         rsa_priv::RsaPrivateKey::generate(size, &mut SystemRandom, &mut SystemRandom)
@@ -556,6 +553,8 @@ impl SigningKey {
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
+    use crate::high::hmac_drbg::HmacDrbg;
+    use crate::mid::rng::SliceRandomSource;
 
     fn check_all_algs(buf: &mut [u8], private: &SigningKey, public: &VerifyingKey) {
         let sig = private.sign_pkcs1_sha256(buf, b"hello").unwrap();
@@ -693,8 +692,31 @@ mod tests {
         assert_eq!(encoded, pkcs8_der);
     }
 
+    /// Every backend makes the same decisions from the same random input,
+    /// so generates the same key.
     #[test]
-    #[cfg(not(target_arch = "arm"))]
+    fn key_generation_known_answer() {
+        let candidates = include_str!("../testdata/rsa.bench.2048.txt")
+            .split_whitespace()
+            .flat_map(|line| hex::decode(line).unwrap())
+            .collect::<Vec<_>>();
+        let key = SigningKey(
+            rsa_priv::RsaPrivateKey::generate(
+                KeySize::Rsa2048,
+                &mut SliceRandomSource(&candidates),
+                &mut HmacDrbg::<hash::Sha256>::new(b"", b"", b""),
+            )
+            .unwrap(),
+        );
+        let mut buffer = [0u8; SigningKey::MAX_PKCS1_BUFFER_LEN];
+        let der = key.to_pkcs1_der(&mut buffer).unwrap();
+        assert_eq!(
+            hex::encode(hash::Sha256::hash(der)),
+            "45cd51509b4deac86be0cb60faa945339c4526cce2faa489212c6b9b853b121d"
+        );
+    }
+
+    #[test]
     fn key_generation_smoke_test() {
         let mut sizes = vec![2048, 3072];
 
