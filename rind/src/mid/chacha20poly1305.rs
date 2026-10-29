@@ -4,7 +4,7 @@
 use crate::Error;
 use crate::low::chacha20::ChaCha20;
 use crate::low::poly1305::Poly1305;
-use crate::low::{Entry, ct_equal, zeroise};
+use crate::low::{self, Entry, ct_equal, zeroise};
 
 /// A ChaCha20Poly1305 key.
 ///
@@ -16,6 +16,7 @@ pub struct ChaCha20Poly1305 {
 impl ChaCha20Poly1305 {
     /// Create a new [`ChaCha20Poly1305`] from 32 bytes of key material.
     pub fn new(key: [u8; 32]) -> Self {
+        low::ct::secret_slice(&key);
         Self { key }
     }
 
@@ -36,6 +37,8 @@ impl ChaCha20Poly1305 {
     ) {
         let _entry = Entry::new_secret();
         self.cipher(nonce, aad, cipher_inout, tag_out, true);
+        low::ct::public_slice(cipher_inout);
+        low::ct::public_slice(tag_out);
     }
 
     /// Decrypts and verifies the given message.
@@ -62,6 +65,7 @@ impl ChaCha20Poly1305 {
         self.cipher(nonce, aad, cipher_inout, &mut actual_tag, false);
 
         if ct_equal(&actual_tag, tag) {
+            low::ct::public_slice(cipher_inout);
             Ok(())
         } else {
             // avoid unauthenticated plaintext leak

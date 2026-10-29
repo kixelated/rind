@@ -553,6 +553,8 @@ impl SigningKey {
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
+    use crate::high::hmac_drbg::HmacDrbg;
+    use crate::mid::rng::SliceRandomSource;
 
     fn check_all_algs(buf: &mut [u8], private: &SigningKey, public: &VerifyingKey) {
         let sig = private.sign_pkcs1_sha256(buf, b"hello").unwrap();
@@ -688,6 +690,30 @@ mod tests {
         let mut buffer = [0u8; SigningKey::MAX_PKCS1_BUFFER_LEN];
         let encoded = decoded.to_pkcs8_der(&mut buffer).unwrap();
         assert_eq!(encoded, pkcs8_der);
+    }
+
+    /// Every backend makes the same decisions from the same random input,
+    /// so generates the same key.
+    #[test]
+    fn key_generation_known_answer() {
+        let candidates = include_str!("../testdata/rsa.bench.2048.txt")
+            .split_whitespace()
+            .flat_map(|line| hex::decode(line).unwrap())
+            .collect::<Vec<_>>();
+        let key = SigningKey(
+            rsa_priv::RsaPrivateKey::generate(
+                KeySize::Rsa2048,
+                &mut SliceRandomSource(&candidates),
+                &mut HmacDrbg::<hash::Sha256>::new(b"", b"", b""),
+            )
+            .unwrap(),
+        );
+        let mut buffer = [0u8; SigningKey::MAX_PKCS1_BUFFER_LEN];
+        let der = key.to_pkcs1_der(&mut buffer).unwrap();
+        assert_eq!(
+            hex::encode(hash::Sha256::hash(der)),
+            "45cd51509b4deac86be0cb60faa945339c4526cce2faa489212c6b9b853b121d"
+        );
     }
 
     #[test]

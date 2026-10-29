@@ -1,9 +1,10 @@
 use std::sync::OnceLock;
 
 use aws_lc_rs::rand::SystemRandom;
+#[cfg(not(target_arch = "arm"))]
+use aws_lc_rs::signature::ECDSA_P384_SHA384_FIXED_SIGNING;
 use aws_lc_rs::signature::{
-    ECDSA_P256_SHA256_FIXED_SIGNING, ECDSA_P384_SHA384_FIXED_SIGNING, EcdsaKeyPair,
-    EcdsaSigningAlgorithm, Ed25519KeyPair, KeyPair,
+    ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair, EcdsaSigningAlgorithm, Ed25519KeyPair, KeyPair,
 };
 use jsonwebtoken::crypto::aws_lc;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey};
@@ -73,17 +74,20 @@ pub fn all() -> Vec<Key> {
         &ECDSA_P256_SHA256_FIXED_SIGNING,
     ));
 
-    let p384 = ecdsa::SigningKey::<ecdsa::P384>::generate().unwrap();
-    keys.push(Key::new(
-        Algorithm::ES384,
-        "rind",
-        EncodingKey::from_ec_der(p384.to_pkcs8_der(&mut [0; 256]).unwrap()),
-        DecodingKey::from_ec_der(&p384.private_key.public_key_uncompressed()),
-    ));
-    keys.push(aws_lc_ecdsa(
-        Algorithm::ES384,
-        &ECDSA_P384_SHA384_FIXED_SIGNING,
-    ));
+    #[cfg(not(target_arch = "arm"))]
+    {
+        let p384 = ecdsa::SigningKey::<ecdsa::P384>::generate().unwrap();
+        keys.push(Key::new(
+            Algorithm::ES384,
+            "rind",
+            EncodingKey::from_ec_der(p384.to_pkcs8_der(&mut [0; 256]).unwrap()),
+            DecodingKey::from_ec_der(&p384.private_key.public_key_uncompressed()),
+        ));
+        keys.push(aws_lc_ecdsa(
+            Algorithm::ES384,
+            &ECDSA_P384_SHA384_FIXED_SIGNING,
+        ));
+    }
 
     let ed25519 = eddsa::Ed25519SigningKey::generate().unwrap();
     keys.push(Key::new(
@@ -126,7 +130,7 @@ pub fn all() -> Vec<Key> {
     keys
 }
 
-fn aws_lc_ecdsa(algorithm: Algorithm, signing: &'static EcdsaSigningAlgorithm) -> Key {
+pub fn aws_lc_ecdsa(algorithm: Algorithm, signing: &'static EcdsaSigningAlgorithm) -> Key {
     let pkcs8 = EcdsaKeyPair::generate_pkcs8(signing, &SystemRandom::new()).unwrap();
     let pair = EcdsaKeyPair::from_pkcs8(signing, pkcs8.as_ref()).unwrap();
     Key::new(
@@ -137,18 +141,19 @@ fn aws_lc_ecdsa(algorithm: Algorithm, signing: &'static EcdsaSigningAlgorithm) -
     )
 }
 
-/// One RSA-2048 key per test binary, as PKCS#1 private and public DER.
+/// rind's RSA-2048 test key, as PKCS#1 private and public DER.
+///
+/// A fixture rather than a generated key, since armv7 cannot yet generate one.
 pub fn rsa_key() -> (&'static [u8], &'static [u8]) {
-    static KEY: OnceLock<(Vec<u8>, Vec<u8>)> = OnceLock::new();
-    let (private, public) = KEY.get_or_init(|| {
-        let key = rsa::SigningKey::generate(rsa::KeySize::Rsa2048).unwrap();
-        (
-            key.to_pkcs1_der(&mut [0; 2048]).unwrap().to_vec(),
-            key.public_key()
-                .to_pkcs1_der(&mut [0; 512])
-                .unwrap()
-                .to_vec(),
-        )
+    const PRIVATE: &[u8] = include_bytes!("../../../rind/src/high/rsa/rsa2048.der");
+    static PUBLIC: OnceLock<Vec<u8>> = OnceLock::new();
+    let public = PUBLIC.get_or_init(|| {
+        rsa::SigningKey::from_pkcs1_der(PRIVATE)
+            .unwrap()
+            .public_key()
+            .to_pkcs1_der(&mut [0; 512])
+            .unwrap()
+            .to_vec()
     });
-    (private, public)
+    (PRIVATE, public)
 }

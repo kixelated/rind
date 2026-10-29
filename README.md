@@ -42,12 +42,18 @@ but there is also a public API for general-purpose use.
 
 ## Limitations
 
-`aarch64` and `x86_64` architectures only.
+`aarch64`, `x86_64`, and 32-bit `arm` architectures only.
 
 - `aarch64` requires `aes`, `sha2`, `pmull`, and `neon` CPU features.
-  (This notably excludes Raspberry PI 4 and earlier, but covers Raspberry Pi 5.)
+  (This notably excludes Raspberry PI 4 and earlier, which can run the 32-bit
+  `arm` build, but covers Raspberry Pi 5.)
 - `x86_64` requires `aes`, `ssse3`, `popcnt`, `avx`, `avx2`, `adx`, `bmi2`, and `pclmulqdq` CPU features.
   (This is most x86_64 CPUs made since around ~2014.)
+- 32-bit `arm` (tested on `armv7-unknown-linux-gnueabihf`, and built for
+  `armv7-linux-androideabi`) runs [libcrux]'s verified portable Rust instead,
+  and needs no CPU features. It does not yet offer P-384,
+  the unauthenticated ciphers, SHA-3, or SHAKE, and an Ed25519 public key that is not a curve point is
+  refused when verifying rather than when decoding.
 
 Every operation panics on a CPU missing one of these. Call `rind::cpu::check()`
 at startup to get an error naming the missing feature instead.
@@ -86,9 +92,12 @@ We are grateful to:
     - SHA-3 Keccak-f
     - Big integer arithmetic
 - [wycheproof]: collated test vectors for all algorithms.
+- [libcrux]: formally verified portable Rust (from HACL\*) for the 32-bit
+  `arm` backend.
 
 [s2n-bignum]: https://github.com/awslabs/s2n-bignum
 [wycheproof]: https://github.com/C2SP/wycheproof
+[libcrux]: https://github.com/cryspen/libcrux
 [SLOTHY]: https://github.com/slothy-optimizer/slothy
 [performance]: https://jbp.io/rind/
 [rind-rustls]: https://crates.io/crates/rind-rustls
@@ -198,7 +207,8 @@ have some different options depending on CPU features:
 ### Symmetric cryptography
 SHA1 and SHA256 have straightforward implementations using hashing intrinsics
 (aka "SHA-NI" on x86_64, "sha" extension on aarch64) with runtime fallback
-on x86_64 to a pure Rust version if needed.
+on x86_64 to a pure Rust version if needed. 32-bit `arm` always runs that pure
+Rust SHA1, since libcrux has none.
 
 SHA384/SHA512 on x86_64 has an AVX2 by-4 implementation, plus an AVX2 interleaved
 single block implementation.

@@ -14,7 +14,8 @@ use crate::low::cpu::verify_cpu_features;
 pub(crate) struct Sha1Context {
     h: [u32; 5],
     blockwise: Blockwise<{ Self::BLOCK_SZ }>,
-    nblocks: usize,
+    // u64 so 32-bit targets can hash past 4 GiB.
+    nblocks: u64,
 }
 
 impl Sha1Context {
@@ -54,17 +55,15 @@ impl Sha1Context {
     pub(crate) fn finish(mut self) -> [u8; Self::OUTPUT_SZ] {
         let bytes = self
             .nblocks
-            .checked_mul(Self::BLOCK_SZ)
-            .and_then(|bytes| bytes.checked_add(self.blockwise.used()))
+            .checked_mul(Self::BLOCK_SZ as u64)
+            .and_then(|bytes| bytes.checked_add(self.blockwise.used() as u64))
             .unwrap();
 
         let bits = bytes
             .checked_mul(8)
             .expect("excess data processed by hash function");
 
-        let last_blocks = self
-            .blockwise
-            .md_pad_with_length(&(bits as u64).to_be_bytes());
+        let last_blocks = self.blockwise.md_pad_with_length(&bits.to_be_bytes());
         self.update_blocks(last_blocks.as_ref());
 
         let mut r = [0u8; Self::OUTPUT_SZ];
@@ -80,7 +79,9 @@ impl Sha1Context {
         if !blocks.is_empty() {
             verify_cpu_features();
             crate::low::sha1_compress_blocks(&mut self.h, blocks);
-            self.nblocks = self.nblocks.saturating_add(blocks.len() / Self::BLOCK_SZ);
+            self.nblocks = self
+                .nblocks
+                .saturating_add((blocks.len() / Self::BLOCK_SZ) as u64);
         }
     }
 
@@ -89,4 +90,21 @@ impl Sha1Context {
 
     /// The output size of SHA1.
     pub(crate) const OUTPUT_SZ: usize = 20;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The bit length overflows a 32-bit usize at 512 MiB, and the byte count
+    // at 4 GiB.
+    #[test]
+    fn length_past_32_bit_usize() {
+        for bytes in [1u64 << 29, 1 << 32] {
+            let mut ctx = Sha1Context::new();
+            ctx.nblocks = bytes / Sha1Context::BLOCK_SZ as u64;
+            ctx.update(b"x");
+            ctx.finish();
+        }
+    }
 }

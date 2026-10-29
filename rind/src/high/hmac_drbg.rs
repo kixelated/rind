@@ -12,7 +12,7 @@ use crate::mid::rng::RandomSource;
 pub(crate) struct HmacDrbg<H: Hash> {
     k: HashOutput,
     v: HashOutput,
-    reseed_counter: usize,
+    reseed_counter: u64,
     _h: PhantomData<H>,
 }
 

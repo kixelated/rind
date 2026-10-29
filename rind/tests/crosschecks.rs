@@ -1,11 +1,10 @@
-use aws_lc_rs::{digest, hmac, rsa::KeyPair, signature::Ed25519KeyPair};
+use aws_lc_rs::rsa::KeyPair;
+use aws_lc_rs::{digest, hmac, signature::Ed25519KeyPair};
 use proptest::collection::vec;
 use proptest::prelude::*;
 use rind::hashing::{Hash, HashContext, LegacySha1, hmac::Hmac};
-use rind::signing::{
-    eddsa::Ed25519SigningKey,
-    rsa::{KeySize, SigningKey},
-};
+use rind::signing::eddsa::Ed25519SigningKey;
+use rind::signing::rsa::{KeySize, SigningKey};
 
 #[test]
 fn rsa_2048_key_generation() {
@@ -105,6 +104,7 @@ proptest! {
     }
 }
 
+#[cfg(not(target_arch = "arm"))]
 mod cipher {
     use aws_lc_rs::aead::{Aad, CHACHA20_POLY1305, LessSafeKey, Nonce, UnboundKey, quic};
     use aws_lc_rs::cipher::{AES_128, AES_256, EncryptingKey, EncryptionContext, UnboundCipherKey};

@@ -6,8 +6,9 @@ fn check_passes() {
     assert_eq!(rind::cpu::check(), Ok(()));
 }
 
-// `RIND_CPU_DISABLE_*` only takes effect with debug assertions.
-#[cfg(debug_assertions)]
+// `RIND_CPU_DISABLE_*` only takes effect with debug assertions, and the
+// portable armv7 backend requires no CPU features.
+#[cfg(all(debug_assertions, not(target_arch = "arm")))]
 #[test]
 fn missing_feature_is_named() {
     #[cfg(target_arch = "x86_64")]

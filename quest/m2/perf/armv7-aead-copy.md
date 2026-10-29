@@ -13,7 +13,3 @@ rind's in-place buffer once per call. Check whether libcrux exposes an
 in-place entry point, or accepts aliased buffers soundly. armv7 is a phone or
 small board publishing a few Mbps, so measure on real armv7 hardware before
 optimizing (see the [epic](/quest/m2/perf/README.md)).
-
-## Required
-
-- [libcrux backend](/quest/m1/moq/armv7/backend.md) - the armv7 backend that copies

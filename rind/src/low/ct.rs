@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 
 cfg_if::cfg_if! {
-    if #[cfg(all(test, feature = "__ctgrind"))] {
+    if #[cfg(feature = "__ctgrind")] {
         use crabgrind::{memcheck, valgrind};
         use core::mem::size_of_val;
 
