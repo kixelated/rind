@@ -6,7 +6,7 @@ repository = "https://github.com/kixelated/rind"
 license = "Apache-2.0 OR ISC OR MIT-0"
 description = "str0m CryptoProvider backed by rind"
 categories = ["network-programming", "cryptography"]
-rust-version = "1.89"
+rust-version.workspace = true
 readme = "README.md"
 # The str0m provider interface on dimpl 0.9, which `rind-dimpl` targets, is
 # unreleased. Publish once a str0m release carries it and these git
