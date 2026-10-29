@@ -71,5 +71,10 @@ RustCrypto dependency.
 - [rind-str0m on a str0m release](/quest/m1/moq/str0m.md) - publishable once it depends on that release
 - [instant-acme 0.9 is released](/quest/m1/moq/instant-acme-release.md) - waiting on the release with a pluggable `CryptoProvider`
 - [rind-instant-acme](/quest/m1/moq/instant-acme.md) - instant-acme 0.9's `CryptoProvider`
+- [Wipe HMAC's padded key](/quest/m1/moq/hmac-key-wipe.md) - `Hmac::new` zeroes its stack copy of the key
+- [AEADs refuse over-long messages](/quest/m1/moq/aead-length.md) - `encrypt` returns an error past the algorithm's limit
+- [One workspace MSRV](/quest/m1/moq/msrv.md) - every crate inherits the workspace's `rust-version`
+- [Fail fast without test vectors](/quest/m1/moq/ci-submodules.md) - `just ci` names the missing submodules up front
+- [Coverage detects x86_64](/quest/m1/moq/coverage-arch.md) - `admin/coverage` runs its x86_64 passes in CI
 - [Verification](/quest/m1/moq/verify.md) - Wycheproof, aws-lc-rs differential tests, adapter handshakes, and benchmarks on every backend
 - [Release](/quest/m1/moq/release.md) - publish the rind release MoQ switches to
