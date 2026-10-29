@@ -14,7 +14,8 @@ the key as bytes so it can be wiped, and rebuilds the HMAC key on each
 without giving it up.
 
 The obvious route is to keep the pre-keyed HMAC state (inner and outer hash
-states) and wipe it on drop. rind allows `unsafe` only in `low`, so the wipe
+states), which [Wipe HMAC and DRBG state](/quest/m1/moq/state-wipe.md) makes
+wipe itself on drop. rind allows `unsafe` only in `low`, so the wipe
 has to come from a safe zeroing of graviola's `Hmac` state, or from a
 `low` helper. A hand-written `Clone` on `Hmac` was the other cost noted in
 #13.

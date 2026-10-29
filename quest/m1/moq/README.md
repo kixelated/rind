@@ -77,5 +77,7 @@ RustCrypto dependency.
 - [Coverage detects x86_64](/quest/m1/moq/coverage-arch.md) - `admin/coverage` runs its x86_64 passes in CI
 - [ctgrind covers every secret](/quest/m1/moq/ctgrind-gaps.md) - ML-KEM, ECDSA nonces, and AES key setup run under ctgrind
 - [Run doctests under Cranelift](/quest/m1/moq/cranelift-doctest.md) - the rcgen example runs again
+- [AesGcm refuses a bad key length](/quest/m1/moq/aes-gcm-key.md) - `AesGcm::new` returns an error instead of panicking
+- [Wipe HMAC and DRBG state](/quest/m1/moq/state-wipe.md) - `Hmac` and `HmacDrbg` zero their keyed state on drop
 - [Verification](/quest/m1/moq/verify.md) - Wycheproof, aws-lc-rs differential tests, adapter handshakes, and benchmarks on every backend
 - [Release](/quest/m1/moq/release.md) - publish the rind release MoQ switches to
