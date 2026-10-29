@@ -27,7 +27,7 @@ armv7 ctgrind:
 Guidance:
 
 - Extend `admin/ctgrind` with the armv7 runner rather than a second script.
-- A finding inside libcrux is reported upstream, and rind works around it
-  only if the fix is in rind's own code.
+- A finding inside libcrux or fiat-crypto is reported upstream, and rind works
+  around it only if the fix is in rind's own code.
 - Once it is stable and runs on every PR, mark the CI job required on `main`;
   a nightly-only job stays optional, since it never runs on a PR's head.
