@@ -77,6 +77,8 @@ RustCrypto dependency.
 - [AEADs refuse over-long messages](/quest/m1/moq/aead-length.md) - `encrypt` returns an error past the algorithm's limit
 - [One workspace MSRV](/quest/m1/moq/msrv.md) - every crate inherits the workspace's `rust-version`
 - [Coverage detects x86_64](/quest/m1/moq/coverage-arch.md) - `admin/coverage` runs its x86_64 passes in CI
+- [Wipe hash scratch](/quest/m1/moq/hash-scratch-wipe.md) - SHA compress functions leave no copy of a hashed secret on the stack
+- [ctgrind on aarch64](/quest/m1/moq/aarch64-ctgrind.md) - the constant-time check runs on graviola's aarch64 backend
 - [ctgrind covers every secret](/quest/m1/moq/ctgrind-gaps.md) - ML-KEM, ECDSA nonces, and AES key setup run under ctgrind
 - [Run doctests under Cranelift](/quest/m1/moq/cranelift-doctest.md) - the rcgen example runs again
 - [Verification](/quest/m1/moq/verify.md) - Wycheproof, aws-lc-rs differential tests, adapter handshakes, and benchmarks on every backend
