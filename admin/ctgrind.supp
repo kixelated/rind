@@ -1,0 +1,16 @@
+# Memcheck findings in dependencies that rind cannot fix in its own code.
+
+# libcrux decides whether a tag verified, then branches on that decision. The
+# outcome is public, but libcrux does not declassify it for memcheck.
+{
+   libcrux-aes-gcm-decrypt-outcome
+   Memcheck:Cond
+   src:aes_gcm.rs:99
+   fun:*libcrux_aes*
+}
+{
+   libcrux-chacha20poly1305-decrypt-outcome
+   Memcheck:Cond
+   src:aead_chacha20poly1305.rs:606
+   fun:*libcrux_chacha20poly1305*
+}

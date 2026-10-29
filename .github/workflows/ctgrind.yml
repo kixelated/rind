@@ -41,9 +41,11 @@ jobs:
         run: admin/ctgrind ${{ matrix.build }}
 
   # The arm64 runner executes 32-bit ARM natively, so an armhf valgrind checks
-  # the armv7 build (libcrux and fiat-crypto) without emulation.
+  # the armv7 build (libcrux and fiat-crypto) without emulation. Nightly only:
+  # the debug build alone runs well over an hour.
   armv7:
     name: armv7 (${{ matrix.build || 'debug' }})
+    if: github.event_name == 'schedule'
     strategy:
       matrix:
         build: ["", --release]

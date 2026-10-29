@@ -3,10 +3,15 @@ set -e
 
 # Pass `--target armv7-unknown-linux-gnueabihf` on a host that executes
 # 32-bit ARM natively, such as an arm64 one, with an armhf valgrind.
+#
+# Release builds keep line tables so memcheck names inlined frames, which
+# the suppressions match.
+valgrind="valgrind --track-origins=yes --error-exitcode=99 --suppressions=$(dirname "$0")/ctgrind.supp"
 export VALGRIND_BUG_494162=1
-export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="valgrind --track-origins=yes --error-exitcode=99"
-export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUNNER="valgrind --track-origins=yes --error-exitcode=99"
-export CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_RUNNER="valgrind --track-origins=yes --error-exitcode=99"
+export CARGO_PROFILE_RELEASE_DEBUG=line-tables-only
+export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="$valgrind"
+export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUNNER="$valgrind"
+export CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_RUNNER="$valgrind"
 
 # rind's unit tests mark its secrets through the `__ctgrind` hooks. Wycheproof
 # runs without them, since its harness compares secret outputs directly.
