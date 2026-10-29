@@ -189,7 +189,6 @@ pub mod aead {
 /// Unauthenticated ciphers, for protocols that specify one alongside their own integrity protection.
 ///
 /// Prefer [`aead`] unless a protocol requires one of these.
-#[cfg(not(target_arch = "arm"))]
 pub mod cipher {
     pub use super::mid::aes::{Aes, AesCtr};
     pub use super::mid::chacha20::ChaCha20;
