@@ -19,6 +19,7 @@ pub(crate) fn zeroise_value<T: Zeroable>(v: &mut T) {
 pub(crate) trait Zeroable {}
 
 impl Zeroable for u8 {}
+impl Zeroable for u32 {}
 impl Zeroable for u64 {}
 impl Zeroable for usize {}
 
