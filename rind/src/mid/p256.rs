@@ -24,8 +24,8 @@ impl PublicKey {
     /// Create an P-256 [`PublicKey`] from a byte slice.
     ///
     /// This must be exactly 65 bytes in length, using the X9.62
-    /// uncompressed encoding.  An error is returned if the point is
-    /// not on the curve.
+    /// uncompressed encoding.  An error is returned if a coordinate
+    /// is not below the field prime, or the point is not on the curve.
     pub fn from_x962_uncompressed(bytes: &[u8]) -> Result<Self, Error> {
         let _entry = low::Entry::new_public();
         let point = AffineMontPoint::from_x962_uncompressed(bytes)?;
@@ -261,10 +261,17 @@ impl AffineMontPoint {
         let (_, xy) = bytes.split_at(1);
         let (x, y) = xy.split_at(FieldElement::BYTES);
 
-        let point = Self::from_xy(
-            FieldElement(util::big_endian_slice_to_u64x4(x).unwrap()).as_mont(),
-            FieldElement(util::big_endian_slice_to_u64x4(y).unwrap()).as_mont(),
-        );
+        let x = util::big_endian_slice_to_u64x4(x).unwrap();
+        let y = util::big_endian_slice_to_u64x4(y).unwrap();
+
+        // A coordinate at or above p would be reduced, giving the point a
+        // second encoding.  Public, so this need not be constant time.
+        let below_p = |v: &[u64; 4]| v.iter().rev().lt(CURVE_PRIME.iter().rev());
+        if !below_p(&x) || !below_p(&y) {
+            return Err(Error::NotOnCurve);
+        }
+
+        let point = Self::from_xy(FieldElement(x).as_mont(), FieldElement(y).as_mont());
 
         if !point.on_curve() {
             return Err(Error::NotOnCurve);
@@ -1088,6 +1095,13 @@ const CURVE_ONE_MONT: FieldElement = FieldElement([
     0xffff_ffff_ffff_ffff,
     0x0000_0000_ffff_fffe,
 ]);
+
+const CURVE_PRIME: [u64; 4] = [
+    0xffff_ffff_ffff_ffff,
+    0x0000_0000_ffff_ffff,
+    0x0000_0000_0000_0000,
+    0xffff_ffff_0000_0001,
+];
 
 const CURVE_ORDER: [u64; 4] = [
     0xf3b9_cac2_fc63_2551,
