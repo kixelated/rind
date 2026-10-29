@@ -268,7 +268,7 @@ impl AffineMontPoint {
         // second encoding.  Public, so this need not be constant time.
         let below_p = |v: &[u64; 4]| v.iter().rev().lt(CURVE_PRIME.iter().rev());
         if !below_p(&x) || !below_p(&y) {
-            return Err(Error::OutOfRange);
+            return Err(Error::NotOnCurve);
         }
 
         let point = Self::from_xy(FieldElement(x).as_mont(), FieldElement(y).as_mont());

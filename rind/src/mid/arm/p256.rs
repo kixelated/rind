@@ -36,16 +36,6 @@ impl PublicKey {
         }
 
         let xy: [u8; 64] = bytes[1..].try_into().map_err(|_| Error::WrongLength)?;
-
-        // HACL* refuses these too, but reports them as off the curve.
-        let below_p = |v: &[u8]| {
-            let v = util::big_endian_slice_to_u64x4(v).unwrap();
-            bignum256::lt_mask(&v, &CURVE_PRIME) == u64::MAX
-        };
-        if !below_p(&xy[..32]) || !below_p(&xy[32..]) {
-            return Err(Error::OutOfRange);
-        }
-
         match libcrux_p256::validate_public_key(&xy) {
             true => Ok(Self { xy }),
             false => Err(Error::NotOnCurve),
@@ -306,14 +296,6 @@ fn uncompressed(xy: &[u8; 64]) -> [u8; PublicKey::BYTES] {
     r[1..].copy_from_slice(xy);
     r
 }
-
-/// The field prime `p`, as little-endian words.
-const CURVE_PRIME: [u64; 4] = [
-    0xffff_ffff_ffff_ffff,
-    0x0000_0000_ffff_ffff,
-    0x0000_0000_0000_0000,
-    0xffff_ffff_0000_0001,
-];
 
 /// The curve order `n`, as little-endian words.
 const CURVE_ORDER: [u64; 4] = [

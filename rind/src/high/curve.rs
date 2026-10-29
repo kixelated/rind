@@ -429,13 +429,13 @@ mod tests {
             for (x, y) in small_x {
                 let (x, y) = (coordinate(x), coordinate(y));
                 decode(&x, &y).unwrap();
-                assert_eq!(decode(&plus_p(&x), &y), Err(Error::OutOfRange));
+                assert_eq!(decode(&plus_p(&x), &y), Err(Error::NotOnCurve));
             }
 
             let (x, y) = (coordinate(small_y.0), coordinate(small_y.1));
             decode(&x, &y).unwrap();
-            assert_eq!(decode(&x, &plus_p(&y)), Err(Error::OutOfRange));
-            assert_eq!(decode(&x, &p), Err(Error::OutOfRange));
+            assert_eq!(decode(&x, &plus_p(&y)), Err(Error::NotOnCurve));
+            assert_eq!(decode(&x, &p), Err(Error::NotOnCurve));
         }
 
         check::<P256>(
