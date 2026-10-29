@@ -28,7 +28,7 @@ Never rebase or force-push a pushed branch; merge the base branch in instead.
 Check that the PR is still open before pushing to its branch, since a push after merge recreates the deleted branch.
 
 Open a draft PR while working, without asking once the scope is settled.
-Run `just ci` before every push, and when the work is done, review it locally and mark the PR ready with `/quest-review`.
+Run `just ci` before every push, and mark the PR ready with `/quest-review` when the work is done.
 Keep it a draft only while its description lists a decision the maintainer still owns.
 Fix any merge conflicts and failing CI checks.
 
