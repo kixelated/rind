@@ -78,6 +78,5 @@ RustCrypto dependency.
 - [One workspace MSRV](/quest/m1/moq/msrv.md) - every crate inherits the workspace's `rust-version`
 - [Coverage detects x86_64](/quest/m1/moq/coverage-arch.md) - `admin/coverage` runs its x86_64 passes in CI
 - [ctgrind covers every secret](/quest/m1/moq/ctgrind-gaps.md) - ML-KEM, ECDSA nonces, and AES key setup run under ctgrind
-- [Run doctests under Cranelift](/quest/m1/moq/cranelift-doctest.md) - the rcgen example runs again
 - [Verification](/quest/m1/moq/verify.md) - Wycheproof, aws-lc-rs differential tests, adapter handshakes, and benchmarks on every backend
 - [Release](/quest/m1/moq/release.md) - publish the rind release MoQ switches to
