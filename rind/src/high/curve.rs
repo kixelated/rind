@@ -71,7 +71,8 @@ pub trait PublicKey<C: Curve + ?Sized> {
     /// `bytes` must be precisely `LEN_BYTES` in length.
     ///
     /// An error is returned for the wrong length, wrong indicator
-    /// byte, or if the resulting point is not on the curve.
+    /// byte, a coordinate not below the field prime, or if the
+    /// resulting point is not on the curve.
     fn from_x962_uncompressed(bytes: &[u8]) -> Result<Self, Error>
     where
         Self: Sized;
@@ -397,6 +398,82 @@ mod tests {
         }
 
         process_cavp("../thirdparty/cavp/ecdsa/PKV.rsp", &mut State::default());
+    }
+
+    #[test]
+    fn non_canonical_coordinates() {
+        // Each point is on the curve with a coordinate small enough that
+        // adding p still fits, so that encoding reduces to an on-curve point
+        // and only a range check refuses it.
+        fn check<C: Curve>(p: &str, small_x: &[(&str, &str)], small_y: (&str, &str)) {
+            let p = hex::decode(p).unwrap();
+            let coordinate = |hex: &str| {
+                let bytes = hex::decode(hex).unwrap();
+                [vec![0; p.len() - bytes.len()], bytes].concat()
+            };
+            let plus_p = |v: &[u8]| {
+                let mut sum = v.to_vec();
+                let mut carry = 0;
+                for (s, p) in sum.iter_mut().zip(&p).rev() {
+                    let t = *s as u16 + *p as u16 + carry;
+                    *s = t as u8;
+                    carry = t >> 8;
+                }
+                assert_eq!(carry, 0);
+                sum
+            };
+            let decode = |x: &[u8], y: &[u8]| {
+                C::PublicKey::from_x962_uncompressed(&[&[0x04], x, y].concat()).map(drop)
+            };
+
+            for (x, y) in small_x {
+                let (x, y) = (coordinate(x), coordinate(y));
+                decode(&x, &y).unwrap();
+                assert_eq!(decode(&plus_p(&x), &y), Err(Error::OutOfRange));
+            }
+
+            let (x, y) = (coordinate(small_y.0), coordinate(small_y.1));
+            decode(&x, &y).unwrap();
+            assert_eq!(decode(&x, &plus_p(&y)), Err(Error::OutOfRange));
+            assert_eq!(decode(&x, &p), Err(Error::OutOfRange));
+        }
+
+        check::<P256>(
+            "ffffffff00000001000000000000000000000000ffffffffffffffffffffffff",
+            &[
+                (
+                    "00",
+                    "66485c780e2f83d72433bd5d84a06bb6541c2af31dae871728bf856a174f93f4",
+                ),
+                (
+                    "05",
+                    "459243b9aa581806fe913bce99817ade11ca503c64d9a3c533415c083248fbcc",
+                ),
+            ],
+            (
+                "d7325d7646cd60d80a92738ceb345f844cffaf35841022cab176f692de8de1d7",
+                "05",
+            ),
+        );
+
+        #[cfg(not(target_arch = "arm"))]
+        check::<P384>(
+            "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffeffffffff0000000000000000ffffffff",
+            &[
+                (
+                    "00",
+                    "c306610fb0ae5a159cf45c06069f22a6c5eb3641c602d42dea2c4b4f75550793406d80d2b91ad54f9048bd487af1ade1",
+                ),
+                (
+                    "02",
+                    "8cdeadbbd04911a3c1931e26df3fa6439dca9c7eb286fbd46fc319f0e2bb780232baf57825fc0c1912ada2fefe84024c",
+                ),
+            ],
+            (
+                "2261b2bf605c22f2f3aef6338719b2c486388ad5240719a5257315969ef01ba27f0a104c89704773a81fdabee6ab5c78",
+                "01",
+            ),
+        );
     }
 
     #[test]
