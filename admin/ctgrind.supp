@@ -8,9 +8,13 @@
    src:aes_gcm.rs:99
    fun:*libcrux_aes*
 }
+
+# Unoptimised, libcrux's P-256 Diffie-Hellman branches on its check that the
+# private scalar is in range. rind's scalars always are, so the outcome is
+# public, but libcrux does not declassify it for memcheck.
 {
-   libcrux-chacha20poly1305-decrypt-outcome
+   libcrux-p256-dh-scalar-check
    Memcheck:Cond
-   src:aead_chacha20poly1305.rs:606
-   fun:*libcrux_chacha20poly1305*
+   src:p256.rs:1571
+   fun:*ecp256dh_r*
 }

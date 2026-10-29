@@ -3,8 +3,8 @@
 //
 // ChaCha20, from HACL*'s verified `Hacl_Chacha20` as libcrux-chacha20poly1305
 // 0.0.10 ships it (`src/hacl/chacha20.rs`): the state setup and block function,
-// less the module paths. armv7's ChaCha20-Poly1305 runs the same code inside
-// libcrux, which does not export it.
+// less the module paths, since libcrux does not export them. HChaCha20, for
+// XChaCha20, runs the same rounds as draft-irtf-cfrg-xchacha-03 specifies.
 
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
@@ -161,4 +161,41 @@ impl Drop for ChaCha20 {
     fn drop(&mut self) {
         zeroise(&mut self.ctx);
     }
+}
+
+pub(crate) struct XChaCha20(ChaCha20);
+
+impl XChaCha20 {
+    pub(crate) fn new(key: &[u8; 32], nonce: &[u8; 24]) -> Self {
+        let mut subkey = hchacha20(key, nonce);
+        let mut chacha_nonce = [0u8; 16];
+        chacha_nonce[8..].copy_from_slice(&nonce[16..]);
+        let chacha = ChaCha20::new(&subkey, &chacha_nonce);
+        zeroise(&mut subkey);
+        Self(chacha)
+    }
+
+    pub(crate) fn cipher(&mut self, buffer: &mut [u8]) {
+        self.0.cipher(buffer)
+    }
+}
+
+/// HChaCha20 of `key` and the first 16 bytes of `nonce`: the ChaCha20 rounds
+/// without the final addition, keeping words 0-3 and 12-15.
+fn hchacha20(key: &[u8; 32], nonce: &[u8; 24]) -> [u8; 32] {
+    let mut st = [0u32; 16];
+    let counter = u32::from_le_bytes([nonce[0], nonce[1], nonce[2], nonce[3]]);
+    chacha20_init(&mut st, key, &nonce[4..16], counter);
+    rounds(&mut st);
+    let mut out = [0u8; 32];
+    for (o, w) in out
+        .as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .zip(st[..4].iter().chain(&st[12..]))
+    {
+        *o = w.to_le_bytes();
+    }
+    zeroise(&mut st);
+    out
 }

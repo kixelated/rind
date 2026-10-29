@@ -235,6 +235,7 @@ cfg_if::cfg_if! {
         pub(crate) use arm::aes::AesKey;
         pub(crate) use arm::aes_ctr;
         pub(crate) use arm::chacha20;
+        pub(crate) use arm::poly1305;
         pub(crate) use arm::bignum_eq::bignum_eq;
         pub(crate) use arm::curve25519::{curve25519_x25519, curve25519_x25519base};
         pub(crate) use arm::posint::{PosInt, SecretPosInt};
