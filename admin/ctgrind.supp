@@ -16,5 +16,5 @@
    libcrux-p256-dh-scalar-check
    Memcheck:Cond
    src:p256.rs:1571
-   fun:*ecp256dh_r*
+   fun:*libcrux_p256*
 }
