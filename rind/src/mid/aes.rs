@@ -107,11 +107,18 @@ pub(super) fn check_gcm_lengths(aad: usize, msg: usize) -> Result<(), Error> {
 }
 
 fn expand_key(key: &[u8]) -> Result<AesKey, Error> {
-    low::ct::secret_slice(key);
-    match key.len() {
-        16 | 32 => Ok(AesKey::new(key)),
-        _ => Err(Error::WrongLength),
+    if !matches!(key.len(), 16 | 32) {
+        return Err(Error::WrongLength);
     }
+
+    // Mark a copy: the caller's buffer may be shared, or a promoted constant.
+    let mut copy = [0u8; 32];
+    let copy_key = &mut copy[..key.len()];
+    copy_key.copy_from_slice(key);
+    low::ct::secret_slice(copy_key);
+    let expanded = AesKey::new(copy_key);
+    zeroise(&mut copy);
+    Ok(expanded)
 }
 
 #[cfg(test)]

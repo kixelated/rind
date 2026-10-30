@@ -90,8 +90,8 @@ impl DecapKey {
     pub fn keygen_internal(seed: &[u8; 64]) -> Self {
         // Preliminaries: split seed into d and z.
         let (d, z) = seed.split_at(32);
-        let d = d.try_into().unwrap();
-        let z = z.try_into().unwrap();
+        let d = low::ct::into_secret(d.try_into().unwrap());
+        let z = low::ct::into_secret(z.try_into().unwrap());
 
         // 1. (ekPKE, dkPKE) <- K-PKE.KeyGen(d)
         // 2. ek <- ekPKE
@@ -148,7 +148,8 @@ impl DecapKey {
         g.update(&[K_BYTE]);
         let g = g.finish();
         let (rho, sigma) = g.split_at(32);
-        let rho: [u8; 32] = rho.try_into().unwrap();
+        // rho seeds the public matrix, so it is public.
+        let rho: [u8; 32] = low::ct::into_public(rho.try_into().unwrap());
         let sigma = sigma.try_into().unwrap();
 
         // 3. - 7.
@@ -167,7 +168,7 @@ impl DecapKey {
         let t_hat = a_hat.mul_add(&s_hat, &e_hat);
 
         let encap = EncapKey {
-            t_hat: t_hat.to_bytes(),
+            t_hat: low::ct::into_public(t_hat.to_bytes()),
             rho,
             transpose_a_hat: a_hat.transpose(),
         };
@@ -263,6 +264,8 @@ impl EncapKey {
 
     #[doc(hidden)]
     pub fn encaps_internal(self, m: Message) -> (SharedSecret, Ciphertext) {
+        low::ct::secret_slice(&m.0);
+
         // 1. (K, r) <- G(m || H(ek))
         let mut h = sha3::Sha3_256Context::new();
         h.update(&self.t_hat);
@@ -279,7 +282,7 @@ impl EncapKey {
 
         // 2. c <- K-PKE.Encrypt(ek, m, r)
         let c = self.kpke_encrypt(m, r);
-        (SharedSecret(k), c)
+        (SharedSecret(k), Ciphertext(low::ct::into_public(c.0)))
     }
 
     fn kpke_encrypt(&self, m: Message, r: KpkeRandomness) -> Ciphertext {
@@ -393,6 +396,11 @@ impl Domain for Ntt {}
 struct MulCache;
 impl Domain for MulCache {}
 
+/// Polynomial coefficients.
+///
+/// Arithmetic on coefficients, here and in the compression and sampling
+/// helpers, wraps: their bounds rule out overflow, and a debug build's
+/// overflow check would branch on secret values.
 #[derive(Clone, Debug)]
 #[repr(align(32))]
 struct Coeffs<const C: usize, D: Domain>([i16; C], PhantomData<D>);
@@ -446,7 +454,7 @@ impl Coeffs<{ K * K * N }, Ntt> {
             low::mlkem_tomont(&mut term.0);
 
             for (r, t) in rr.iter_mut().zip(term.0) {
-                *r += t;
+                *r = r.wrapping_add(t);
             }
         }
 
@@ -489,7 +497,7 @@ impl Coeffs<{ K * K * N }, Ntt> {
             low::mlkem_basemul_k3(&mut term.0, aa, &y.0, &y_precomp.0);
 
             for (r, t) in rr.iter_mut().zip(term.0) {
-                *r += t;
+                *r = r.wrapping_add(t);
             }
         }
 
@@ -568,11 +576,11 @@ impl<const C: usize> Coeffs<C, Ntt> {
 /// Division-free so no variable-time division instruction is emitted
 /// (cf. KyberSlash); the constant is exact over the whole input range.
 fn compress_4(x: i16) -> u8 {
-    debug_assert!((0..Q).contains(&x));
+    debug_assert!((0..Q).contains(&low::ct::into_public(x)));
     let c = x as u64;
     let c = c << 4;
-    let c = c + Q_HALF as u64;
-    let c = c * 80635;
+    let c = c.wrapping_add(Q_HALF as u64);
+    let c = c.wrapping_mul(80635);
     let c = c >> 28;
     let c = c & 0xf;
     c as u8
@@ -590,11 +598,11 @@ fn decompress_4(y: u16) -> i16 {
 
 /// `Compress_10(x) = round((2^10 / q) * x) mod 2^10`, for x in [0, Q)
 fn compress_10(x: i16) -> u16 {
-    debug_assert!((0..Q).contains(&x));
+    debug_assert!((0..Q).contains(&low::ct::into_public(x)));
     let c = x as u64;
     let c = c << 10;
-    let c = c + Q_HALF as u64;
-    let c = c * 1290167;
+    let c = c.wrapping_add(Q_HALF as u64);
+    let c = c.wrapping_mul(1290167);
     let c = c >> 32;
     let c = c & 0x3ff;
     c as u16
@@ -615,10 +623,10 @@ fn compress_1_x8(coeffs: &[i16; 8]) -> u8 {
     let mut r = 0;
 
     for (i, x) in coeffs.iter().enumerate() {
-        debug_assert!((0..Q).contains(x));
+        debug_assert!((0..Q).contains(&low::ct::into_public(*x)));
         let x = (*x as u64) << 1;
-        let x = x + Q_HALF as u64;
-        let x = x * 80635;
+        let x = x.wrapping_add(Q_HALF as u64);
+        let x = x.wrapping_mul(80635);
         let x = x >> 28;
         r |= ((x & 1) as u8) << i;
     }
@@ -785,7 +793,7 @@ impl<const C: usize> Coeffs<C, Normal> {
     /// Simple addition
     fn add(mut self, term: &Self) -> Self {
         for (ss, tt) in self.0.iter_mut().zip(term.0.iter()) {
-            *ss += *tt;
+            *ss = ss.wrapping_add(*tt);
         }
         self.reduce_in_place();
         self
@@ -794,7 +802,7 @@ impl<const C: usize> Coeffs<C, Normal> {
     /// Simple subtraction
     fn sub(mut self, term: &Self) -> Self {
         for (ss, tt) in self.0.iter_mut().zip(term.0.iter()) {
-            *ss -= *tt;
+            *ss = ss.wrapping_sub(*tt);
         }
         self.reduce_in_place();
         self
@@ -806,12 +814,12 @@ fn sample_cbd2(buf: &[u8; 128], out: &mut [i16; 256]) {
     let (out_chunks, _) = out.as_chunks_mut::<8>();
     for (in_bytes, out_coeffs) in buf_chunks.iter().zip(out_chunks.iter_mut()) {
         let t = u32::from_le_bytes(*in_bytes);
-        let d = (t & 0x5555_5555) + ((t >> 1) & 0x5555_5555);
+        let d = (t & 0x5555_5555).wrapping_add((t >> 1) & 0x5555_5555);
 
         for (j, coeff) in out_coeffs.iter_mut().enumerate() {
             let a = ((d >> (4 * j)) & 0x3) as i16;
             let b = ((d >> (4 * j + 2)) & 0x3) as i16;
-            *coeff = a - b;
+            *coeff = a.wrapping_sub(b);
         }
     }
 }
@@ -839,7 +847,7 @@ mod tests {
         let d = DecapKey::generate().unwrap();
         let (ess, ct) = d.encapsulation_key().encaps().unwrap();
         let dss = d.decaps(&ct);
-        assert_eq!(ess.0, dss.0);
+        assert_eq!(low::ct::into_public(ess.0), low::ct::into_public(dss.0));
     }
 
     #[test]

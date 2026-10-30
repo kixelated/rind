@@ -132,7 +132,10 @@ impl PrivateKey {
         for _ in 0..64 {
             let mut r = [0u8; Scalar::BYTES];
             rng.fill(&mut r)?;
-            if let Ok(p) = Self::from_bytes(&r) {
+            low::ct::secret_slice(&r);
+            let key = Self::from_bytes(&r);
+            low::zeroise(&mut r);
+            if let Ok(p) = key {
                 return Ok(p);
             }
         }
@@ -182,7 +185,12 @@ impl StaticPrivateKey {
     /// Return a fixed-length encoding of this private key's value.
     pub fn as_bytes(&self) -> [u8; Scalar::BYTES] {
         let _entry = low::Entry::new_secret();
-        low::ct::into_public(self.0.scalar.as_bytes())
+        low::ct::into_public(self.secret_bytes())
+    }
+
+    /// Return [`Self::as_bytes`] without declassifying it, for use inside rind.
+    pub(crate) fn secret_bytes(&self) -> [u8; Scalar::BYTES] {
+        self.0.scalar.as_bytes()
     }
 
     /// Derive the corresponding public key, and return it in
@@ -703,10 +711,11 @@ impl Scalar {
     fn into_range_check(self) -> Result<Self, Error> {
         let reduced = self.reduce_mod_n();
 
-        if !reduced.private_eq(&self) || self.is_zero() {
-            Err(Error::OutOfRange)
-        } else {
-            Ok(self)
+        // Whether a scalar is in range is public: a key or signature is refused
+        // on it, and a rejected nonce candidate says nothing of the one accepted.
+        match low::ct::into_public(reduced.private_eq(&self) & !self.is_zero()) {
+            true => Ok(self),
+            false => Err(Error::OutOfRange),
         }
     }
 
