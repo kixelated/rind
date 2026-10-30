@@ -42,16 +42,14 @@ impl XChaCha20Poly1305 {
         // block 0 keys Poly1305
         check_counter(1, cipher_inout.len())?;
         // libcrux writes the ciphertext and tag to one separate buffer.
-        let mut plain = cipher_inout.to_vec();
+        let plain = cipher_inout.to_vec();
         let mut sealed = vec![0u8; plain.len() + 16];
-        let result = xchacha20_poly1305::encrypt(&self.key, &plain, &mut sealed, aad, nonce).map(
-            |(cipher, tag)| {
+        xchacha20_poly1305::encrypt(&self.key, &plain, &mut sealed, aad, nonce)
+            .map(|(cipher, tag)| {
                 cipher_inout.copy_from_slice(cipher);
                 tag_out.copy_from_slice(tag);
-            },
-        );
-        zeroise(&mut plain);
-        result.map_err(|_| Error::WrongLength)
+            })
+            .map_err(|_| Error::WrongLength)
     }
 
     /// Decrypts and verifies the given message.

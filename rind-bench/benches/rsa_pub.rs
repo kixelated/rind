@@ -54,5 +54,59 @@ fn rsa2048_pkcs1_sha256_verify(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, rsa2048_pkcs1_sha256_verify);
+fn rsa2048_pss_sha256_verify(c: &mut Criterion) {
+    // Signed here, since PSS signatures are randomized.
+    let private_key = rind::signing::rsa::SigningKey::from_pkcs1_der(include_bytes!(
+        "../../rind/src/high/rsa/rsa2048.der"
+    ))
+    .unwrap();
+    let mut public_key = [0u8; 512];
+    let public_key = private_key
+        .public_key()
+        .to_pkcs1_der(&mut public_key)
+        .unwrap();
+    let message =
+        b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
+    let mut signature = [0u8; 256];
+    let signature = private_key
+        .sign_pss_sha256(&mut signature, message)
+        .unwrap();
+
+    let mut group = c.benchmark_group("rsa2048-pss-sha256-verify");
+    group.throughput(Throughput::Elements(1));
+
+    group.bench_function("ring", |b| {
+        use ring::signature;
+        let peer_public_key =
+            signature::UnparsedPublicKey::new(&signature::RSA_PSS_2048_8192_SHA256, public_key);
+
+        b.iter(|| {
+            black_box(peer_public_key.verify(message, signature)).unwrap();
+        })
+    });
+
+    group.bench_function("aws-lc-rs", |b| {
+        use aws_lc_rs::signature;
+        let peer_public_key =
+            signature::UnparsedPublicKey::new(&signature::RSA_PSS_2048_8192_SHA256, public_key);
+
+        b.iter(|| {
+            black_box(peer_public_key.verify(message, signature)).unwrap();
+        })
+    });
+
+    group.bench_function("rind", |b| {
+        let peer_public_key = rind::signing::rsa::VerifyingKey::from_pkcs1_der(public_key).unwrap();
+
+        b.iter(|| {
+            black_box(peer_public_key.verify_pss_sha256(signature, message)).unwrap();
+        })
+    });
+}
+
+criterion_group!(
+    benches,
+    rsa2048_pkcs1_sha256_verify,
+    rsa2048_pss_sha256_verify
+);
 criterion_main!(benches);

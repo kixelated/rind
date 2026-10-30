@@ -15,8 +15,6 @@
 use libcrux_hacl_rs::prelude::*;
 use libcrux_macros as krml;
 
-use crate::low::zeroise;
-
 pub(crate) const chacha20_constants: [u32; 4] =
     [0x61707865u32, 0x3320646eu32, 0x79622d32u32, 0x6b206574u32];
 
@@ -153,12 +151,5 @@ impl ChaCha20 {
             }
             self.ctx[12] = self.ctx[12].wrapping_add(1);
         }
-        zeroise(&mut keystream);
-    }
-}
-
-impl Drop for ChaCha20 {
-    fn drop(&mut self) {
-        zeroise(&mut self.ctx);
     }
 }

@@ -10,10 +10,19 @@ use crate::Error;
 use crate::low::zeroise;
 
 /// An in-progress HMAC computation, using hash function `H`.
-#[derive(Clone)]
 pub struct Hmac<H: Hash> {
     inner: H::Context,
     outer: H::Context,
+}
+
+// Not derived: that would also require `H: Clone`, which HKDF's generic `Prk<H>` cannot assume.
+impl<H: Hash> Clone for Hmac<H> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            outer: self.outer.clone(),
+        }
+    }
 }
 
 impl<H: Hash> Hmac<H> {
@@ -24,9 +33,8 @@ impl<H: Hash> Hmac<H> {
         let key = key.as_ref();
         // shorten long keys
         if key.len() > key_block.len() {
-            let mut h_key = H::hash(key);
+            let h_key = H::hash(key);
             key_block[..h_key.as_ref().len()].copy_from_slice(h_key.as_ref());
-            zeroise(h_key.as_mut());
         } else {
             key_block[..key.len()].copy_from_slice(key);
         }

@@ -31,6 +31,9 @@ struct TestGroup {
     #[serde(default, rename(deserialize = "publicKeyDer"), with = "hex::serde")]
     public_key_der: Vec<u8>,
 
+    #[serde(default, rename(deserialize = "privateKeyPkcs8"), with = "hex::serde")]
+    private_key_pkcs8: Vec<u8>,
+
     #[serde(default)]
     sha: String,
 
@@ -701,6 +704,52 @@ fn test_rsa_pkcs1_verify() {
                     ) => {}
                     _ => panic!("expected {:?} got {:?}", test.result, result.err()),
                 }
+            }
+        }
+    }
+}
+
+#[test]
+fn test_rsa_pkcs1_sign() {
+    // The 1024- and 1536-bit files hold only keys below our 2048-bit minimum.
+    for file in &[
+        "rsa_pkcs1_2048_sig_gen_test.json",
+        "rsa_pkcs1_3072_sig_gen_test.json",
+        "rsa_pkcs1_4096_sig_gen_test.json",
+    ] {
+        let data_file = File::open(format!("../thirdparty/wycheproof/testvectors_v1/{file}"))
+            .expect("failed to open data file");
+        println!("file: {data_file:?}");
+
+        let reader = BufReader::new(data_file);
+        let tests: TestFile = serde_json::from_reader(reader).expect("invalid test JSON");
+        let mut summary = Summary::new();
+
+        for group in tests.groups {
+            summary.group(&group);
+
+            if !matches!(group.sha.as_ref(), "SHA-256" | "SHA-384" | "SHA-512") {
+                summary.skipped(&format!("pkcs1 signing with {} not supported", group.sha));
+                continue;
+            }
+
+            let key = rsa::SigningKey::from_pkcs8_der(&group.private_key_pkcs8).unwrap();
+
+            for test in group.tests {
+                summary.start(&test);
+
+                let mut signature = [0u8; 512];
+                let signature = match group.sha.as_ref() {
+                    "SHA-256" => key.sign_pkcs1_sha256(&mut signature, &test.msg),
+                    "SHA-384" => key.sign_pkcs1_sha384(&mut signature, &test.msg),
+                    "SHA-512" => key.sign_pkcs1_sha512(&mut signature, &test.msg),
+                    other => panic!("unhandled sha {other:?}"),
+                }
+                .unwrap();
+
+                // Every case is valid or acceptable (a small public exponent),
+                // and PKCS#1 v1.5 signing is deterministic.
+                assert_eq!(signature, &test.sig[..]);
             }
         }
     }

@@ -28,8 +28,8 @@ pub(crate) struct RsaPrivateKey {
 
 impl RsaPrivateKey {
     pub(crate) fn new(
-        p: RsaPosIntModP,
-        q: RsaPosIntModP,
+        mut p: RsaPosIntModP,
+        mut q: RsaPosIntModP,
         d: RsaPosIntD,
         dp: RsaPosIntModP,
         dq: RsaPosIntModP,
@@ -43,6 +43,15 @@ impl RsaPrivateKey {
             || !(MIN_PRIVATE_MODULUS_BYTES..=MAX_PRIVATE_MODULUS_BYTES).contains(&p_len)
         {
             return Err(Error::OutOfRange);
+        }
+
+        // The CRT reduces `c` mod each prime by Montgomery reduction, which
+        // needs `c` below 2^(64w) times the prime for a w-word prime. Working
+        // at the wider prime's width meets that for unbalanced primes too.
+        if p.len_bytes() < q.len_bytes() {
+            p.expand(&q);
+        } else {
+            q.expand(&p);
         }
 
         let public = RsaPublicKey::new(n, e)?;
@@ -89,6 +98,10 @@ impl RsaPrivateKey {
 
     pub(crate) fn modulus_len_bytes(&self) -> usize {
         self.public.modulus_len_bytes()
+    }
+
+    pub(crate) fn modulus_len_bits(&self) -> usize {
+        self.public.modulus_len_bits()
     }
 
     pub(crate) fn encode_components<'a>(
