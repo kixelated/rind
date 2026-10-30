@@ -146,7 +146,7 @@ impl VerifyingKey {
         let m = self.0.public_op(c).map_err(|_| Error::BadSignature)?;
 
         let mut m_bytes = [0u8; rsa_pub::MAX_PUBLIC_MODULUS_BYTES];
-        let m_bytes = m.to_bytes(&mut m_bytes)?;
+        let m_bytes = i2osp(&m, &mut m_bytes[..self.0.modulus_len_bytes()])?;
 
         let mut actual_m = [0u8; rsa_pub::MAX_PUBLIC_MODULUS_BYTES];
         let actual_m = &mut actual_m[..self.0.modulus_len_bytes()];
@@ -221,10 +221,14 @@ impl VerifyingKey {
         let c = PosInt::from_bytes(signature).map_err(|_| Error::BadSignature)?;
         let m = self.0.public_op(c).map_err(|_| Error::BadSignature)?;
 
-        let mut m_bytes = [0u8; rsa_pub::MAX_PUBLIC_MODULUS_BYTES];
-        let m_bytes_len = m.to_bytes(&mut m_bytes)?.len();
+        // RFC 8017 section 8.1.2: EM is only `ceil(emBits / 8)` octets, one
+        // fewer than the modulus when its bit length is one more than a
+        // multiple of eight, and `m` must fit them.
+        let em_bits = self.0.modulus_len_bits() - 1;
+        let mut em = [0u8; rsa_pub::MAX_PUBLIC_MODULUS_BYTES];
+        let em = i2osp(&m, &mut em[..em_bits.div_ceil(8)]).map_err(|_| Error::BadSignature)?;
 
-        pkcs1::verify_pss_sig::<H>(&mut m_bytes[..m_bytes_len], hash.as_ref())
+        pkcs1::verify_pss_sig::<H>(em, em_bits, hash.as_ref())
     }
 }
 
@@ -539,35 +543,46 @@ impl SigningKey {
 
         let hash = H::hash(message);
 
-        let mut m = [0u8; rsa_pub::MAX_PUBLIC_MODULUS_BYTES];
-        let m = &mut m[..self.0.modulus_len_bytes()];
+        // RFC 8017 section 8.1.1: EM is only `ceil(emBits / 8)` octets, one
+        // fewer than the modulus when its bit length is one more than a
+        // multiple of eight.
+        let em_bits = self.0.modulus_len_bits() - 1;
+        let mut em = [0u8; rsa_pub::MAX_PUBLIC_MODULUS_BYTES];
+        let em = &mut em[..em_bits.div_ceil(8)];
 
-        pkcs1::encode_pss_sig::<H>(m, &mut SystemRandom, hash.as_ref())?;
-        let m = PosInt::from_bytes(m)?;
+        pkcs1::encode_pss_sig::<H>(em, em_bits, &mut SystemRandom, hash.as_ref())?;
+        let m = PosInt::from_bytes(em)?;
         let c = self.0.private_op(&m).map_err(|_| Error::BadSignature)?;
         self.to_signature(&c, signature)
     }
 
-    /// Writes `c` to the front of `signature` in exactly the modulus length,
-    /// as PKCS#1's I2OSP requires, however many of its leading bytes are zero.
+    /// Writes `c` to the front of `signature` in exactly the modulus length.
     fn to_signature<'a, const N: usize>(
         &self,
         c: &PosInt<N>,
         signature: &'a mut [u8],
     ) -> Result<&'a [u8], Error> {
-        let mut bytes = [0u8; rsa_pub::MAX_PUBLIC_MODULUS_BYTES];
-        let bytes = c.to_bytes(&mut bytes)?;
-        // `c` is below the modulus, so any bytes beyond its length are zero.
-        let bytes = &bytes[bytes.len().saturating_sub(self.0.modulus_len_bytes())..];
-
         let signature = signature
             .get_mut(..self.0.modulus_len_bytes())
             .ok_or(Error::OutOfRange)?;
-        let (zeroes, value) = signature.split_at_mut(signature.len() - bytes.len());
-        zeroes.fill(0);
-        value.copy_from_slice(bytes);
-        Ok(signature)
+        Ok(i2osp(c, signature)?)
     }
+}
+
+/// This is I2OSP: writes `x` to all of `out`, big-endian, however many of its
+/// leading bytes are zero, and refuses an `x` that does not fit.
+fn i2osp<'a, const N: usize>(x: &PosInt<N>, out: &'a mut [u8]) -> Result<&'a mut [u8], Error> {
+    let mut bytes = [0u8; rsa_pub::MAX_PUBLIC_MODULUS_BYTES];
+    let bytes = x.to_bytes(&mut bytes)?;
+    let (excess, bytes) = bytes.split_at(bytes.len().saturating_sub(out.len()));
+    if excess.iter().any(|b| *b != 0) {
+        return Err(Error::OutOfRange);
+    }
+
+    let (zeroes, value) = out.split_at_mut(out.len() - bytes.len());
+    zeroes.fill(0);
+    value.copy_from_slice(bytes);
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -684,6 +699,24 @@ mod tests {
         check_all_algs(&mut [0u8; 1024], &private_key, &private_key.public_key());
     }
 
+    /// Moduli that are not a whole number of words: 2049 bits makes PSS's
+    /// encoded message a byte shorter than the modulus, 2050 bits masks seven
+    /// of its top bits, and 2056 bits is a whole number of bytes.
+    const ODD_SIZE_KEYS: [&[u8]; 3] = [
+        include_bytes!("rsa/rsa2049.pkcs8.der"),
+        include_bytes!("rsa/rsa2050.pkcs8.der"),
+        include_bytes!("rsa/rsa2056.pkcs8.der"),
+    ];
+
+    #[test]
+    fn pairwise_odd_size_sign_verify() {
+        for der in ODD_SIZE_KEYS {
+            let private_key = SigningKey::from_pkcs8_der(der).unwrap();
+
+            check_all_algs(&mut [0u8; 257], &private_key, &private_key.public_key());
+        }
+    }
+
     #[test]
     fn pairwise_key_formatting() {
         check_pkcs1(include_bytes!("rsa/rsa2048.der"));
@@ -697,6 +730,9 @@ mod tests {
         check_pkcs8(include_bytes!("rsa/rsa4096.pkcs8.der"));
         check_pkcs8(include_bytes!("rsa/rsa6144.pkcs8.der"));
         check_pkcs8(include_bytes!("rsa/rsa8192.pkcs8.der"));
+        for der in ODD_SIZE_KEYS {
+            check_pkcs8(der);
+        }
     }
 
     fn check_pkcs1(pkcs1_der: &[u8]) {

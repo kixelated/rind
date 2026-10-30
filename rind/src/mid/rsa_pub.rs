@@ -16,9 +16,8 @@ pub(crate) struct RsaPublicKey {
 
 impl RsaPublicKey {
     pub(crate) fn new(n: RsaPosInt, e: u32) -> Result<Self, Error> {
-        let n_len = n.len_bytes();
         if n.is_even()
-            || !(MIN_PUBLIC_MODULUS_BYTES..=MAX_PUBLIC_MODULUS_BYTES).contains(&n_len)
+            || !(MIN_PUBLIC_MODULUS_BITS..=MAX_PUBLIC_MODULUS_BITS).contains(&n.len_bits())
             || e == 0
         {
             return Err(Error::OutOfRange);
@@ -44,6 +43,10 @@ impl RsaPublicKey {
 
     pub(crate) fn modulus_len_bytes(&self) -> usize {
         self.n.len_bytes()
+    }
+
+    pub(crate) fn modulus_len_bits(&self) -> usize {
+        self.n.len_bits()
     }
 
     /// m = c ** e mod n
@@ -87,7 +90,6 @@ const MAX_PUBLIC_MODULUS_WORDS: usize = MAX_PUBLIC_MODULUS_BITS / 64;
 pub(crate) const MAX_PUBLIC_MODULUS_BYTES: usize = MAX_PUBLIC_MODULUS_BITS / 8;
 
 const MIN_PUBLIC_MODULUS_BITS: usize = 2048;
-const MIN_PUBLIC_MODULUS_BYTES: usize = MIN_PUBLIC_MODULUS_BITS / 8;
 
 type RsaPosInt = low::PosInt<MAX_PUBLIC_MODULUS_WORDS>;
 
