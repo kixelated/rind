@@ -10,13 +10,14 @@ Check the advisory's state and patched versions with
 the crate's versions on crates.io. It was in triage on 2026-10-29.
 
 Once that release exists, bump rind's libcrux crates to it, drop the bignum
-entry from `admin/ctgrind.supp` if it has one, confirm armv7 ctgrind passes
-in debug and release, and delete this quest.
+entries from `admin/ctgrind.supp`, confirm armv7 ctgrind passes in debug and
+release, and delete this quest.
 
 ## Plan
 
-Settled (maintainer, 2026-10-29): this quest only bumps libcrux for the
-bignum fix and drops that suppression. armv7's ChaCha20-Poly1305 and
-XChaCha20-Poly1305 keep the shared composition over rind's ChaCha20,
-HACL*'s Poly1305, and rind's `ct_equal`, and do not go back to libcrux's
-AEAD, so libcrux's ChaCha report needs nothing here.
+Settled (maintainer, 2026-10-30): armv7 ctgrind landed without waiting on
+libcrux, with this finding suppressed. Settled (2026-10-29): this quest only
+bumps libcrux for the bignum fix and drops that suppression. armv7's
+ChaCha20-Poly1305 and XChaCha20-Poly1305 keep the shared composition over
+rind's ChaCha20, HACL*'s Poly1305, and rind's `ct_equal`, and do not go back
+to libcrux's AEAD, so libcrux's ChaCha report needs nothing here.

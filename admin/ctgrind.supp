@@ -18,3 +18,16 @@
    src:p256.rs:1571
    fun:*libcrux_p256*
 }
+
+# libcrux-hacl-rs bignum constant-time finding, reported privately; drop once
+# fixed (quest/m1/moq/libcrux-ct-fixes.md).
+{
+   libcrux-hacl-rs-bignum-modexp
+   Memcheck:Value4
+   fun:*bn_mod_exp_consttime_precomp_u64*
+}
+{
+   libcrux-hacl-rs-bignum-reduction
+   Memcheck:Cond
+   fun:*bn_almost_mont_reduction_u64*
+}
