@@ -13,8 +13,8 @@ Settled with the maintainer (2026-10-28), after
 [kixelated/rind#8](https://github.com/kixelated/rind/pull/8) merged without
 armv7 ctgrind:
 
-- Run under emulation now; armv7 hardware is only needed for timing, which is
-  [armv7 benchmark host](/quest/m2/perf/armv7-host.md). Memcheck's
+- Run under emulation now; armv7 hardware is only needed for timing, which
+  the `bench` workflow's `armv7` job covers. Memcheck's
   definedness tracking follows the instructions executed, not their speed, so
   emulated results are real.
 - valgrind cannot run inside qemu's user mode, which the armv7 tests use.

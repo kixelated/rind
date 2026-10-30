@@ -26,16 +26,17 @@ pub enum Error {
     /// Presented AEAD tag/aad/ciphertext/nonce was wrong
     DecryptFailed,
 
-    /// An ASN.1 encoding/decoding error.
-    Asn1Error(crate::high::asn1::Error),
-
-    /// A key formatting/validation error.
-    KeyFormatError(KeyFormatError),
+    /// A key encoding was malformed or did not match the expected algorithm.
+    KeyRejected(KeyRejected),
 }
 
-#[non_exhaustive]
+/// Why a key encoding was rejected, which its `Display` describes.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum KeyFormatError {
+pub struct KeyRejected(KeyFormatError);
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum KeyFormatError {
+    Asn1(crate::high::asn1::Error),
     UnsupportedPkcs8Version,
     MismatchedPkcs8Algorithm,
     MismatchedPkcs8Parameters,
@@ -47,20 +48,23 @@ pub enum KeyFormatError {
 
 impl From<KeyFormatError> for Error {
     fn from(kfe: KeyFormatError) -> Self {
-        Self::KeyFormatError(kfe)
+        Self::KeyRejected(KeyRejected(kfe))
     }
 }
 
-impl core::fmt::Display for KeyFormatError {
+impl core::fmt::Display for KeyRejected {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::UnsupportedPkcs8Version => write!(f, "unsupported PKCS#8 version"),
-            Self::MismatchedPkcs8Algorithm => write!(f, "mismatched PKCS#8 algorithm"),
-            Self::MismatchedPkcs8Parameters => write!(f, "mismatched PKCS#8 parameters"),
-            Self::MismatchedPkcs8PublicKey => write!(f, "mismatched PKCS#8 public key"),
-            Self::MismatchedSec1Curve => write!(f, "mismatched SEC1 curve"),
-            Self::MismatchedSec1PublicKey => write!(f, "mismatched SEC1 public key"),
-            Self::MismatchedSpkiAlgorithm => write!(f, "mismatched SPKI algorithm"),
+        match self.0 {
+            KeyFormatError::Asn1(e) => write!(f, "an ASN.1 decoding error: {e}"),
+            KeyFormatError::UnsupportedPkcs8Version => write!(f, "unsupported PKCS#8 version"),
+            KeyFormatError::MismatchedPkcs8Algorithm => write!(f, "mismatched PKCS#8 algorithm"),
+            KeyFormatError::MismatchedPkcs8Parameters => {
+                write!(f, "mismatched PKCS#8 parameters")
+            }
+            KeyFormatError::MismatchedPkcs8PublicKey => write!(f, "mismatched PKCS#8 public key"),
+            KeyFormatError::MismatchedSec1Curve => write!(f, "mismatched SEC1 curve"),
+            KeyFormatError::MismatchedSec1PublicKey => write!(f, "mismatched SEC1 public key"),
+            KeyFormatError::MismatchedSpkiAlgorithm => write!(f, "mismatched SPKI algorithm"),
         }
     }
 }
@@ -81,13 +85,12 @@ impl core::fmt::Display for Error {
             ),
             Self::BadSignature => write!(f, "presented signature is invalid"),
             Self::DecryptFailed => write!(f, "presented AEAD tag/aad/ciphertext/nonce was wrong"),
-            Self::Asn1Error(e) => write!(f, "an ASN.1 encoding/decoding error: {e}"),
-            Self::KeyFormatError(e) => write!(f, "a key formatting/validation error: {e}"),
+            Self::KeyRejected(e) => write!(f, "a key was rejected: {e}"),
         }
     }
 }
 
-impl core::error::Error for KeyFormatError {}
+impl core::error::Error for KeyRejected {}
 impl core::error::Error for Error {}
 
 #[cfg(test)]
@@ -125,47 +128,47 @@ mod tests {
         assert_eq!(
             format!(
                 "{}",
-                Error::Asn1Error(crate::high::asn1::Error::UnexpectedTag)
+                Error::from(KeyFormatError::Asn1(
+                    crate::high::asn1::Error::UnexpectedTag
+                ))
             ),
-            "an ASN.1 encoding/decoding error: unexpected tag"
+            "a key was rejected: an ASN.1 decoding error: unexpected tag"
         );
         assert_eq!(
-            format!(
-                "{}",
-                Error::KeyFormatError(KeyFormatError::UnsupportedPkcs8Version)
-            ),
-            "a key formatting/validation error: unsupported PKCS#8 version"
+            format!("{}", Error::from(KeyFormatError::UnsupportedPkcs8Version)),
+            "a key was rejected: unsupported PKCS#8 version"
         );
     }
 
     #[test]
-    fn test_keyformaterror_display() {
+    fn test_keyrejected_display() {
+        let display = |kfe| format!("{}", KeyRejected(kfe));
         assert_eq!(
-            format!("{}", KeyFormatError::UnsupportedPkcs8Version),
+            display(KeyFormatError::UnsupportedPkcs8Version),
             "unsupported PKCS#8 version"
         );
         assert_eq!(
-            format!("{}", KeyFormatError::MismatchedPkcs8Algorithm),
+            display(KeyFormatError::MismatchedPkcs8Algorithm),
             "mismatched PKCS#8 algorithm"
         );
         assert_eq!(
-            format!("{}", KeyFormatError::MismatchedPkcs8Parameters),
+            display(KeyFormatError::MismatchedPkcs8Parameters),
             "mismatched PKCS#8 parameters"
         );
         assert_eq!(
-            format!("{}", KeyFormatError::MismatchedPkcs8PublicKey),
+            display(KeyFormatError::MismatchedPkcs8PublicKey),
             "mismatched PKCS#8 public key"
         );
         assert_eq!(
-            format!("{}", KeyFormatError::MismatchedSec1Curve),
+            display(KeyFormatError::MismatchedSec1Curve),
             "mismatched SEC1 curve"
         );
         assert_eq!(
-            format!("{}", KeyFormatError::MismatchedSec1PublicKey),
+            display(KeyFormatError::MismatchedSec1PublicKey),
             "mismatched SEC1 public key"
         );
         assert_eq!(
-            format!("{}", KeyFormatError::MismatchedSpkiAlgorithm),
+            display(KeyFormatError::MismatchedSpkiAlgorithm),
             "mismatched SPKI algorithm"
         );
     }

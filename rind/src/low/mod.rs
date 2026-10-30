@@ -26,10 +26,11 @@ mod generic {
     pub(crate) mod p384;
     #[cfg(not(target_arch = "arm"))]
     pub(crate) mod poly1305;
-    // armv7's SHA1, also built in x86_64 tests to check the AVX2 path against.
+    // armv7's SHA1 and SHA256, also built in x86_64 tests to check the AVX2
+    // paths against.
     #[cfg(any(target_arch = "arm", all(test, target_arch = "x86_64")))]
     pub(super) mod sha1;
-    #[cfg(any(target_arch = "x86_64", target_arch = "arm"))]
+    #[cfg(any(target_arch = "arm", all(test, target_arch = "x86_64")))]
     pub(super) mod sha256;
     #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
     pub(super) mod sha512;

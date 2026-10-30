@@ -5,6 +5,7 @@ members = [
   "rind-bench",
   "rind-cpuid",
   "rind-dimpl",
+  "rind-instant-acme",
   "rind-object-store",
   "rind-rcgen",
   "rind-rustls",
