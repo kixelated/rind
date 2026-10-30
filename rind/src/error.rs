@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 
 /// All errors that may happen in this crate.
+///
+/// Unlike aws-lc-rs's opaque `Unspecified`, this is an enum a caller can
+/// match on, such as to tell a wrong length from a bad signature.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Error {

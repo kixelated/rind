@@ -153,7 +153,7 @@ impl SignatureVerificationAlgorithm for Verify {
 
 #[cfg(test)]
 mod tests {
-    use rind::random;
+    use rind::rand;
     use rind::signature::{
         ECDSA_P256_SHA256_ASN1_SIGNING, ECDSA_P384_SHA384_ASN1_SIGNING, EcdsaKeyPair,
         Ed25519KeyPair, KeyPair, RsaKeyPair,
@@ -163,7 +163,7 @@ mod tests {
 
     fn message() -> [u8; 64] {
         let mut message = [0u8; 64];
-        random::fill(&mut message).unwrap();
+        rand::fill(&mut message).unwrap();
         message
     }
 

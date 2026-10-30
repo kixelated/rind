@@ -4,7 +4,7 @@ use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_m
 fn test_rc_chacha(key: &chacha20poly1305::XChaCha20Poly1305, aad: &[u8], plain: &[u8]) {
     use chacha20poly1305::AeadInOut;
     let mut nonce = [0u8; 24];
-    rind::random::fill(&mut nonce).unwrap();
+    rind::rand::fill(&mut nonce).unwrap();
     let nonce = &nonce;
 
     let mut ct = plain.to_vec();

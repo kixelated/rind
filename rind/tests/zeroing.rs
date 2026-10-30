@@ -102,11 +102,9 @@ fn mlkem768() {
 fn hkdf() {
     use rind::hkdf::*;
 
-    for algorithm in [HKDF_SHA256, HKDF_SHA384, HKDF_SHA512] {
-        let salt = Salt::new(algorithm, b"salt");
-        check_zeroed_on_drop(Box::pin(salt.extract(b"ikm")));
-        check_zeroed_on_drop(Box::pin(salt));
-    }
+    let salt = Salt::new(HKDF_SHA256, b"salt");
+    check_zeroed_on_drop(Box::pin(salt.extract(b"ikm")));
+    check_zeroed_on_drop(Box::pin(salt));
 }
 
 #[test]

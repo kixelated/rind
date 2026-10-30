@@ -54,7 +54,7 @@ struct RngProvider;
 
 impl rustls::crypto::SecureRandom for RngProvider {
     fn fill(&self, bytes: &mut [u8]) -> Result<(), rustls::crypto::GetRandomFailed> {
-        rind::random::fill(bytes).map_err(|_| rustls::crypto::GetRandomFailed)
+        rind::rand::fill(bytes).map_err(|_| rustls::crypto::GetRandomFailed)
     }
 }
 

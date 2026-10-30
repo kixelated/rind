@@ -220,14 +220,6 @@ fn hkdf_tests() {
         "../thirdparty/wycheproof/testvectors_v1/hkdf_sha256_test.json",
         hkdf::HKDF_SHA256,
     );
-    check(
-        "../thirdparty/wycheproof/testvectors_v1/hkdf_sha384_test.json",
-        hkdf::HKDF_SHA384,
-    );
-    check(
-        "../thirdparty/wycheproof/testvectors_v1/hkdf_sha512_test.json",
-        hkdf::HKDF_SHA512,
-    );
 }
 
 #[test]

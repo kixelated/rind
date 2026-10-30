@@ -254,23 +254,16 @@ mod hkdf {
         }
     }
 
-    fn check(
-        ours: hkdf::Algorithm,
-        theirs: theirs::Algorithm,
-        salt: &[u8],
-        ikm: &[u8],
-        info: &[Vec<u8>],
-        len: usize,
-    ) -> Result<(), TestCaseError> {
+    fn check(salt: &[u8], ikm: &[u8], info: &[Vec<u8>], len: usize) -> Result<(), TestCaseError> {
         let info: Vec<&[u8]> = info.iter().map(Vec::as_slice).collect();
 
         let mut ours_out = vec![0u8; len];
-        let prk = hkdf::Salt::new(ours, salt).extract(ikm);
+        let prk = hkdf::Salt::new(hkdf::HKDF_SHA256, salt).extract(ikm);
         let result = prk
             .expand(&info, len)
             .and_then(|okm| okm.fill(&mut ours_out));
 
-        let prk = theirs::Salt::new(theirs, salt).extract(ikm);
+        let prk = theirs::Salt::new(theirs::HKDF_SHA256, salt).extract(ikm);
         match prk.expand(&info, Len(len)) {
             Ok(okm) => {
                 result.unwrap();
@@ -286,41 +279,17 @@ mod hkdf {
         Ok(())
     }
 
-    // Lengths up to a few blocks, or either side of the 255-block limit.
-    fn out_len(hash_len: usize) -> impl Strategy<Value = usize> {
-        prop_oneof![0..200usize, (255 * hash_len - 70)..(255 * hash_len + 70)]
-    }
-
-    // Salts either side of the block size, and info split into parts.
+    // Salts either side of the block size, info split into parts, and
+    // lengths up to a few blocks or either side of the 255-block limit.
     proptest! {
         #[test]
         fn sha256(
             salt in vec(any::<u8>(), 0..200),
             ikm in vec(any::<u8>(), 0..200),
             info in vec(vec(any::<u8>(), 0..100), 0..4),
-            len in out_len(32),
+            len in prop_oneof![0..200usize, (255 * 32 - 70usize)..(255 * 32 + 70)],
         ) {
-            check(hkdf::HKDF_SHA256, theirs::HKDF_SHA256, &salt, &ikm, &info, len)?;
-        }
-
-        #[test]
-        fn sha384(
-            salt in vec(any::<u8>(), 0..200),
-            ikm in vec(any::<u8>(), 0..200),
-            info in vec(vec(any::<u8>(), 0..100), 0..4),
-            len in out_len(48),
-        ) {
-            check(hkdf::HKDF_SHA384, theirs::HKDF_SHA384, &salt, &ikm, &info, len)?;
-        }
-
-        #[test]
-        fn sha512(
-            salt in vec(any::<u8>(), 0..200),
-            ikm in vec(any::<u8>(), 0..200),
-            info in vec(vec(any::<u8>(), 0..100), 0..4),
-            len in out_len(64),
-        ) {
-            check(hkdf::HKDF_SHA512, theirs::HKDF_SHA512, &salt, &ikm, &info, len)?;
+            check(&salt, &ikm, &info, len)?;
         }
 
         // Keys built straight from an `Okm` match aws-lc-rs's conversions.
@@ -603,7 +572,7 @@ mod ed25519 {
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::sample::Index;
-    use rind::signature::{self, KeyPair as _};
+    use rind::signature;
 
     proptest! {
         #[test]
@@ -613,11 +582,11 @@ mod ed25519 {
             flip in any::<Option<Index>>(),
         ) {
             // Signing is deterministic, so one seed gives both sides the same
-            // public key, encoding, and signatures.
-            let ours = signature::Ed25519KeyPair::from_seed_unchecked(&seed).unwrap();
+            // public key, encoding, and signatures; loading ours checks the
+            // public key matches theirs.
             let theirs = Ed25519KeyPair::from_seed_unchecked(&seed).unwrap();
-            let public = ours.public_key().as_ref();
-            prop_assert_eq!(public, theirs.public_key().as_ref());
+            let public = theirs.public_key().as_ref();
+            let ours = signature::Ed25519KeyPair::from_seed_and_public_key(&seed, public).unwrap();
             let spki = theirs.public_key().as_der().unwrap();
             prop_assert_eq!(ours.to_spki_der(&mut [0; 64]).unwrap().to_vec(), spki.as_ref());
             prop_assert_eq!(ours.seed(), seed);

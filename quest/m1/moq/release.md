@@ -22,7 +22,3 @@ configured. The token can publish new crates, so release-plz creates each
 Decided 2026-10-30 (maintainer): the first release does not wait on
 upstream releases. Publishing still waits for the maintainer's go-ahead on
 the release PR.
-
-## Required
-
-- [Learn from aws-lc-rs's API](/quest/m1/moq/api/README.md) - the first release ships the aws-lc-rs-shaped API, so MoQ ports once
