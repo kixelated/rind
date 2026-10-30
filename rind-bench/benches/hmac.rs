@@ -94,7 +94,9 @@ fn sha1(c: &mut Criterion) {
     let mut group = c.benchmark_group("hmac-sha1");
     let key = [0xff; 20];
 
-    for (size, size_name) in [(32, "32B"), (2048, "2KB")] {
+    // 1204B is an MTU-sized SRTP packet plus its rollover counter, the input
+    // of AES-128-CM-HMAC-SHA1-80's per-packet tag.
+    for (size, size_name) in [(32, "32B"), (1204, "1204B"), (2048, "2KB")] {
         let input = vec![0u8; size];
         group.throughput(Throughput::Elements(1));
 
