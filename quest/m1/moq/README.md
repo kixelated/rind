@@ -69,7 +69,6 @@ RustCrypto dependency.
 - [str0m releases its dimpl 0.9 provider interface](/quest/m1/moq/str0m-release.md) - waiting on the release `rind-str0m` targets
 - [rind-str0m on a str0m release](/quest/m1/moq/str0m.md) - publishable once it depends on that release
 - [instant-acme 0.9 is released](/quest/m1/moq/instant-acme-release.md) - waiting on the release with a pluggable `CryptoProvider`
-- [rind-instant-acme](/quest/m1/moq/instant-acme.md) - instant-acme's `CryptoProvider`, on its main branch until 0.9 ships
 - [Publish rind-instant-acme](/quest/m1/moq/instant-acme-publish.md) - switch to the 0.9 release and publish
 - [ctgrind on armv7](/quest/m1/moq/armv7-ctgrind.md) - the constant-time check runs on the armv7 build
 - [SHA-1 AVX2 rounds in Rust](/quest/m1/moq/sha1-rust.md) - no new inline assembly in the SHA-1 path
