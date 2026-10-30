@@ -122,7 +122,10 @@ rind's own code is licensed under Apache-2.0 OR ISC OR MIT-0. Copied code
 keeps its source's copyright and license, which [LICENSE] lists with the
 texts they require; dependencies ship their own. Every file under
 `rind/src` names its license in a `SPDX-License-Identifier` comment, and
-files Graviola wrote keep their `Written for Graviola by ...` header.
+files Graviola wrote keep their `Written for Graviola by ...` header. The
+`rind` crate as a whole is therefore `(Apache-2.0 OR ISC OR MIT-0) AND
+(Apache-2.0 OR ISC OR MIT) AND Apache-2.0`. The adapter crates copy
+nothing under another license, so they stay `Apache-2.0 OR ISC OR MIT-0`.
 
 A change that copies code from a new source, or moves an algorithm to a
 different one, updates this table and [LICENSE] in the same PR.
