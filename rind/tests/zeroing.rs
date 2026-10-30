@@ -105,7 +105,9 @@ fn hkdf() {
     use rind::hkdf::*;
 
     for algorithm in [HKDF_SHA256, HKDF_SHA384, HKDF_SHA512] {
-        check_zeroed_on_drop(Box::pin(Salt::new(algorithm, b"salt").extract(b"ikm")));
+        let salt = Salt::new(algorithm, b"salt");
+        check_zeroed_on_drop(Box::pin(salt.extract(b"ikm")));
+        check_zeroed_on_drop(Box::pin(salt));
     }
 }
 
