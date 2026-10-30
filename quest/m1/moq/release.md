@@ -2,10 +2,11 @@
 
 ## Goal
 
-rind and every `rind-*` adapter MoQ uses are published on crates.io through
-release-plz, and MoQ's
-[covered.md](https://github.com/moq-dev/moq/blob/main/quest/m2/rind/covered.md)
-condition holds.
+rind and every publishable `rind-*` adapter are on crates.io through
+release-plz. `rind-str0m` and `rind-instant-acme` publish later, through
+[rind-str0m on a str0m release](/quest/m1/moq/str0m.md) and
+[Publish rind-instant-acme](/quest/m1/moq/instant-acme-publish.md), once
+their upstream releases exist.
 
 ## Plan
 
@@ -18,7 +19,6 @@ The release workflow authenticates as moq's GitHub App (`moq-bot`) with the
 configured. The token can publish new crates, so release-plz creates each
 `rind-*` adapter on its first release.
 
-## Required
-
-- [rind-instant-acme](/quest/m1/moq/instant-acme.md) - part of the release
-- [Verification](/quest/m1/moq/verify.md) - every backend and adapter proven
+Decided 2026-10-30 (maintainer): the first release does not wait on
+upstream releases. Publishing still waits for the maintainer's go-ahead on
+the release PR.

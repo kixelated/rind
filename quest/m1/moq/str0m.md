@@ -20,8 +20,7 @@ carries that interface:
 Public API: none beyond the release's own changes.
 
 - Verification of rind-str0m (its round-trip test against str0m's aws-lc-rs
-  provider, on every backend) lands here, split out of
-  [Verification](/quest/m1/moq/verify.md) on 2026-10-29.
+  provider, on every backend) lands here (maintainer, 2026-10-29).
 
 ## Required
 
