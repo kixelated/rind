@@ -27,3 +27,4 @@ quest here if it still matters.
 - [armv7 benchmark host](/quest/m2/perf/armv7-host.md) - rind-bench runs on real armv7 hardware
 - [armv7 AEAD copy](/quest/m2/perf/armv7-aead-copy.md) - armv7 AEADs seal and open in place without copying the buffer
 - [armv7 P-256 signing](/quest/m2/perf/armv7-p256-nonce.md) - armv7 ECDSA P-256 computes its nonce point once
+- [SHA-256 without SHA-NI](/quest/m2/perf/sha256-avx2.md) - an AVX2 schedule for x86_64 hosts without SHA extensions
