@@ -85,7 +85,6 @@ async fn issue_certificate() {
         key_authorization.as_str().to_string(),
     ));
     challenge.set_ready().await.unwrap();
-    drop(authorizations);
 
     let retries = RetryPolicy::new().initial_delay(Duration::from_millis(10));
     assert_eq!(
