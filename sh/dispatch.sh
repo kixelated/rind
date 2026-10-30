@@ -53,10 +53,12 @@ declare -A scope=(
     [rs]='^(rind[^/]*/|fuzz/|thirdparty/|Cargo\.(toml|lock)$|\.rustfmt\.toml$)'
     # Advisories, licenses, and sources move with any manifest or the policy.
     [deny]='(^|/)Cargo\.(toml|lock)$|^deny\.toml$'
+    [license]='^(rind/src/|admin/scan-license$)'
     # Quest documents form one graph, so any change validates the whole tree,
     # as does a bump of the flake-pinned validator.
     [quest]='^(quest/|flake\.lock$)'
-    [gh]='^\.github/'
+    # alert.yml must watch every workflow that runs outside a pull request.
+    [gh]='^(\.github/|sh/alert\.sh$)'
     # The agent session hooks and their regression suite.
     [hooks]='^\.(claude|codex)/hooks/'
     [shell]=''
@@ -69,8 +71,9 @@ declare -A scope=(
 declare -A tools=(
     [rs]='cargo jq'
     [deny]='cargo-deny'
+    [license]='find grep'
     [quest]='quest'
-    [gh]='actionlint'
+    [gh]='actionlint yq jq'
     [hooks]='shellcheck'
     [shell]='shellcheck'
     [nix]='nixfmt'
@@ -80,7 +83,7 @@ verb=$action
 [[ "$verb" != ci ]] || verb=check
 
 case "$verb" in
-    check) modules=(rs deny quest gh hooks shell nix) ;;
+    check) modules=(rs deny license quest gh hooks shell nix) ;;
     fix) modules=(rs nix) ;;
 esac
 
@@ -155,7 +158,11 @@ for module in "${selected[@]}"; do
             ;;
         check:deny) cargo deny --locked check ;;
         check:quest) quest check ;;
-        check:gh) actionlint ;;
+        check:license) bash admin/scan-license ;;
+        check:gh)
+            actionlint
+            sh/alert.sh check
+            ;;
         check:hooks)
             files '.claude/hooks/*.sh' '.codex/hooks/*.sh' | xargs -0 shellcheck
             bash .claude/hooks/direnv.test.sh

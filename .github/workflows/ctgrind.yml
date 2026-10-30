@@ -1,12 +1,13 @@
 name: ctgrind
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
   schedule:
     - cron: "0 18 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ctgrind-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
