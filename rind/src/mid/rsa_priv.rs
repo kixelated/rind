@@ -100,6 +100,10 @@ impl RsaPrivateKey {
         self.public.modulus_len_bytes()
     }
 
+    pub(crate) fn modulus_len_bits(&self) -> usize {
+        self.public.modulus_len_bits()
+    }
+
     pub(crate) fn encode_components<'a>(
         &self,
         buffer: &'a mut RsaComponentsBuffer,

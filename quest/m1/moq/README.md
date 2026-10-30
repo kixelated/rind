@@ -71,5 +71,4 @@ RustCrypto dependency.
 - [instant-acme 0.9 is released](/quest/m1/moq/instant-acme-release.md) - waiting on the release with a pluggable `CryptoProvider`
 - [rind-instant-acme](/quest/m1/moq/instant-acme.md) - instant-acme 0.9's `CryptoProvider`
 - [ctgrind on armv7](/quest/m1/moq/armv7-ctgrind.md) - the constant-time check runs on the armv7 build
-- [RSA keys of any bit length verify](/quest/m1/moq/rsa-odd-size.md) - moduli that aren't a multiple of 64 bits verify valid signatures
 - [Release](/quest/m1/moq/release.md) - publish the rind release MoQ switches to
