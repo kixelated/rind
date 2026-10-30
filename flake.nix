@@ -58,8 +58,8 @@
         in
         {
           packages = {
-            # The quest CLI alone, so quest.yml can validate the tree without
-            # entering the dev shell.
+            # The quest CLI alone, so land.yml's jobs run the gate without
+            # building the dev shell around it.
             quest = quest-cli;
           };
 

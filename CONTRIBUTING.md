@@ -6,7 +6,7 @@ under the files they change.
 
 # Commits
 
-PRs into `main` are squash-merged, so the PR title becomes the commit subject in `git log`; the body keeps only the co-author trailers, not the PR description.
+PRs land on `main` as squash commits, so the PR title becomes the commit subject in `git log`; the body keeps the PR's commit messages and co-author trailers, not the PR description.
 
 - Use conventional-commit subjects (`feat(rustls): ...`, `fix: ...`, `chore: ...`, `docs: ...`)
 - AI commit attribution goes in a `Co-Authored-By:` trailer, not the commit body.
@@ -32,9 +32,11 @@ Run `just ci` before every push, and mark the PR ready with `/quest-review` when
 Keep it a draft only while its description lists a decision the maintainer still owns.
 Fix any merge conflicts and failing CI checks.
 
-Every PR runs only **Check** (`just ci` over the diff).
+PRs run no CI of their own.
 The platform workflows inherited from graviola run nightly, or on demand with `gh workflow run <name> --ref <branch>`.
-Merge with `gh pr merge --squash <number>` once checks pass, the review is clean, and the maintainer has approved merging that PR.
+PRs land only through `quest land`: once the review is clean and the maintainer has approved merging, queue the PR with `quest merge <pr> <token> --land <head>`.
+The Land workflow squashes the queue onto `main`, runs `just ci` once on the organization's queue runner, and fast-forwards `main` to the longest passing prefix, ejecting with a comment a PR that conflicts or fails alone.
+The admin bypass of `main`'s ruleset is for emergencies.
 
 # AI
 
@@ -62,6 +64,7 @@ Record out-of-scope findings as follow-up quests with `/quest-plan`, not GitHub 
 
 rind is a GitHub fork of [ctz/graviola](https://github.com/ctz/graviola) and keeps its history, so upstream changes merge in and rind's can be offered back.
 Merge upstream with a merge commit, never a rebase.
+The gate squashes, so an upstream merge lands through the admin bypass once `just ci` passes on it.
 Open no PRs against graviola until rind carries MoQ; then revisit.
 Each `Written for Graviola by ...` header is attribution; keep it on files that carry one.
 
