@@ -9,7 +9,7 @@ use super::hash::{Hash, HashContext, SignatureHash};
 use super::hmac_drbg::HmacDrbg;
 use super::pkcs8;
 use crate::error::{Error, KeyFormatError};
-use crate::low::{Entry, ct, zeroise};
+use crate::low::{Entry, ct};
 use crate::mid::rng::{RandomSource, SystemRandom};
 
 /// An ECDSA signing key, on curve `C`.
@@ -249,7 +249,6 @@ impl<C: Curve> SigningKey<C> {
             &e_bytes[..C::Scalar::LEN_BYTES],
             random,
         );
-        zeroise(&mut encoded_private_key_buf);
 
         let (k, r) = loop {
             let k = C::generate_random_key(&mut rng)?;

@@ -72,6 +72,5 @@ RustCrypto dependency.
 - [rind-instant-acme](/quest/m1/moq/instant-acme.md) - instant-acme's `CryptoProvider`, on its main branch until 0.9 ships
 - [Publish rind-instant-acme](/quest/m1/moq/instant-acme-publish.md) - switch to the 0.9 release and publish
 - [ctgrind on armv7](/quest/m1/moq/armv7-ctgrind.md) - the constant-time check runs on the armv7 build
-- [Inherited wipes match aws-lc](/quest/m1/moq/inherited-wipes.md) - graviola's wipes and the ECDH shared point follow the zeroing rule
 - [SHA-1 AVX2 rounds in Rust](/quest/m1/moq/sha1-rust.md) - no new inline assembly in the SHA-1 path
 - [Release](/quest/m1/moq/release.md) - publish the rind release MoQ switches to
