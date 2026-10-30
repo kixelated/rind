@@ -86,37 +86,18 @@ fn ed25519() {
 }
 
 #[test]
-fn ecdh_x25519() {
-    use rind::key_agreement::x25519::PrivateKey;
-    let x25519 = PrivateKey::new_random().unwrap();
-    check_zeroed_on_drop(Box::pin(x25519));
-}
-
-#[test]
-fn ecdh_static_x25519() {
-    use rind::key_agreement::x25519::StaticPrivateKey;
-    let x25519 = StaticPrivateKey::from_array(&[0xffu8; 32]);
-    check_zeroed_on_drop(Box::pin(x25519));
-}
-
-#[test]
-fn ecdh_p256() {
-    use rind::key_agreement::p256::PrivateKey;
-    let p256 = PrivateKey::new_random().unwrap();
-    check_zeroed_on_drop(Box::pin(p256));
-}
-
-#[test]
-fn ecdh_p384() {
-    use rind::key_agreement::p384::PrivateKey;
-    let p384 = PrivateKey::new_random().unwrap();
-    check_zeroed_on_drop(Box::pin(p384));
+fn ecdh() {
+    use rind::agreement::*;
+    for algorithm in [&X25519, &ECDH_P256, &ECDH_P384] {
+        let key = EphemeralPrivateKey::generate(algorithm).unwrap();
+        check_zeroed_on_drop(Box::pin(key));
+    }
 }
 
 #[test]
 fn mlkem768() {
-    use rind::key_agreement::mlkem768::DecapKey;
-    check_zeroed_on_drop(Box::pin(DecapKey::generate().unwrap()));
+    use rind::kem::*;
+    check_zeroed_on_drop(Box::pin(DecapsulationKey::generate(&ML_KEM_768).unwrap()));
 }
 
 #[test]
@@ -130,19 +111,21 @@ fn hkdf() {
 
 #[test]
 fn hmac() {
-    use rind::hashing::hmac::Hmac;
-    use rind::hashing::{LegacySha1, Sha256, Sha384, Sha512};
+    use rind::hmac::*;
 
-    // A partial block leaves message bytes buffered beside the keyed states.
-    macro_rules! check {
-        ($($H:ty),*) => {$({
-            let mut hmac = Hmac::<$H>::new([0xffu8; 32]);
-            hmac.update([0xffu8; 3]);
-            check_zeroed_on_drop(Box::pin(hmac));
-        })*};
+    for algorithm in [
+        HMAC_SHA1_FOR_LEGACY_USE_ONLY,
+        HMAC_SHA256,
+        HMAC_SHA384,
+        HMAC_SHA512,
+    ] {
+        let key = Key::new(algorithm, &[0xffu8; 32]);
+        // A partial block leaves message bytes buffered beside the keyed states.
+        let mut ctx = Context::with_key(&key);
+        ctx.update(&[0xffu8; 3]);
+        check_zeroed_on_drop(Box::pin(ctx));
+        check_zeroed_on_drop(Box::pin(key));
     }
-
-    check!(LegacySha1, Sha256, Sha384, Sha512);
 }
 
 #[test]

@@ -49,7 +49,3 @@ becomes `prk.expand(info, out.len())?.fill(&mut out)?`, or
 Consumers: no adapter (rustls runs HKDF over `rind-rustls`'s HMAC). MoQ:
 moq-quic's reset HMAC key, connection-ID key, and token AEAD key, and
 moq-e2ee's credential derivation, all from aws-lc-rs's identical shape.
-
-## Required
-
-- [Reusable HMAC keys](/quest/m1/moq/api/hmac.md) - `hkdf::Algorithm` wraps an `hmac::Algorithm`, and `Okm` builds an `hmac::Key`

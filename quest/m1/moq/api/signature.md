@@ -6,9 +6,7 @@
 padding, the hash, and the signature encoding, replacing
 `rind::signing`'s generic `SigningKey<C>::sign::<H>`, its `sign_asn1`
 variants, and RSA's method per padding and hash. A key pair is bound to its
-signing algorithm when loaded, and no key exposes its curve-level key, so an
-ECDSA key can no longer be reused for ECDH through its public `private_key`
-field.
+signing algorithm when loaded, and no key exposes its curve-level key.
 
 ## Plan
 
@@ -65,8 +63,9 @@ pub mod signature {
   ECDSA private scalar to write a JWK's `d`; expose it under aws-lc-rs's name
   for it, `private_key().as_be_bytes()`, or a plainer one the implementation
   argues for.
-- `ecdsa::Curve`, `P256`, `P384`, and the public `private_key` and
-  `public_key` fields leave the public API.
+- `ecdsa::Curve`, `P256`, `P384`, `VerifyingKey`'s public `public_key`
+  field, and the interim `SigningKey::public_key()` leave the public API.
+  `Curve`'s associated types still reach the crate-private curve keys.
 
 Migration: `ecdsa::SigningKey::<P256>::from_pkcs8_der(der)` becomes
 `EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, der)`, and

@@ -61,88 +61,58 @@ pub mod doc {
     pub use super::low::inline_assembly_safety;
 }
 
-/// Key agreement algorithms.
-pub mod key_agreement {
-    /// X25519 key agreement.
-    ///
-    /// ```
-    /// use rind::key_agreement::x25519::*;
-    ///
-    /// let alice = PrivateKey::new_random().unwrap();
-    /// let bob = PrivateKey::new_random().unwrap();
-    ///
-    /// let alice_pub = alice.public_key();
-    /// let bob_pub = bob.public_key();
-    ///
-    /// let alice_shared_secret = alice.diffie_hellman(&bob_pub).unwrap();
-    /// let bob_shared_secret = bob.diffie_hellman(&alice_pub).unwrap();
-    /// assert_eq!(alice_shared_secret.0, bob_shared_secret.0);
-    /// ```
-    ///
-    /// See [RFC7748](https://datatracker.ietf.org/doc/html/rfc7748).
-    pub mod x25519 {
-        pub use crate::mid::x25519::{PrivateKey, PublicKey, SharedSecret, StaticPrivateKey};
-    }
+/// Ephemeral key agreement: X25519, and ECDH on P-256 and P-384.
+///
+/// ```
+/// use rind::agreement::*;
+///
+/// let alice = EphemeralPrivateKey::generate(&X25519).unwrap();
+/// let bob = EphemeralPrivateKey::generate(&X25519).unwrap();
+///
+/// let alice_pub = alice.compute_public_key();
+/// let bob_pub = bob.compute_public_key();
+///
+/// let alice_secret = agree_ephemeral(alice, &UnparsedPublicKey::new(&X25519, bob_pub))
+///     .expect("bob gave an invalid public key");
+/// let bob_secret = agree_ephemeral(bob, &UnparsedPublicKey::new(&X25519, alice_pub))
+///     .expect("alice gave an invalid public key");
+///
+/// assert_eq!(alice_secret.as_ref(), bob_secret.as_ref());
+/// ```
+pub mod agreement {
+    pub use crate::high::agreement::{
+        Algorithm, ECDH_P256, ECDH_P384, EphemeralPrivateKey, PublicKey, SharedSecret,
+        UnparsedPublicKey, X25519, agree_ephemeral,
+    };
+}
 
-    /// Elliptic curve Diffie-Hellman on P-256
-    ///
-    /// P-256 is also known as "NISTP256", "prime256v1", or "secp256r1".
-    ///
-    /// ```
-    /// use rind::key_agreement::p256::*;
-    ///
-    /// let alice = PrivateKey::new_random().unwrap();
-    /// let bob = PrivateKey::new_random().unwrap();
-    ///
-    /// let alice_pub = alice.public_key_uncompressed();
-    /// let bob_pub = bob.public_key_uncompressed();
-    ///
-    /// let alice_shared_secret = PublicKey::from_x962_uncompressed(&bob_pub)
-    ///     .and_then(move |bob_pub| alice.diffie_hellman(&bob_pub))
-    ///     .expect("bob gave an invalid public key");
-    ///
-    /// let bob_shared_secret = PublicKey::from_x962_uncompressed(&alice_pub)
-    ///     .and_then(move |alice_pub| bob.diffie_hellman(&alice_pub))
-    ///     .expect("alice gave an invalid public key");
-    ///
-    /// assert_eq!(alice_shared_secret.0, bob_shared_secret.0);
-    /// ```
-    ///
-    /// See [SEC1](https://www.secg.org/sec1-v2.pdf) for one definition.
-    pub mod p256 {
-        pub use crate::mid::p256::{PrivateKey, PublicKey, SharedSecret, StaticPrivateKey};
-    }
-
-    /// Elliptic curve Diffie-Hellman on P-384
-    ///
-    /// P-384 is also known as "NISTP384", or "secp384r1".
-    ///
-    /// ```
-    /// use rind::key_agreement::p384::*;
-    ///
-    /// let alice = PrivateKey::new_random().unwrap();
-    /// let bob = PrivateKey::new_random().unwrap();
-    ///
-    /// let alice_pub = alice.public_key_uncompressed();
-    /// let bob_pub = bob.public_key_uncompressed();
-    ///
-    /// let alice_shared_secret = PublicKey::from_x962_uncompressed(&bob_pub)
-    ///     .and_then(move |bob_pub| alice.diffie_hellman(&bob_pub))
-    ///     .expect("bob gave an invalid public key");
-    ///
-    /// let bob_shared_secret = PublicKey::from_x962_uncompressed(&alice_pub)
-    ///     .and_then(move |alice_pub| bob.diffie_hellman(&alice_pub))
-    ///     .expect("alice gave an invalid public key");
-    ///
-    /// assert_eq!(alice_shared_secret.0, bob_shared_secret.0);
-    /// ```
-    ///
-    /// See [SEC1](https://www.secg.org/sec1-v2.pdf) for one definition.
-    pub mod p384 {
-        pub use crate::mid::p384::{PrivateKey, PublicKey, SharedSecret, StaticPrivateKey};
-    }
-
-    pub use crate::mid::mlkem768;
+/// Key encapsulation: ML-KEM-768.
+///
+/// ```
+/// # fn main() -> Result<(), rind::Error> {
+/// use rind::kem::*;
+///
+/// // The recipient generates a key pair, and sends the encapsulation key to
+/// // the sender.
+/// let decapsulation_key = DecapsulationKey::generate(&ML_KEM_768)?;
+/// let encapsulation_key = decapsulation_key.encapsulation_key();
+///
+/// // The sender parses the encapsulation key, encapsulates a fresh secret,
+/// // and sends the ciphertext back to the recipient.
+/// let peer_key = EncapsulationKey::new(&ML_KEM_768, encapsulation_key.key_bytes())?;
+/// let (ciphertext, sender_secret) = peer_key.encapsulate()?;
+///
+/// // The recipient decapsulates the ciphertext, recovering the same secret.
+/// let recipient_secret = decapsulation_key.decapsulate(Ciphertext::from(ciphertext.as_ref()))?;
+///
+/// assert_eq!(sender_secret.as_ref(), recipient_secret.as_ref());
+/// # Ok(())
+/// # }
+/// ```
+pub mod kem {
+    pub use crate::high::kem::{
+        Algorithm, Ciphertext, DecapsulationKey, EncapsulationKey, ML_KEM_768, SharedSecret,
+    };
 }
 
 /// Public key signatures.
@@ -184,13 +154,37 @@ pub mod digest {
     };
 }
 
-/// HMAC and HKDF, and the hash functions that parameterize them and signatures.
+/// Message authentication with HMAC.
+///
+/// A [`hmac::Key`] precomputes its keyed hash states once; each message then
+/// signs through a [`hmac::Context`] started from it, or the one-shot
+/// [`hmac::sign`] and [`hmac::verify`].
+///
+/// ```
+/// use rind::hmac;
+///
+/// let key = hmac::Key::new(hmac::HMAC_SHA256, b"secret");
+///
+/// let mut ctx = hmac::Context::with_key(&key);
+/// ctx.update(b"hello, ");
+/// ctx.update(b"world");
+/// let tag = ctx.sign();
+///
+/// hmac::verify(&key, b"hello, world", tag.as_ref()).unwrap();
+/// ```
+pub mod hmac {
+    pub use super::high::hmac::{
+        Algorithm, Context, HMAC_SHA1_FOR_LEGACY_USE_ONLY, HMAC_SHA256, HMAC_SHA384, HMAC_SHA512,
+        Key, Tag, sign, verify,
+    };
+}
+
+/// HKDF, and the hash functions that parameterize it and signatures.
 ///
 /// To hash a message, use [`digest`].
 pub mod hashing {
     pub use super::high::hash::{LegacySha1, Sha256, Sha384, Sha512};
     pub use super::high::hkdf;
-    pub use super::high::hmac;
 }
 
 /// Authenticated encryption.

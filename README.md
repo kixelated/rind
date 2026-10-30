@@ -6,10 +6,9 @@
 > at use with [rustls](https://github.com/rustls/rustls) and
 > [MoQ](https://github.com/moq-dev/moq).
 
-rind is a fork of [Graviola](https://github.com/ctz/graviola) by Joe
-Birr-Pixton. It keeps Graviola's history so changes can be rebased or offered
-upstream, and adds what MoQ needs to drop C cryptography entirely; the plan
-lives in [`quest/`](quest/README.md).
+rind began as a fork of [Graviola](https://github.com/ctz/graviola) by Joe
+Birr-Pixton, and no longer tracks it. It adds what MoQ needs to drop C
+cryptography entirely; the plan lives in [`quest/`](quest/README.md).
 
 *High quality*: rind incorporates assembler routines
 from the [s2n-bignum] project.  These have been formally proven
@@ -50,12 +49,12 @@ but there is also a public API for general-purpose use.
 - `x86_64` requires `aes`, `ssse3`, `popcnt`, `avx`, `avx2`, `adx`, `bmi2`, and `pclmulqdq` CPU features.
   (This is most x86_64 CPUs made since around ~2014.)
 - 32-bit `arm` (tested on `armv7-unknown-linux-gnueabihf`, and built for
-  `armv7-linux-androideabi`) runs [libcrux]'s portable Rust instead, with
-  P-384 over [fiat-crypto]'s, and needs no CPU features. Where the CPU has the
-  ARMv8 crypto extension, as most 32-bit Android devices do, AES, GHASH, SHA1,
-  and SHA256 run [aws-lc]'s assembly for it instead. An Ed25519 public key
-  that is not a curve point is refused when verifying rather than when
-  decoding.
+  `armv7-linux-androideabi`) runs portable Rust instead, mostly from
+  [libcrux] (see [Algorithms](#algorithms)), and needs no CPU features. Where
+  the CPU has the ARMv8 crypto extension, as most 32-bit Android devices do,
+  AES, GHASH, SHA1, and SHA256 run [aws-lc]'s assembly for it instead. An
+  Ed25519 public key that is not a curve point is refused when verifying
+  rather than when decoding.
 
 Every operation panics on a CPU missing one of these. Call `rind::cpu::check()`
 at startup to get an error naming the missing feature instead.
@@ -82,79 +81,75 @@ cargo bench
 With [Nix](https://nixos.org), `nix develop` (or direnv) provides CI's
 toolchain, and `just check` runs CI's gate over what the branch changed.
 
-## Acknowledgements and Thanks
+## Algorithms
 
-rind incorporates significant code from other open source projects.
-We are grateful to:
+Each cell names whose code runs for that algorithm on that backend: the
+[sources](#sources) below, rind's own code, or Graviola's own Rust and
+intrinsics. A ✓ marks code its source formally verifies, to the extent
+[Sources](#sources) states; everything else is unverified. The table
+describes `main`, and changes alongside the code it describes.
 
-- [s2n-bignum]: formally verified assembler for
-    - P256, P384, P521 field arithmetic and group operations
-    - x25519
-    - ML-KEM-768 underlying arithmetic
-    - SHA-3 Keccak-f
-    - Big integer arithmetic
-- [wycheproof]: collated test vectors for all algorithms.
-- [libcrux]: portable Rust for the 32-bit `arm` backend, formally verified
-  (from HACL\*, or with hax) except its AES, which libcrux marks
-  pre-verification.
-- [fiat-crypto]: formally verified P-384 field arithmetic for the 32-bit `arm`
-  backend.
-- [aws-lc]: AES, GHASH, SHA1, and SHA256 assembly for the 32-bit `arm`
-  backend's ARMv8 crypto extension path. It is not formally verified; it is
-  the code OpenSSL, BoringSSL, and aws-lc run on 32-bit ARM.
+| Algorithm | x86_64 | aarch64 | armv7 |
+|---|---|---|---|
+| AES-128-GCM, AES-256-GCM | Graviola | Graviola | crypto extension: [aws-lc] AES and GHASH (copied), rind GCM; otherwise: [libcrux-aes] |
+| AES block (header protection), AES-CTR (SRTP) | Graviola block, rind CTR | Graviola block, rind CTR | crypto extension: [aws-lc] block and CTR (copied); otherwise: [libcrux-aes] block (copied), rind CTR |
+| ChaCha20 (header protection) | Graviola | Graviola | [HACL\*] block function ✓ (copied), rind keystream |
+| ChaCha20-Poly1305, XChaCha20-Poly1305 | Graviola | Graviola | [HACL\*] ChaCha20 block function and Poly1305 ✓; Graviola AEAD; rind HChaCha20 |
+| SHA-1 (legacy only) | rind | rind | crypto extension: [aws-lc] (copied); otherwise: rind |
+| SHA-256, SHA-384, SHA-512 | Graviola | Graviola | crypto extension: [aws-lc] SHA-256 (copied); otherwise: Graviola SHA-256; Graviola SHA-384 and SHA-512 |
+| HMAC | Graviola | Graviola | Graviola |
+| HKDF | rind | rind | rind |
+| X25519 | [s2n-bignum] ✓ | [s2n-bignum] ✓ | [HACL\*] ✓ |
+| Ed25519 | [s2n-bignum] point and scalar arithmetic ✓; Graviola EdDSA and SHA-512 | [s2n-bignum] point and scalar arithmetic ✓; Graviola EdDSA and SHA-512 | [HACL\*] ✓ |
+| P-256 ECDH, ECDSA | [s2n-bignum] field and point arithmetic ✓; Graviola scalar multiplication, table lookup, and ECDSA | [s2n-bignum] field and point arithmetic ✓; Graviola scalar multiplication, table lookup, and ECDSA | [HACL\*] ✓; Graviola ECDSA nonce |
+| P-384 ECDH, ECDSA | [s2n-bignum] field and point arithmetic ✓; Graviola scalar multiplication, table lookup, and ECDSA | [s2n-bignum] field and point arithmetic ✓; Graviola scalar multiplication, table lookup, and ECDSA | [fiat-crypto] field and scalar arithmetic ✓; rind point formulas, inversion, and table lookup; Graviola scalar multiplication and ECDSA |
+| ML-KEM-768 | [s2n-bignum] polynomial arithmetic and Keccak-f ✓; Graviola FIPS 203 and AVX-512 sampling | [s2n-bignum] polynomial arithmetic and Keccak-f ✓; Graviola FIPS 203 | [libcrux-ml-kem] ✓, except its SHA-3 |
+| RSA PKCS#1 v1.5 and PSS signatures, key generation | [s2n-bignum] bignum arithmetic ✓; Graviola exponentiation, CRT, padding, and key generation | [s2n-bignum] bignum arithmetic ✓; Graviola exponentiation, CRT, padding, and key generation | [HACL\*] bignum arithmetic and exponentiation ✓; rind CRT and key generation; Graviola padding |
 
+The tests use [Wycheproof]'s vectors.
+
+### Sources
+
+| Source | How rind uses it | License | What is verified |
+|---|---|---|---|
+| [Graviola] | copied: rind began as a copy of it, and rind-rustls of its rustls-graviola; its aarch64 ChaCha20 and its Poly1305 began as [cifra], CC0-1.0 | Apache-2.0 OR ISC OR MIT-0 | nothing |
+| rind | its own code | Apache-2.0 OR ISC OR MIT-0 | nothing |
+| [s2n-bignum] | copied: its assembly, transliterated into Rust `asm!` by `admin/parse-asm` | Apache-2.0 OR ISC OR MIT-0; its ML-KEM and aarch64 Keccak-f routines (from mlkem-native) Apache-2.0 OR ISC OR MIT; its x86_64 Keccak-f (from OpenSSL) Apache-2.0 | HOL Light proofs ([x86_64](https://github.com/awslabs/s2n-bignum/tree/main/x86/proofs), [aarch64](https://github.com/awslabs/s2n-bignum/tree/main/arm/proofs)) that each routine's object code computes its specified result for all inputs. They check s2n-bignum's own build, not rind's transliteration, and do not cover memory safety. |
+| [HACL\*] | dependency, through libcrux-hacl-rs, libcrux-p256, libcrux-ed25519, and libcrux-poly1305; copied: the ChaCha20 block function, from libcrux-chacha20poly1305 | Apache-2.0 | [F\* proofs](https://github.com/hacl-star/hacl-star) of memory safety, functional correctness, and secret independence of the F\* source. libcrux's Rust is compiled mechanically from HACL\*'s verified C, and that step is not itself verified. |
+| [libcrux-ml-kem] | dependency | Apache-2.0 | [hax and F\* proofs](https://github.com/cryspen/libcrux/blob/main/libcrux-ml-kem/proofs/verification_status.md) of panic freedom and functional correctness for its portable arithmetic, NTT, serialization, and high-level code. Its SHA-3, from libcrux-sha3, is unverified. |
+| [libcrux-aes] | dependency for AES-GCM; copied: the block cipher | Apache-2.0 | nothing: libcrux marks it pre-verification |
+| [aws-lc] | copied: its 32-bit ARM assembly for the ARMv8 crypto extension (AES, GHASH, SHA-1, SHA-256), which aws-lc takes from OpenSSL, imported into Rust `global_asm!` by `admin/import-aws-lc-arm` | Apache-2.0 | nothing: aws-lc's proofs cover its x86_64 and aarch64 code, not this |
+| [fiat-crypto] | dependency | MIT OR Apache-2.0 OR BSD-1-Clause | [Coq proofs](https://github.com/mit-plv/fiat-crypto) that each generated field operation is correct. rind's point formulas, inversion, and table lookup over them are not covered. |
+
+rind's own code is licensed under Apache-2.0 OR ISC OR MIT-0. Copied code
+keeps its source's copyright and license, which [LICENSE] lists with the
+texts they require; dependencies ship their own. Every file under
+`rind/src` names its license in a `SPDX-License-Identifier` comment, and
+files Graviola wrote keep their `Written for Graviola by ...` header.
+
+A change that copies code from a new source, or moves an algorithm to a
+different one, updates this table and [LICENSE] in the same PR.
+
+[Graviola]: https://github.com/ctz/graviola
+[cifra]: https://github.com/ctz/cifra
 [s2n-bignum]: https://github.com/awslabs/s2n-bignum
-[wycheproof]: https://github.com/C2SP/wycheproof
+[HACL\*]: https://github.com/hacl-star/hacl-star
+[libcrux-ml-kem]: https://github.com/cryspen/libcrux/tree/main/libcrux-ml-kem
+[libcrux-aes]: https://github.com/cryspen/libcrux/tree/main/crates/algorithms/aes
 [libcrux]: https://github.com/cryspen/libcrux
 [aws-lc]: https://github.com/aws/aws-lc
 [fiat-crypto]: https://github.com/mit-plv/fiat-crypto
-[SLOTHY]: https://github.com/slothy-optimizer/slothy
+[Wycheproof]: https://github.com/C2SP/wycheproof
+[LICENSE]: https://github.com/moq-dev/rind/blob/main/LICENSE
 [performance]: https://jbp.io/rind/
 [rind-rustls]: https://crates.io/crates/rind-rustls
-
-## Algorithms
-
-### Public key signatures
-
-- [x] RSA-PSS signature verification
-- [x] RSA-PKCS#1 signature verification
-- [x] RSA-PSS signing
-- [x] RSA-PKCS#1 signing
-- [x] ECDSA on P256 w/ SHA2
-- [x] ECDSA on P384 w/ SHA2
-- [x] Ed25519
-
-### Hashing
-
-- [x] SHA1, for legacy protocols only (not usable for signatures)
-- [x] SHA256
-- [x] SHA384 & SHA512
-- [x] HMAC
-- [x] HKDF
-- [x] HMAC-DRBG
-
-### Key exchange
-
-- [x] X25519
-- [x] P256
-- [x] P384
-- [x] ML-KEM-768
-
-### AEADs
-
-- [x] AES-GCM
-- [x] chacha20-poly1305 and xchacha20-poly1305
-
-### Unauthenticated ciphers
-
-- [x] AES block encryption, for QUIC header protection and DTLS 1.3 record number protection
-- [x] AES-CTR, for SRTP
-- [x] ChaCha20, for QUIC header protection and DTLS 1.3 record number protection
 
 ## Assorted technical details
 
 ### RSA
-All the arithmetic is provided by s2n-bignum.
+On x86_64 and aarch64, all the arithmetic is provided by s2n-bignum, under the
+exponentiation described below; armv7 uses HACL\*'s arithmetic and
+exponentiation instead.
 
 The RSA private operation always uses the CRT optimisation.
 
@@ -172,7 +167,8 @@ RSA key generation is currently not side-channel safe.  Avoid doing it in untrus
 physical environments.
 
 ### ECC
-All ECC field and scalar arithmetic are provided by s2n-bignum.
+On x86_64 and aarch64, all ECC field and scalar arithmetic are provided by
+s2n-bignum, and the rest of this section describes those backends.
 
 P256 base point multiplication uses a 7-bit exponent window with Booth encoding
 (this costs a 148KB constant table).
@@ -196,7 +192,7 @@ and is written in AVX2/Neon intrinsics.
 X25519 directly uses the s2n-bignum implementation.
 
 ### ML-KEM-768
-The core polynomial arithmetic -- the NTT, inverse NTT, base multiplication
+On x86_64 and aarch64, the core polynomial arithmetic -- the NTT, inverse NTT, base multiplication
 and reduction -- is provided by s2n-bignum (contributed by the mlkem-native
 developers).  The surrounding FIPS-203 construction (key generation,
 encapsulation and decapsulation) is written in Rust.
@@ -251,15 +247,3 @@ We have broadly three module layers:
 `low` must present the same interface irrespective of platform.  To this end,
 `low::generic` contains pure-rust polyfills for items we don't have assembler-
 or intrinsic-based implementations for a certain platform.
-
-## License
-
-rind incorporates and redistributes code from:
-
-- [Graviola](https://github.com/ctz/graviola): Apache-2.0 OR ISC OR MIT-0
-- [s2n-bignum]: Apache-2.0 OR ISC OR MIT-0
-
-New code written for rind is licensed under
-Apache-2.0 OR ISC OR MIT-0.
-
-Every file has a `SPDX-License-Identifier` comment.

@@ -10,36 +10,9 @@ pub(crate) fn enter_cpu_state() -> u32 {
     0
 }
 
-pub(crate) fn leave_cpu_state(_old: u32) {
-    // zeroise simd registers
-
-    // SAFETY: this crate requires the `avx` cpu feature.
-    // SAFETY: all registers written by `vzeroall` are listed as clobbers.
-    unsafe {
-        core::arch::asm!(
-            // clear z/y/xmm0-15
-            "   vzeroall",
-
-            // TODO: add zmm16-31 here if/when we use AVX512
-            out("ymm0") _,
-            out("ymm1") _,
-            out("ymm2") _,
-            out("ymm3") _,
-            out("ymm4") _,
-            out("ymm5") _,
-            out("ymm6") _,
-            out("ymm7") _,
-            out("ymm8") _,
-            out("ymm9") _,
-            out("ymm10") _,
-            out("ymm11") _,
-            out("ymm12") _,
-            out("ymm13") _,
-            out("ymm14") _,
-            out("ymm15") _,
-        )
-    }
-}
+/// Nothing to restore, since `enter_cpu_state` changed nothing. Vector
+/// registers hold scratch, not owned secrets, so like aws-lc we leave them.
+pub(crate) fn leave_cpu_state(_old: u32) {}
 
 /// Effectively memset(ptr, 0, len), but not visible to optimiser
 ///

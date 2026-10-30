@@ -93,8 +93,7 @@ pub(crate) fn enter_cpu_state() -> u32 {
     0
 }
 
-/// Nothing to clear. The crypto extension's routines leave round keys in NEON
-/// registers, which aws-lc does not clear after the same routines either.
+/// Nothing to restore, since `enter_cpu_state` changed nothing.
 pub(crate) fn leave_cpu_state(_old: u32) {}
 
 /// Effectively memset(ptr, 0, len), but not visible to optimiser

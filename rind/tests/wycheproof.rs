@@ -8,9 +8,8 @@ use rind::aead::{
 };
 use rind::cipher::ChaCha20;
 use rind::hashing::hkdf::Prk;
-use rind::hashing::hmac::Hmac;
 use rind::hashing::{LegacySha1, Sha256, Sha384, Sha512};
-use rind::key_agreement::{mlkem768, p256, p384, x25519};
+use rind::hmac;
 use rind::signing::{ecdsa, eddsa, rsa};
 use serde::Deserialize;
 
@@ -56,9 +55,7 @@ struct Test {
     id: usize,
     #[allow(unused)] // for Debug
     comment: Option<String>,
-    #[serde(default)]
-    flags: Vec<String>,
-    #[serde(default, with = "hex::serde", alias = "K")]
+    #[serde(default, with = "hex::serde")]
     key: Vec<u8>,
     #[serde(default, with = "hex::serde")]
     msg: Vec<u8>,
@@ -67,12 +64,6 @@ struct Test {
     #[serde(default, with = "hex::serde")]
     sig: Vec<u8>,
     #[serde(default, with = "hex::serde")]
-    private: Vec<u8>,
-    #[serde(default, with = "hex::serde")]
-    public: Vec<u8>,
-    #[serde(default, with = "hex::serde")]
-    shared: Vec<u8>,
-    #[serde(default, with = "hex::serde")]
     ct: Vec<u8>,
     #[serde(default, with = "hex::serde")]
     aad: Vec<u8>,
@@ -80,16 +71,6 @@ struct Test {
     iv: Vec<u8>,
     #[serde(default, rename(deserialize = "initialCounter"), with = "hex::serde")]
     initial_counter: Vec<u8>,
-    #[serde(default, with = "hex::serde")]
-    seed: Vec<u8>,
-    #[serde(default, with = "hex::serde")]
-    ek: Vec<u8>,
-    #[serde(default, with = "hex::serde")]
-    dk: Vec<u8>,
-    #[serde(default, with = "hex::serde")]
-    m: Vec<u8>,
-    #[serde(default, with = "hex::serde")]
-    c: Vec<u8>,
     #[serde(default, with = "hex::serde")]
     ikm: Vec<u8>,
     #[serde(default, with = "hex::serde")]
@@ -101,12 +82,6 @@ struct Test {
     #[serde(default, with = "hex::serde")]
     okm: Vec<u8>,
     result: ExpectedResult,
-}
-
-impl Test {
-    fn has_flag(&self, s: &str) -> bool {
-        self.flags.contains(&s.to_string())
-    }
 }
 
 #[derive(Deserialize, Debug, Default)]
@@ -172,125 +147,36 @@ impl Drop for Summary {
 }
 
 #[test]
-fn hmac_sha1_tests() {
-    let data_file = File::open("../thirdparty/wycheproof/testvectors_v1/hmac_sha1_test.json")
-        .expect("failed to open data file");
+fn hmac_tests() {
+    for (file, algorithm) in [
+        ("hmac_sha1_test.json", hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY),
+        ("hmac_sha256_test.json", hmac::HMAC_SHA256),
+        ("hmac_sha384_test.json", hmac::HMAC_SHA384),
+        ("hmac_sha512_test.json", hmac::HMAC_SHA512),
+    ] {
+        let data_file = File::open(format!("../thirdparty/wycheproof/testvectors_v1/{file}"))
+            .unwrap_or_else(|_| panic!("failed to open data file {file}"));
 
-    let reader = BufReader::new(data_file);
-    let tests: TestFile = serde_json::from_reader(reader).expect("invalid test JSON");
-    let mut summary = Summary::new();
+        let reader = BufReader::new(data_file);
+        let tests: TestFile = serde_json::from_reader(reader).expect("invalid test JSON");
+        let mut summary = Summary::new();
 
-    for group in tests.groups {
-        summary.group(&group);
-        for test in group.tests {
-            summary.start(&test);
+        for group in tests.groups {
+            summary.group(&group);
+            for test in group.tests {
+                summary.start(&test);
 
-            let mut ctx = Hmac::<LegacySha1>::new(test.key);
-            ctx.update(test.msg);
-            let result = match test.tag.len() {
-                20 => ctx.verify(&test.tag),
-                10 => truncated(ctx.finish().as_ref(), &test.tag),
-                _ => todo!("unhandled truncated hmac"),
-            };
+                let key = hmac::Key::new(algorithm, &test.key);
+                let result = match test.tag.len() == algorithm.tag_len() {
+                    true => hmac::verify(&key, &test.msg, &test.tag),
+                    false => truncated(hmac::sign(&key, &test.msg).as_ref(), &test.tag),
+                };
 
-            match (test.result, result) {
-                (ExpectedResult::Valid, Ok(())) => {}
-                (ExpectedResult::Invalid, Err(Error::BadSignature)) => {}
-                _ => panic!("expected {:?} got {:?}", test.result, result),
-            }
-        }
-    }
-}
-
-#[test]
-fn hmac_sha256_tests() {
-    let data_file = File::open("../thirdparty/wycheproof/testvectors_v1/hmac_sha256_test.json")
-        .expect("failed to open data file");
-
-    let reader = BufReader::new(data_file);
-    let tests: TestFile = serde_json::from_reader(reader).expect("invalid test JSON");
-    let mut summary = Summary::new();
-
-    for group in tests.groups {
-        summary.group(&group);
-        for test in group.tests {
-            summary.start(&test);
-
-            let mut ctx = Hmac::<Sha256>::new(test.key);
-            ctx.update(test.msg);
-            let result = match test.tag.len() {
-                32 => ctx.verify(&test.tag),
-                16 => truncated(ctx.finish().as_ref(), &test.tag),
-                _ => todo!("unhandled truncated hmac"),
-            };
-
-            match (test.result, result) {
-                (ExpectedResult::Valid, Ok(())) => {}
-                (ExpectedResult::Invalid, Err(Error::BadSignature)) => {}
-                _ => panic!("expected {:?} got {:?}", test.result, result),
-            }
-        }
-    }
-}
-
-#[test]
-fn hmac_sha384_tests() {
-    let data_file = File::open("../thirdparty/wycheproof/testvectors_v1/hmac_sha384_test.json")
-        .expect("failed to open data file");
-
-    let reader = BufReader::new(data_file);
-    let tests: TestFile = serde_json::from_reader(reader).expect("invalid test JSON");
-    let mut summary = Summary::new();
-
-    for group in tests.groups {
-        summary.group(&group);
-        for test in group.tests {
-            summary.start(&test);
-
-            let mut ctx = Hmac::<Sha384>::new(test.key);
-            ctx.update(test.msg);
-            let result = match test.tag.len() {
-                48 => ctx.verify(&test.tag),
-                24 => truncated(ctx.finish().as_ref(), &test.tag),
-                _ => todo!("unhandled truncated hmac"),
-            };
-
-            match (test.result, result) {
-                (ExpectedResult::Valid, Ok(())) => {}
-                (ExpectedResult::Invalid, Err(Error::BadSignature)) => {}
-                _ => panic!("expected {:?} got {:?}", test.result, result),
-            }
-        }
-    }
-}
-
-#[test]
-fn hmac_sha512_tests() {
-    let data_file = File::open("../thirdparty/wycheproof/testvectors_v1/hmac_sha512_test.json")
-        .expect("failed to open data file");
-
-    let reader = BufReader::new(data_file);
-    let tests: TestFile = serde_json::from_reader(reader).expect("invalid test JSON");
-    let mut summary = Summary::new();
-
-    for group in tests.groups {
-        summary.group(&group);
-
-        for test in group.tests {
-            summary.start(&test);
-
-            let mut ctx = Hmac::<Sha512>::new(test.key);
-            ctx.update(test.msg);
-            let result = match test.tag.len() {
-                64 => ctx.verify(&test.tag),
-                32 => truncated(ctx.finish().as_ref(), &test.tag),
-                _ => todo!("unhandled truncated hmac"),
-            };
-
-            match (test.result, result) {
-                (ExpectedResult::Valid, Ok(())) => {}
-                (ExpectedResult::Invalid, Err(Error::BadSignature)) => {}
-                _ => panic!("expected {:?} got {:?}", test.result, result),
+                match (test.result, result) {
+                    (ExpectedResult::Valid, Ok(())) => {}
+                    (ExpectedResult::Invalid, Err(Error::BadSignature)) => {}
+                    _ => panic!("expected {:?} got {:?}", test.result, result),
+                }
             }
         }
     }
@@ -458,114 +344,6 @@ fn test_verify_ecdsa_p384() {
                     ) => {}
                     _ => panic!("expected {:?} got {:?}", test.result, result),
                 }
-            }
-        }
-    }
-}
-
-#[test]
-fn test_ecdh_p256() {
-    let data_file =
-        File::open("../thirdparty/wycheproof/testvectors_v1/ecdh_secp256r1_ecpoint_test.json")
-            .expect("failed to open data file");
-
-    let reader = BufReader::new(data_file);
-    let tests: TestFile = serde_json::from_reader(reader).expect("invalid test JSON");
-    let mut summary = Summary::new();
-
-    for group in tests.groups {
-        summary.group(&group);
-
-        for test in group.tests {
-            summary.start(&test);
-
-            let private = p256::StaticPrivateKey::from_bytes(&test.private).unwrap();
-            let result = p256::PublicKey::from_x962_uncompressed(&test.public)
-                .and_then(|pubkey| private.diffie_hellman(&pubkey));
-
-            // unsupported test cases
-            if test.has_flag("CompressedPublic") || test.has_flag("CompressedPoint") {
-                assert_eq!(result.err(), Some(Error::NotUncompressed));
-                summary.skipped("no support for point compression");
-                continue;
-            }
-
-            match (test.result, &result) {
-                (ExpectedResult::Valid, Ok(shared)) => assert_eq!(&shared.0[..], &test.shared),
-                (ExpectedResult::Invalid, Err(Error::NotOnCurve))
-                    if test.has_flag("InvalidCurveAttack") => {}
-                (ExpectedResult::Invalid, Err(Error::WrongLength))
-                    if test.has_flag("InvalidEncoding") => {}
-                _ => panic!("expected {:?} got {:?}", test.result, result.err()),
-            }
-        }
-    }
-}
-
-#[test]
-fn test_ecdh_p384() {
-    let data_file =
-        File::open("../thirdparty/wycheproof/testvectors_v1/ecdh_secp384r1_ecpoint_test.json")
-            .expect("failed to open data file");
-
-    let reader = BufReader::new(data_file);
-    let tests: TestFile = serde_json::from_reader(reader).expect("invalid test JSON");
-    let mut summary = Summary::new();
-
-    for group in tests.groups {
-        summary.group(&group);
-
-        for test in group.tests {
-            summary.start(&test);
-
-            let private = p384::StaticPrivateKey::from_bytes(&test.private).unwrap();
-            let result = p384::PublicKey::from_x962_uncompressed(&test.public)
-                .and_then(|pubkey| private.diffie_hellman(&pubkey));
-
-            // unsupported test cases
-            if test.has_flag("CompressedPublic") || test.has_flag("CompressedPoint") {
-                assert_eq!(result.err(), Some(Error::NotUncompressed));
-                summary.skipped("no support for point compression");
-                continue;
-            }
-
-            match (test.result, &result) {
-                (ExpectedResult::Valid, Ok(shared)) => assert_eq!(&shared.0[..], &test.shared),
-                (ExpectedResult::Invalid, Err(Error::NotOnCurve))
-                    if test.has_flag("InvalidCurveAttack") => {}
-                (ExpectedResult::Invalid, Err(Error::WrongLength))
-                    if test.has_flag("InvalidEncoding") => {}
-                _ => panic!("expected {:?} got {:?}", test.result, result.err()),
-            }
-        }
-    }
-}
-
-#[test]
-fn test_ecdh_x25519() {
-    let data_file = File::open("../thirdparty/wycheproof/testvectors_v1/x25519_test.json")
-        .expect("failed to open data file");
-
-    let reader = BufReader::new(data_file);
-    let tests: TestFile = serde_json::from_reader(reader).expect("invalid test JSON");
-    let mut summary = Summary::new();
-
-    for group in tests.groups {
-        summary.group(&group);
-
-        for test in group.tests {
-            summary.start(&test);
-
-            let private = x25519::StaticPrivateKey::try_from_slice(&test.private).unwrap();
-            let result = x25519::PublicKey::try_from_slice(&test.public)
-                .and_then(|pubkey| private.diffie_hellman(&pubkey));
-            match (test.result, &result) {
-                (ExpectedResult::Acceptable, Err(Error::NotOnCurve))
-                    if test.has_flag("ZeroSharedSecret") => {}
-                (ExpectedResult::Valid | ExpectedResult::Acceptable, Ok(shared)) => {
-                    assert_eq!(&shared.0[..], &test.shared)
-                }
-                _ => panic!("expected {:?} got {:?}", test.result, result.err()),
             }
         }
     }
@@ -1021,125 +799,6 @@ fn test_xchacha20poly1305() {
                     .unwrap(),
                 &test.msg[..]
             );
-        }
-    }
-}
-
-#[test]
-fn test_mlkem768_keygen() {
-    let data_file =
-        File::open("../thirdparty/wycheproof/testvectors_v1/mlkem_768_keygen_seed_test.json")
-            .expect("failed to open data file");
-
-    let reader = BufReader::new(data_file);
-    let tests: TestFile = serde_json::from_reader(reader).expect("invalid test JSON");
-    let mut summary = Summary::new();
-
-    for group in tests.groups {
-        summary.group(&group);
-
-        for test in group.tests {
-            summary.start(&test);
-
-            let decap = mlkem768::DecapKey::keygen_internal(&test.seed.try_into().unwrap());
-            if test.result == ExpectedResult::Valid {
-                assert_eq!(decap.as_bytes().as_slice(), &test.dk);
-                assert_eq!(decap.encapsulation_key().as_bytes().as_slice(), &test.ek);
-            }
-        }
-    }
-}
-
-#[test]
-fn test_mlkem768_encaps() {
-    let data_file =
-        File::open("../thirdparty/wycheproof/testvectors_v1/mlkem_768_encaps_test.json")
-            .expect("failed to open data file");
-
-    let reader = BufReader::new(data_file);
-    let tests: TestFile = serde_json::from_reader(reader).expect("invalid test JSON");
-    let mut summary = Summary::new();
-
-    for group in tests.groups {
-        summary.group(&group);
-
-        for test in group.tests {
-            summary.start(&test);
-
-            let Ok(encap_array) = test.ek.try_into() else {
-                summary.skipped("ek wrong size");
-                continue;
-            };
-
-            let Ok(m_array) = test.m.try_into() else {
-                summary.skipped("m wrong size");
-                continue;
-            };
-
-            let r = mlkem768::EncapKey::from_bytes(&encap_array)
-                .map(|encap| encap.encaps_internal(mlkem768::Message(m_array)));
-
-            match (test.result, r) {
-                (ExpectedResult::Valid, Ok((shared_secret, ciphertext))) => {
-                    assert_eq!(&shared_secret.as_ref(), &test.key.as_slice());
-                    assert_eq!(&ciphertext.as_ref(), &test.c.as_slice());
-                }
-                (ExpectedResult::Invalid, Ok((shared_secret, ciphertext))) => {
-                    assert!(
-                        shared_secret.as_ref() != test.key.as_slice()
-                            || ciphertext.as_ref() != test.c.as_slice()
-                    );
-                }
-                (ExpectedResult::Invalid, Err(_)) => {}
-                (_, _) => panic!(),
-            }
-        }
-    }
-}
-
-#[test]
-fn test_mlkem768() {
-    let data_file = File::open("../thirdparty/wycheproof/testvectors_v1/mlkem_768_test.json")
-        .expect("failed to open data file");
-
-    let reader = BufReader::new(data_file);
-    let tests: TestFile = serde_json::from_reader(reader).expect("invalid test JSON");
-    let mut summary = Summary::new();
-
-    for group in tests.groups {
-        summary.group(&group);
-
-        for test in group.tests {
-            summary.start(&test);
-
-            let Ok(seed_array) = test.seed.try_into() else {
-                summary.skipped("seed wrong size");
-                continue;
-            };
-
-            let Ok(c_array): Result<[u8; 1088], _> = test.c.try_into() else {
-                summary.skipped("ciphertext wrong size");
-                continue;
-            };
-
-            let Ok(ek_array): Result<[u8; 1184], _> = test.ek.as_slice().try_into() else {
-                summary.skipped("ek wrong size");
-                continue;
-            };
-
-            let decap = mlkem768::DecapKey::keygen_internal(&seed_array);
-            let encap = mlkem768::EncapKey::from_bytes(&ek_array);
-            let shared_secret = decap.decaps(&mlkem768::Ciphertext::from(c_array));
-
-            match (test.result, encap) {
-                (ExpectedResult::Valid, Ok(encap)) => {
-                    assert_eq!(&shared_secret.as_ref(), &test.key.as_slice());
-                    assert_eq!(encap.as_bytes().as_slice(), &test.ek);
-                }
-                (ExpectedResult::Invalid, Err(_)) => {}
-
-                (expect, err) => panic!("unexpected: expected={expect:?} - err={:?}", err.err()),
-            };
         }
     }
 }

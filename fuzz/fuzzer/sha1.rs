@@ -2,7 +2,6 @@
 
 use aws_lc_rs::{digest, hmac};
 use libfuzzer_sys::{arbitrary, arbitrary::Arbitrary, fuzz_target};
-use rind::hashing;
 
 fuzz_target!(|op: Operation| {
     match op {
@@ -30,7 +29,10 @@ fuzz_target!(|op: Operation| {
         Operation::HmacSha1 { key, steps } => {
             let mut left =
                 hmac::Context::with_key(&hmac::Key::new(hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY, &key));
-            let mut right = hashing::hmac::Hmac::<hashing::LegacySha1>::new(key);
+            let mut right = rind::hmac::Context::with_key(&rind::hmac::Key::new(
+                rind::hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY,
+                &key,
+            ));
 
             for s in steps {
                 match s {
@@ -46,7 +48,7 @@ fuzz_target!(|op: Operation| {
             }
 
             let left = left.sign();
-            let right = right.finish();
+            let right = right.sign();
             assert_eq!(left.as_ref(), right.as_ref());
         }
     }
