@@ -43,11 +43,12 @@ Targets, refused rather than falling back:
   instead of panicking on its first handshake. Hosts missing a feature are refused, as are
   aarch64 boards without crypto extensions (Raspberry Pi 4, CM4, Zero 2 W),
   which run the armv7 build instead.
-- armv7 (Android and Linux gnueabihf) runs libcrux's verified portable Rust,
-  with P-384 over fiat-crypto's arithmetic. armv7 is a phone client or a small
-  board publishing a few Mbps, so portable AEAD speed is enough; importing
-  aws-lc's armv7 assembly and porting its C was rejected as far more
-  unverified code for throughput the role does not need.
+- armv7 (Android and Linux gnueabihf) runs libcrux's portable Rust, with
+  P-384 over fiat-crypto's arithmetic. Porting aws-lc's C was rejected as far
+  more unverified code for throughput the role does not need. Only its AES,
+  GHASH, and SHA assembly for the ARMv8 crypto extension is imported, for CPUs
+  that have it (maintainer, 2026-10-30, in
+  [moq-dev/rind#84](https://github.com/moq-dev/rind/pull/84)).
 - armv7 runs every operation the `rind-*` adapters and MoQ use, behind the
   same API, so no adapter or MoQ feature carries a per-target exclusion.
   Operations with no consumer, SHA-3 and SHAKE, are not built there
@@ -71,7 +72,6 @@ RustCrypto dependency.
 - [libcrux releases its bignum constant-time fix](/quest/m1/moq/libcrux-ct-fixes.md) - waiting on libcrux's fix, then dropping its armv7 ctgrind suppression
 - [armv7 ctgrind on PRs](/quest/m1/moq/armv7-ctgrind-pr.md) - the release job gates PRs if it is fast enough
 - [Publish rind-instant-acme](/quest/m1/moq/instant-acme-publish.md) - switch to the 0.9 release and publish
-- [Attribute every algorithm's source](/quest/m1/moq/attribution.md) - the README credits each algorithm's source and marks the formally verified ones
 - [Leave graviola's fork network](/quest/m1/moq/detach-fork.md) - waiting on the maintainer to detach the GitHub fork
 - [Learn from aws-lc-rs's API](/quest/m1/moq/api/README.md) - aws-lc-rs-shaped `aead`, `agreement`, `kem`, `signature`, `digest`, `hmac`, `hkdf`, and `rand` before the first release
 - [Release](/quest/m1/moq/release.md) - publish the rind release MoQ switches to

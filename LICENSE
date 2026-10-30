@@ -1,17 +1,100 @@
 rind, a fork of Graviola, is distributed under the following three licenses:
 
 - Apache License version 2.0.
-- MIT license.
 - ISC license.
+- MIT-0 license.
 
 You may use this software under the terms of any of these licenses,
-at your option.
+at your option, except for the third-party code listed below, which
+keeps the license given for it.
 
 Contributions are made under these licenses.
 
 --
 
-SPDX-License-Identifier: Apache-2.0 OR ISC or MIT-0
+Third-party code
+
+rind copies code from the projects below. Each copied file keeps its
+source's copyright lines and names its license in an
+SPDX-License-Identifier comment. The license texts follow this list.
+README.md's Sources table names the same projects: a change that copies
+code from a new project updates both.
+
+Graviola <https://github.com/ctz/graviola>
+
+  What: rind began as a copy of Graviola, and rind-rustls as a copy of
+  its rustls-graviola. Files Graviola wrote carry a "Written for
+  Graviola by ..." header. Its aarch64 ChaCha20 and its Poly1305 began
+  as cifra <https://github.com/ctz/cifra>, by the same author under
+  CC0-1.0.
+  Copyright 2024 Joe Birr-Pixton
+  License: Apache-2.0 OR ISC OR MIT-0, the same choice as rind's own code.
+  Graviola has no NOTICE file.
+
+s2n-bignum <https://github.com/awslabs/s2n-bignum>
+
+  What: the files under rind/src/low/x86_64 and rind/src/low/aarch64
+  that begin "generated source. do not edit.", which admin/parse-asm
+  transliterates from s2n-bignum's assembly.
+  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+  License: Apache-2.0 OR ISC OR MIT-0, except for:
+
+  - The ML-KEM routines (mlkem_*.rs) and the aarch64 Keccak-f routines
+    (sha3_keccak_f1600.rs, sha3_keccak_f1600_alt.rs,
+    sha3_keccak2_f1600.rs), which s2n-bignum takes from mlkem-native
+    <https://github.com/pq-code-package/mlkem-native>.
+    License: Apache-2.0 OR ISC OR MIT. Further copyright lines:
+      Copyright (c) 2024 The mlkem-native project authors
+      Copyright (c) 2021-2022 Arm Limited
+      Copyright (c) 2022 Arm Limited
+      Copyright (c) 2022 Hanno Becker
+      Copyright (c) 2022 Matthias Kannwischer
+      Copyright (c) 2023 Amin Abdulrahman, Matthias Kannwischer
+
+  - The x86_64 Keccak-f routine (x86_64/sha3_keccak_f1600.rs), which
+    s2n-bignum takes from OpenSSL <https://github.com/openssl/openssl>,
+    written by Andy Polyakov.
+    License: Apache-2.0. Further copyright line:
+      Copyright (c) 2017-2024 The OpenSSL Project Authors
+
+  s2n-bignum's NOTICE file reads:
+    Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+libcrux <https://github.com/cryspen/libcrux>
+
+  What: rind/src/low/arm/aes.rs, the bitsliced AES block cipher and key
+  expansion from libcrux-aes 0.0.10.
+  Copyright 2023 Cryspen Sarl
+  License: Apache-2.0. libcrux has no NOTICE file.
+
+HACL* <https://github.com/hacl-star/hacl-star>, through libcrux
+
+  What: rind/src/low/arm/chacha20.rs, the ChaCha20 block function that
+  libcrux-chacha20poly1305 0.0.10 compiles from HACL*'s Hacl_Chacha20.
+  Copyright (c) 2016-2022 INRIA, CMU and Microsoft Corporation
+  Copyright (c) 2022-2023 HACL* Contributors
+  Copyright 2023 Cryspen Sarl
+  License: Apache-2.0. Neither project has a NOTICE file.
+
+aws-lc <https://github.com/aws/aws-lc>, from OpenSSL
+
+  What: the files under rind/src/low/arm/aws_lc, which
+  admin/import-aws-lc-arm takes from aws-lc's pregenerated 32-bit ARM
+  assembly at commit 91c93a8eb860e51482a871a8772cb9b1b310baea:
+  aesv8-armx.s (AES), ghashv8-armx.s (GHASH), sha1-armv4-large.s
+  (SHA1), and sha256-armv4.s (SHA256), from Perl scripts written by
+  Andy Polyakov for OpenSSL.
+  Copyright 2007-2016 The OpenSSL Project Authors. All Rights Reserved.
+  Copyright 2014-2016 The OpenSSL Project Authors. All Rights Reserved.
+  Copyright 2014-2020 The OpenSSL Project Authors. All Rights Reserved.
+  License: Apache-2.0.
+  aws-lc's NOTICE file reads:
+    AWS-LC
+    Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+--
+
+SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 
 Apache 2.0 license
 -------------------------------------
@@ -199,6 +282,13 @@ ISC license
 -------------------------------------
 
 Copyright 2024 Joe Birr-Pixton
+Copyright Amazon.com, Inc. or its affiliates.
+Copyright (c) 2024 The mlkem-native project authors
+Copyright (c) 2021-2022 Arm Limited
+Copyright (c) 2022 Arm Limited
+Copyright (c) 2022 Hanno Becker
+Copyright (c) 2022 Matthias Kannwischer
+Copyright (c) 2023 Amin Abdulrahman, Matthias Kannwischer
 
 Permission to use, copy, modify, and/or distribute this software for any
 purpose with or without fee is hereby granted, provided that the above
@@ -217,6 +307,7 @@ MIT-0 license
 -------------------------------------
 
 Copyright 2024 Joe Birr-Pixton
+Copyright 2021-2024 Amazon.com, Inc. or its affiliates.
 
 Permission is hereby granted, free of charge, to any person obtaining a
 copy of this software and associated documentation files (the "Software"),
@@ -232,3 +323,33 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
+
+
+MIT license
+-------------------------------------
+
+Copyright Amazon.com, Inc. or its affiliates.
+Copyright (c) 2024 The mlkem-native project authors
+Copyright (c) 2021-2022 Arm Limited
+Copyright (c) 2022 Arm Limited
+Copyright (c) 2022 Hanno Becker
+Copyright (c) 2022 Matthias Kannwischer
+Copyright (c) 2023 Amin Abdulrahman, Matthias Kannwischer
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

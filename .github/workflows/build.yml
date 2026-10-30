@@ -72,8 +72,9 @@ jobs:
           # test avx2/aesni aes-gcm & ML-KEM without avx512
           env RIND_CPU_DISABLE_avx512bw=1 RIND_CPU_DISABLE_avx512f=1 RIND_CPU_DISABLE_vaes=1 cargo test
 
-  # 32-bit ARM runs the libcrux backend. Only rind and its adapters build
-  # there: the bench and fuzz crates need C libraries for the host arch.
+  # 32-bit ARM runs libcrux, or aws-lc's assembly for the crypto extension.
+  # Only rind and its adapters build there: the bench and fuzz crates need C
+  # libraries for the host arch.
   armv7:
     name: armv7 (${{ matrix.target }})
     strategy:
@@ -115,9 +116,22 @@ jobs:
         run: cargo clippy -p rind -p rind-rustls -p rind-jsonwebtoken -p rind-object-store -p rind-rcgen -p rind-dimpl -p rind-str0m -p rind-instant-acme --target ${{ matrix.target }} ${{ matrix.test && '--all-targets' || '' }} -- --deny warnings
 
       # Under qemu, so optimised, but keeping the checks a debug build has.
-      - name: Run tests
+      # `max` has the ARMv8 crypto extension; the Cortex-A15 is ARMv7 with
+      # NEON but without it, so this covers both of rind's armv7 paths.
+      - name: Run tests (crypto extension)
         if: matrix.test
         run: cargo test -p rind -p rind-rustls -p rind-jsonwebtoken -p rind-object-store -p rind-rcgen -p rind-dimpl -p rind-str0m -p rind-instant-acme --release --target ${{ matrix.target }}
         env:
           CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: true
           CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS: true
+          QEMU_CPU: max
+          RIND_TEST_ARM_CRYPTO_EXT: 1
+
+      - name: Run tests (portable)
+        if: matrix.test
+        run: cargo test -p rind -p rind-rustls -p rind-jsonwebtoken -p rind-object-store -p rind-rcgen -p rind-dimpl -p rind-str0m -p rind-instant-acme --release --target ${{ matrix.target }}
+        env:
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: true
+          CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS: true
+          QEMU_CPU: cortex-a15
+          RIND_TEST_ARM_CRYPTO_EXT: 0
