@@ -7,7 +7,7 @@ use aws_lc_rs::signature::{
 };
 use jsonwebtoken::crypto::aws_lc;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey};
-use rind::signing::{ecdsa, eddsa, rsa};
+use rind::signature::{self, KeyPair as _};
 
 pub const HMAC: [Algorithm; 3] = [Algorithm::HS256, Algorithm::HS384, Algorithm::HS512];
 pub const RSA: [Algorithm; 6] = [
@@ -61,48 +61,39 @@ pub fn all() -> Vec<Key> {
         ));
     }
 
-    let p256 = ecdsa::SigningKey::<ecdsa::P256>::generate().unwrap();
-    keys.push(Key::new(
-        Algorithm::ES256,
-        "rind",
-        EncodingKey::from_ec_der(p256.to_pkcs8_der(&mut [0; 256]).unwrap()),
-        DecodingKey::from_ec_der(
-            &p256
-                .public_key()
-                .unwrap()
-                .public_key
-                .as_bytes_uncompressed(),
+    for (algorithm, signing) in [
+        (
+            Algorithm::ES256,
+            &signature::ECDSA_P256_SHA256_FIXED_SIGNING,
         ),
-    ));
+        (
+            Algorithm::ES384,
+            &signature::ECDSA_P384_SHA384_FIXED_SIGNING,
+        ),
+    ] {
+        let pair = signature::EcdsaKeyPair::generate(signing).unwrap();
+        keys.push(Key::new(
+            algorithm,
+            "rind",
+            EncodingKey::from_ec_der(pair.to_pkcs8_der(&mut [0; 256]).unwrap()),
+            DecodingKey::from_ec_der(pair.public_key().as_ref()),
+        ));
+    }
     keys.push(aws_lc_ecdsa(
         Algorithm::ES256,
         &ECDSA_P256_SHA256_FIXED_SIGNING,
-    ));
-
-    let p384 = ecdsa::SigningKey::<ecdsa::P384>::generate().unwrap();
-    keys.push(Key::new(
-        Algorithm::ES384,
-        "rind",
-        EncodingKey::from_ec_der(p384.to_pkcs8_der(&mut [0; 256]).unwrap()),
-        DecodingKey::from_ec_der(
-            &p384
-                .public_key()
-                .unwrap()
-                .public_key
-                .as_bytes_uncompressed(),
-        ),
     ));
     keys.push(aws_lc_ecdsa(
         Algorithm::ES384,
         &ECDSA_P384_SHA384_FIXED_SIGNING,
     ));
 
-    let ed25519 = eddsa::Ed25519SigningKey::generate().unwrap();
+    let ed25519 = signature::Ed25519KeyPair::generate().unwrap();
     keys.push(Key::new(
         Algorithm::EdDSA,
         "rind",
         EncodingKey::from_ed_der(ed25519.to_pkcs8_der(&mut [0; 128]).unwrap()),
-        DecodingKey::from_ed_der(&ed25519.public_key().as_bytes()),
+        DecodingKey::from_ed_der(ed25519.public_key().as_ref()),
     ));
     // aws-lc-rs writes PKCS#8 v2, which carries the public key too.
     let pkcs8 = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new()).unwrap();
@@ -156,11 +147,10 @@ pub fn rsa_key() -> (&'static [u8], &'static [u8]) {
     const PRIVATE: &[u8] = include_bytes!("../../../rind/src/high/rsa/rsa2048.der");
     static PUBLIC: OnceLock<Vec<u8>> = OnceLock::new();
     let public = PUBLIC.get_or_init(|| {
-        rsa::SigningKey::from_pkcs1_der(PRIVATE)
+        signature::RsaKeyPair::from_der(PRIVATE)
             .unwrap()
             .public_key()
-            .to_pkcs1_der(&mut [0; 512])
-            .unwrap()
+            .as_ref()
             .to_vec()
     });
     (PRIVATE, public)

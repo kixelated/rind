@@ -2,9 +2,7 @@
 
 use aws_lc_rs::signature::{ECDSA_P256_SHA256_FIXED, UnparsedPublicKey};
 use instant_acme::{CryptoProvider, Error, JwkThumbFields, SigningKey};
-use rind::hashing::Sha256;
-use rind::signing::ecdsa::{self, P256, P384};
-use rind::signing::eddsa::Ed25519SigningKey;
+use rind::signature::{ECDSA_P384_SHA384_FIXED_SIGNING, EcdsaKeyPair, Ed25519KeyPair};
 use rustls_pki_types::PrivatePkcs8KeyDer;
 
 const RIND: &CryptoProvider = &rind_instant_acme::DEFAULT_PROVIDER;
@@ -82,9 +80,8 @@ fn signatures_verify_across_providers() {
         .expect_err("rind's signature binds the message");
 
     let signature = theirs.sign(message).unwrap();
-    ecdsa::VerifyingKey::<P256>::from_x962_uncompressed(&point)
-        .unwrap()
-        .verify::<Sha256>(&[message], &signature)
+    rind::signature::UnparsedPublicKey::new(&rind::signature::ECDSA_P256_SHA256_FIXED, &point)
+        .verify(message, &signature)
         .expect("aws-lc-rs's signature verifies on rind");
 }
 
@@ -92,12 +89,12 @@ fn signatures_verify_across_providers() {
 fn malformed_keys_are_rejected_by_both_providers() {
     let (_, p256) = RIND.key_provider.generate_key().unwrap();
     let p256 = p256.secret_pkcs8_der();
-    let p384 = ecdsa::SigningKey::<P384>::generate()
+    let p384 = EcdsaKeyPair::generate(&ECDSA_P384_SHA384_FIXED_SIGNING)
         .unwrap()
         .to_pkcs8_der(&mut [0; 256])
         .unwrap()
         .to_vec();
-    let ed25519 = Ed25519SigningKey::generate()
+    let ed25519 = Ed25519KeyPair::generate()
         .unwrap()
         .to_pkcs8_der(&mut [0; 128])
         .unwrap()

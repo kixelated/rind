@@ -9,7 +9,7 @@
 //! To make this work deterministically, we depend on two things:
 //!  1. The test checks for zeroisation after dropping
 //!     a value but before deallocating it. See the function
-//!     `check_zeroed_on_drop_bounded` for details.
+//!     `check_zeroed_on_drop` for details.
 //!  2. The types whose zeroization is being tested must be
 //!     _completely_ filled with zero bytes upon drop, including
 //!     any padding bytes. If you have a type like this:
@@ -50,38 +50,36 @@ use std::alloc::{Layout, dealloc};
 
 #[test]
 fn rsa() {
-    use rind::signing::rsa;
-    let rsa_priv =
-        rsa::SigningKey::from_pkcs1_der(include_bytes!("../src/high/rsa/rsa8192.der")).unwrap();
-    let pub_key_size = size_of::<rsa::VerifyingKey>();
-    check_zeroed_on_drop_bounded(Box::pin(rsa_priv), Bounds::SkipPrefix(pub_key_size));
+    use rind::signature::RsaKeyPair;
+    let rsa = RsaKeyPair::from_der(include_bytes!("../src/high/rsa/rsa8192.der")).unwrap();
+    check_zeroed_on_drop(Box::pin(rsa));
 }
 
 #[test]
-fn ecdsa_p256() {
-    use rind::signing::ecdsa::*;
-    let ecdsa =
-        SigningKey::<P256>::from_pkcs8_der(include_bytes!("../src/high/ecdsa/secp256r1.pkcs8.der"))
-            .unwrap();
-    check_zeroed_on_drop(Box::pin(ecdsa));
-}
-
-#[test]
-fn ecdsa_p384() {
-    use rind::signing::ecdsa::*;
-    let ecdsa =
-        SigningKey::<P384>::from_pkcs8_der(include_bytes!("../src/high/ecdsa/secp384r1.pkcs8.der"))
-            .unwrap();
-    check_zeroed_on_drop(Box::pin(ecdsa));
+fn ecdsa() {
+    use rind::signature::*;
+    for (algorithm, pkcs8) in [
+        (
+            &ECDSA_P256_SHA256_ASN1_SIGNING,
+            &include_bytes!("../src/high/ecdsa/secp256r1.pkcs8.der")[..],
+        ),
+        (
+            &ECDSA_P384_SHA384_ASN1_SIGNING,
+            &include_bytes!("../src/high/ecdsa/secp384r1.pkcs8.der")[..],
+        ),
+    ] {
+        check_zeroed_on_drop(Box::pin(
+            EcdsaKeyPair::from_pkcs8(algorithm, pkcs8).unwrap(),
+        ));
+    }
 }
 
 #[test]
 fn ed25519() {
-    use rind::signing::eddsa::*;
-    let ed25519 = Ed25519SigningKey::from_pkcs8_der(include_bytes!(
-        "../src/high/asn1/testdata/ed25519-p8v2.bin"
-    ))
-    .unwrap();
+    use rind::signature::Ed25519KeyPair;
+    let ed25519 =
+        Ed25519KeyPair::from_pkcs8(include_bytes!("../src/high/asn1/testdata/ed25519-p8v2.bin"))
+            .unwrap();
     check_zeroed_on_drop(Box::pin(ed25519));
 }
 
@@ -102,11 +100,13 @@ fn mlkem768() {
 
 #[test]
 fn hkdf() {
-    use rind::hashing::hkdf::Prk;
-    use rind::hashing::{Sha256, Sha512};
+    use rind::hkdf::*;
 
-    check_zeroed_on_drop(Box::pin(Prk::<Sha256>::extract(b"salt", b"ikm")));
-    check_zeroed_on_drop(Box::pin(Prk::<Sha512>::extract(b"salt", b"ikm")));
+    for algorithm in [HKDF_SHA256, HKDF_SHA384, HKDF_SHA512] {
+        let salt = Salt::new(algorithm, b"salt");
+        check_zeroed_on_drop(Box::pin(salt.extract(b"ikm")));
+        check_zeroed_on_drop(Box::pin(salt));
+    }
 }
 
 #[test]
@@ -153,10 +153,6 @@ fn cipher() {
 }
 
 fn check_zeroed_on_drop<T: Unpin>(value: Pin<Box<T>>) {
-    check_zeroed_on_drop_bounded(value, Bounds::All)
-}
-
-fn check_zeroed_on_drop_bounded<T: Unpin>(value: Pin<Box<T>>, bounds: Bounds) {
     let ptr = value.deref() as *const T as *const u8;
     let len = size_of::<T>();
     assert_ne!(len, 0);
@@ -189,7 +185,7 @@ fn check_zeroed_on_drop_bounded<T: Unpin>(value: Pin<Box<T>>, bounds: Bounds) {
         dealloc(addr as *mut u8, Layout::new::<T>());
     }
 
-    for i in bounds.start()..bounds.end(len) {
+    for i in HEAP_FREELIST_ZONE.0..len - HEAP_FREELIST_ZONE.1 {
         if after_drop[i] != 0x00 {
             println!("before_drop: {before_drop:02x?}");
             println!("after_drop: {after_drop:02x?}");
@@ -210,27 +206,6 @@ fn read_into_vec(ptr: *const u8, len: usize) -> Vec<u8> {
         out.push(byte);
     }
     out
-}
-
-enum Bounds {
-    All,
-    SkipPrefix(usize),
-}
-
-impl Bounds {
-    fn start(&self) -> usize {
-        match self {
-            Bounds::All => HEAP_FREELIST_ZONE.0,
-            Bounds::SkipPrefix(prefix) => {
-                assert!(HEAP_FREELIST_ZONE.0 <= *prefix);
-                *prefix
-            }
-        }
-    }
-
-    fn end(&self, len: usize) -> usize {
-        len - HEAP_FREELIST_ZONE.1
-    }
 }
 
 /// Bytes written by the heap to (probably) keep the freed chunk

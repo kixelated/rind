@@ -115,24 +115,37 @@ pub mod kem {
     };
 }
 
-/// Public key signatures.
-pub mod signing {
-    /// RSA signatures.
-    pub mod rsa {
-        pub use crate::high::rsa::{KeySize, SigningKey, VerifyingKey};
-    }
-
-    /// ECDSA signatures.
-    pub mod ecdsa {
-        pub use crate::high::curve::P384;
-        pub use crate::high::curve::{Curve, P256};
-        pub use crate::high::ecdsa::{SigningKey, VerifyingKey};
-    }
-
-    /// EdDSA signatures.
-    pub mod eddsa {
-        pub use crate::high::ed25519::{Ed25519SigningKey, Ed25519VerifyingKey};
-    }
+/// Public key signatures: ECDSA on P-256 and P-384, RSA, and Ed25519.
+///
+/// A key pair is bound to its signing algorithm when loaded, and a peer's
+/// public key is verified against a verification algorithm constant:
+///
+/// ```
+/// # fn main() -> Result<(), rind::Error> {
+/// use rind::signature::*;
+///
+/// let key_pair = EcdsaKeyPair::generate(&ECDSA_P256_SHA256_ASN1_SIGNING)?;
+/// let signature = key_pair.sign(b"hello")?;
+///
+/// let public_key = UnparsedPublicKey::new(&ECDSA_P256_SHA256_ASN1, key_pair.public_key());
+/// public_key.verify(b"hello", signature.as_ref())?;
+/// # Ok(())
+/// # }
+/// ```
+pub mod signature {
+    pub use crate::high::signature::{
+        ECDSA_P256_SHA256_ASN1, ECDSA_P256_SHA256_ASN1_SIGNING, ECDSA_P256_SHA256_FIXED,
+        ECDSA_P256_SHA256_FIXED_SIGNING, ECDSA_P256_SHA384_ASN1, ECDSA_P256_SHA512_ASN1,
+        ECDSA_P384_SHA256_ASN1, ECDSA_P384_SHA384_ASN1, ECDSA_P384_SHA384_ASN1_SIGNING,
+        ECDSA_P384_SHA384_FIXED, ECDSA_P384_SHA384_FIXED_SIGNING, ECDSA_P384_SHA512_ASN1, ED25519,
+        EcdsaKeyPair, EcdsaPublicKey, EcdsaSigningAlgorithm, EcdsaVerificationAlgorithm,
+        Ed25519KeyPair, Ed25519PublicKey, EdDSAParameters, KeyPair, KeySize, ParsedPublicKey,
+        RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_2048_8192_SHA384, RSA_PKCS1_2048_8192_SHA512,
+        RSA_PKCS1_SHA256, RSA_PKCS1_SHA384, RSA_PKCS1_SHA512, RSA_PSS_2048_8192_SHA256,
+        RSA_PSS_2048_8192_SHA384, RSA_PSS_2048_8192_SHA512, RSA_PSS_SHA256, RSA_PSS_SHA384,
+        RSA_PSS_SHA512, RsaKeyPair, RsaParameters, RsaSignatureEncoding, RsaSubjectPublicKey,
+        Signature, UnparsedPublicKey, VerificationAlgorithm,
+    };
 }
 
 /// Cryptographic hash functions.
@@ -179,12 +192,27 @@ pub mod hmac {
     };
 }
 
-/// HKDF, and the hash functions that parameterize it and signatures.
+/// Key derivation with HKDF.
 ///
-/// To hash a message, use [`digest`].
-pub mod hashing {
-    pub use super::high::hash::{LegacySha1, Sha256, Sha384, Sha512};
-    pub use super::high::hkdf;
+/// A [`hkdf::Salt`] extracts a [`hkdf::Prk`] from a secret, which then expands
+/// into any number of keys, each exactly as long as what it becomes.
+///
+/// ```
+/// use rind::{aead, hkdf, hmac};
+///
+/// let prk = hkdf::Salt::new(hkdf::HKDF_SHA256, b"salt").extract(b"input key material");
+///
+/// let aead_key = aead::UnboundKey::from(prk.expand(&[b"aead".as_slice()], &aead::AES_256_GCM).unwrap());
+/// let hmac_key = hmac::Key::from(prk.expand(&[b"hmac".as_slice()], hmac::HMAC_SHA256).unwrap());
+///
+/// let info: [&[u8]; 2] = [b"label", b"context"];
+/// let mut bytes = [0u8; 16];
+/// prk.expand(&info, bytes.len()).unwrap().fill(&mut bytes).unwrap();
+/// ```
+pub mod hkdf {
+    pub use super::high::hkdf::{
+        Algorithm, HKDF_SHA256, HKDF_SHA384, HKDF_SHA512, KeyType, Okm, Prk, Salt,
+    };
 }
 
 /// Authenticated encryption.

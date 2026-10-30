@@ -45,10 +45,20 @@ jobs:
           mode: simulation
           run: cargo codspeed run
 
-  # The arm64 runner executes 32-bit ARM natively, so this times the armv7
-  # build without emulation. Its Neoverse core is no phone or board, so read
-  # rind's time relative to aws-lc-rs in the same run, not as a device's.
-  armv7:
+  # The arm64 runner times aarch64, and executes 32-bit ARM natively, so it
+  # times the armv7 build without emulation too. Its Neoverse core is no
+  # phone or board, so read rind's time relative to aws-lc-rs in the same
+  # run, not as a device's.
+  arm:
+    name: arm (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-unknown-linux-gnu
+            personality: linux64
+          - target: armv7-unknown-linux-gnueabihf
+            personality: linux32
     runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
@@ -61,19 +71,24 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-          targets: armv7-unknown-linux-gnueabihf
+          targets: ${{ matrix.target }}
 
-      # Hosted hardware can change under the same label. The 32-bit
-      # personality makes the kernel list the features armv7 code sees, such
-      # as the crypto instructions aws-lc-rs uses.
+      # Hosted hardware can change under the same label. The personality
+      # makes the kernel list the features the target's code sees, such as
+      # the crypto instructions aws-lc-rs uses.
       - name: Record the CPU
         shell: bash
         run: |
           model=$(lscpu | sed -n 's/^Model name: *//p' | head -n1)
-          features=$(setarch linux32 grep -m1 '^Features' /proc/cpuinfo | cut -d: -f2)
-          echo "CPU: $model; AArch32 features:$features" | tee -a "$GITHUB_STEP_SUMMARY"
+          features=$(setarch ${{ matrix.personality }} grep -m1 '^Features' /proc/cpuinfo | cut -d: -f2)
+          echo "CPU: $model; ${{ matrix.target }} features:$features" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Install OpenSSL
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev
 
       - name: Install armhf toolchain and OpenSSL
+        if: matrix.target == 'armv7-unknown-linux-gnueabihf'
         run: |
           sudo dpkg --add-architecture armhf
           sudo apt-get update
@@ -81,7 +96,7 @@ jobs:
 
       # Only rind and aws-lc-rs, the library it is measured against.
       - name: Run benchmarks
-        run: cargo bench -p rind-bench --target armv7-unknown-linux-gnueabihf -- --noplot '(^|/)(rind|aws-lc-rs)(/|$)'
+        run: cargo bench -p rind-bench --target ${{ matrix.target }} -- --noplot '(^|/)(rind|aws-lc-rs)(/|$)'
         env:
           CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
           CC_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-gcc

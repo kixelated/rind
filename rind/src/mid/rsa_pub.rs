@@ -14,6 +14,9 @@ pub(crate) struct RsaPublicKey {
     n0: u64,
 }
 
+// Every field is words, a length, or an integer, all valid at zero.
+impl low::Zeroable for RsaPublicKey {}
+
 impl RsaPublicKey {
     pub(crate) fn new(n: RsaPosInt, e: u32) -> Result<Self, Error> {
         if n.is_even()

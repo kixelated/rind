@@ -1,4 +1,4 @@
-# Learn from aws-lc-rs's API
+# [S] Learn from aws-lc-rs's API
 
 ## Goal
 
@@ -46,8 +46,7 @@ module-by-module comparison:
   `signature`, `digest`, `hmac`, `hkdf`, `rand`. MoQ's direct callers come
   from aws-lc-rs, so most of their port becomes a path change. `cpu` stays.
 - **A facade, not a rewrite.** The new modules wrap the existing `mid` and
-  `high` types, which keep graviola's layout and become crate-private, so
-  upstream merges still apply.
+  `high` types, which become crate-private.
 - **Each module quest migrates every `rind-*` adapter, rind-bench, and fuzz
   in the same PR**, deletes the API it replaces with no shim, and keeps the
   Wycheproof, differential, ctgrind, and zeroing tests passing on the new
@@ -94,7 +93,8 @@ aws-lc-rs shapes with no consumer, kept out until one appears:
 - `agreement::PrivateKey` (a static ECDH key) and `agree`: no consumer uses a
   key twice. rind's `StaticPrivateKey` types become private.
 - SHA-3 and SHAKE digests, `hmac::Key::generate`, `hkdf::Prk::new_less_safe`,
-  and `Salt`/`Prk` from `Okm`: no consumer.
+  `Salt`/`Prk` from `Okm`, `HKDF_SHA1_FOR_LEGACY_USE_ONLY`, `Salt::none`,
+  and the `Salt::algorithm` and `Okm::len` getters: no consumer.
 
 ### Consumers
 
@@ -107,8 +107,3 @@ generation and import for HMAC, RSA, ECDSA, Ed25519; `rand`), moq-relay and
 moq-hls (SHA-256), moq-rtmp and moq-tokio (HMAC-SHA256), and moq-rtc
 (HMAC-SHA1). Since this lands before rind's first release, MoQ ports once,
 onto this shape.
-
-## Required
-
-- [Typed HKDF output](/quest/m1/moq/api/hkdf.md) - `hkdf::Salt`, `Prk`, and an `Okm` whose length matches the key it becomes
-- [Signature key pairs](/quest/m1/moq/api/signature.md) - ECDSA, RSA, and Ed25519 key pairs and verification algorithms bound to constants

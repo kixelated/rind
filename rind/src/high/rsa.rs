@@ -1,7 +1,7 @@
 // Written for Graviola by Joe Birr-Pixton, 2024.
 // SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 
-pub use rsa_priv::KeySize;
+pub(crate) use rsa_priv::KeySize;
 
 use crate::Error;
 use crate::error::KeyFormatError;
@@ -18,7 +18,7 @@ use crate::mid::{rsa_priv, rsa_pub};
 /// Keys supported by this library have public moduli between
 /// 2048- and 8192-bits.
 #[derive(Debug)]
-pub struct VerifyingKey(rsa_pub::RsaPublicKey);
+pub(crate) struct VerifyingKey(rsa_pub::RsaPublicKey);
 
 impl VerifyingKey {
     /// Decodes an RSA public verification key from PKCS#1 DER format.
@@ -26,7 +26,7 @@ impl VerifyingKey {
     /// This format is defined in
     /// [RFC8017](https://datatracker.ietf.org/doc/html/rfc8017#appendix-A.1.1)
     /// (and earlier standards, including the original PKCS#1 standard).
-    pub fn from_pkcs1_der(bytes: &[u8]) -> Result<Self, Error> {
+    pub(crate) fn from_pkcs1_der(bytes: &[u8]) -> Result<Self, Error> {
         let _entry = Entry::new_public();
         let decoded = pkix::RSAPublicKey::from_bytes(bytes).map_err(KeyFormatError::Asn1)?;
 
@@ -54,7 +54,7 @@ impl VerifyingKey {
     /// of this buffer.  An error is returned if the encoding is larger than
     /// the supplied buffer.  Otherwise, on success, the range containing the
     /// encoding is returned.
-    pub fn to_spki_der<'a>(&self, output: &'a mut [u8]) -> Result<&'a [u8], Error> {
+    pub(crate) fn to_spki_der<'a>(&self, output: &'a mut [u8]) -> Result<&'a [u8], Error> {
         let _entry = Entry::new_public();
 
         let mut pub_key_buffer = [0u8; rsa_pub::MAX_PUBLIC_MODULUS_BYTES + 64];
@@ -80,7 +80,7 @@ impl VerifyingKey {
     /// of this buffer.  An error is returned if the encoding is larger than
     /// the supplied buffer.  Otherwise, on success, the range containing the
     /// encoding is returned.
-    pub fn to_pkcs1_der<'a>(&self, output: &'a mut [u8]) -> Result<&'a [u8], Error> {
+    pub(crate) fn to_pkcs1_der<'a>(&self, output: &'a mut [u8]) -> Result<&'a [u8], Error> {
         let _entry = Entry::new_public();
 
         let mut buffer = [0u8; rsa_pub::MAX_PUBLIC_MODULUS_BYTES + 1];
@@ -103,7 +103,11 @@ impl VerifyingKey {
     /// using SHA-256 by this function.
     ///
     /// [`Error::BadSignature`] is returned if the signature is invalid.
-    pub fn verify_pkcs1_sha256(&self, signature: &[u8], message: &[u8]) -> Result<(), Error> {
+    pub(crate) fn verify_pkcs1_sha256(
+        &self,
+        signature: &[u8],
+        message: &[u8],
+    ) -> Result<(), Error> {
         let _entry = Entry::new_public();
         let hash = hash::Sha256::hash(message);
         self._verify_pkcs1(signature, pkcs1::DIGESTINFO_SHA256, hash.as_ref())
@@ -115,7 +119,11 @@ impl VerifyingKey {
     /// using SHA-384 by this function.
     ///
     /// [`Error::BadSignature`] is returned if the signature is invalid.
-    pub fn verify_pkcs1_sha384(&self, signature: &[u8], message: &[u8]) -> Result<(), Error> {
+    pub(crate) fn verify_pkcs1_sha384(
+        &self,
+        signature: &[u8],
+        message: &[u8],
+    ) -> Result<(), Error> {
         let _entry = Entry::new_public();
         let hash = hash::Sha384::hash(message);
         self._verify_pkcs1(signature, pkcs1::DIGESTINFO_SHA384, hash.as_ref())
@@ -127,7 +135,11 @@ impl VerifyingKey {
     /// using SHA-512 by this function.
     ///
     /// [`Error::BadSignature`] is returned if the signature is invalid.
-    pub fn verify_pkcs1_sha512(&self, signature: &[u8], message: &[u8]) -> Result<(), Error> {
+    pub(crate) fn verify_pkcs1_sha512(
+        &self,
+        signature: &[u8],
+        message: &[u8],
+    ) -> Result<(), Error> {
         let _entry = Entry::new_public();
         let hash = hash::Sha512::hash(message);
         self._verify_pkcs1(signature, pkcs1::DIGESTINFO_SHA512, hash.as_ref())
@@ -171,7 +183,7 @@ impl VerifyingKey {
     /// RSASSA-PSS is described in
     /// [RFC8017](https://datatracker.ietf.org/doc/html/rfc8017#section-8.1)
     /// (and earlier standards, including the original PKCS#1 standard).
-    pub fn verify_pss_sha256(&self, signature: &[u8], message: &[u8]) -> Result<(), Error> {
+    pub(crate) fn verify_pss_sha256(&self, signature: &[u8], message: &[u8]) -> Result<(), Error> {
         let _entry = Entry::new_public();
         self._verify_pss::<hash::Sha256>(signature, message)
     }
@@ -189,7 +201,7 @@ impl VerifyingKey {
     /// RSASSA-PSS is described in
     /// [RFC8017](https://datatracker.ietf.org/doc/html/rfc8017#section-8.1)
     /// (and earlier standards, including the original PKCS#1 standard).
-    pub fn verify_pss_sha384(&self, signature: &[u8], message: &[u8]) -> Result<(), Error> {
+    pub(crate) fn verify_pss_sha384(&self, signature: &[u8], message: &[u8]) -> Result<(), Error> {
         let _entry = Entry::new_public();
         self._verify_pss::<hash::Sha384>(signature, message)
     }
@@ -207,7 +219,7 @@ impl VerifyingKey {
     /// RSASSA-PSS is described in
     /// [RFC8017](https://datatracker.ietf.org/doc/html/rfc8017#section-8.1)
     /// (and earlier standards, including the original PKCS#1 standard).
-    pub fn verify_pss_sha512(&self, signature: &[u8], message: &[u8]) -> Result<(), Error> {
+    pub(crate) fn verify_pss_sha512(&self, signature: &[u8], message: &[u8]) -> Result<(), Error> {
         let _entry = Entry::new_public();
         self._verify_pss::<hash::Sha512>(signature, message)
     }
@@ -236,24 +248,7 @@ impl VerifyingKey {
 ///
 /// Keys supported by this library have public moduli between
 /// 2048- and 8192-bits.  Only two-prime RSA keys are supported.
-///
-/// You can generate a new key using [`SigningKey::generate()`], and then
-/// serialize it using [`SigningKey::to_pkcs1_der()`] or [`SigningKey::to_pkcs8_der()`].
-///
-/// ```
-/// use rind::signing::rsa::{KeySize, SigningKey};
-/// use tempfile::TempDir;
-/// let key = SigningKey::generate(KeySize::Rsa2048)?;
-/// let mut buffer = [0u8; 2048];
-/// let buffer = key.to_pkcs8_der(&mut buffer)?;
-/// let tmp_dir = TempDir::new()?;
-/// std::fs::write(tmp_dir.path().join("key.der"), buffer)?;
-/// # Ok::<(), Box<dyn std::error::Error>>(())
-/// ```
-///
-/// You can decode an existing key using [`SigningKey::from_pkcs1_der()`]
-/// or [`SigningKey::from_pkcs8_der()`], depending on the format you have it in.
-pub struct SigningKey(rsa_priv::RsaPrivateKey);
+pub(crate) struct SigningKey(rsa_priv::RsaPrivateKey);
 
 impl SigningKey {
     /// Generates a new RSA signing key.
@@ -267,7 +262,7 @@ impl SigningKey {
     /// # Warning
     /// Unlike other private key operations in rind, RSA key generation is not side-channel safe.
     /// Avoid generating keys in untrusted multi-tenant or physical environments.
-    pub fn generate(size: KeySize) -> Result<Self, Error> {
+    pub(crate) fn generate(size: KeySize) -> Result<Self, Error> {
         let _entry = Entry::new_secret();
         rsa_priv::RsaPrivateKey::generate(size, &mut SystemRandom, &mut SystemRandom)
             .map(SigningKey)
@@ -278,7 +273,7 @@ impl SigningKey {
     /// This format is defined in
     /// [RFC8017](https://datatracker.ietf.org/doc/html/rfc8017#appendix-A.1.2)
     /// (and earlier standards, including the original PKCS#1 standard).
-    pub fn from_pkcs1_der(bytes: &[u8]) -> Result<Self, Error> {
+    pub(crate) fn from_pkcs1_der(bytes: &[u8]) -> Result<Self, Error> {
         let _entry = Entry::new_secret();
         let decoded = pkix::RSAPrivateKey::from_bytes(bytes).map_err(KeyFormatError::Asn1)?;
 
@@ -314,7 +309,7 @@ impl SigningKey {
     /// of this buffer.  An error is returned if the encoding is larger than
     /// the supplied buffer.  Otherwise, on success, the range containing the
     /// encoding is returned.
-    pub fn to_pkcs1_der<'a>(&self, output: &'a mut [u8]) -> Result<&'a [u8], Error> {
+    pub(crate) fn to_pkcs1_der<'a>(&self, output: &'a mut [u8]) -> Result<&'a [u8], Error> {
         let _entry = Entry::new_secret();
 
         let mut buf = rsa_priv::RsaComponentsBuffer::default();
@@ -346,7 +341,7 @@ impl SigningKey {
     /// of this buffer.  An error is returned if the encoding is larger than
     /// the supplied buffer.  Otherwise, on success, the range containing the
     /// encoding is returned.
-    pub fn to_pkcs8_der<'a>(&self, output: &'a mut [u8]) -> Result<&'a [u8], Error> {
+    pub(crate) fn to_pkcs8_der<'a>(&self, output: &'a mut [u8]) -> Result<&'a [u8], Error> {
         let _entry = Entry::new_secret();
 
         let mut pkcs1_buffer = [0u8; Self::MAX_PKCS1_BUFFER_LEN];
@@ -367,7 +362,7 @@ impl SigningKey {
     /// (and earlier standards, including the original PKCS#8 standard).
     ///
     /// `privateKeyAlgorithm` inside this encoding must be `rsaEncryption`.
-    pub fn from_pkcs8_der(bytes: &[u8]) -> Result<Self, Error> {
+    pub(crate) fn from_pkcs8_der(bytes: &[u8]) -> Result<Self, Error> {
         let _entry = Entry::new_secret();
         pkcs8::Key::decode(
             bytes,
@@ -378,13 +373,13 @@ impl SigningKey {
     }
 
     /// Returns the matching public key.
-    pub fn public_key(&self) -> VerifyingKey {
+    pub(crate) fn public_key(&self) -> VerifyingKey {
         let _entry = Entry::new_public();
         VerifyingKey(self.0.public_key())
     }
 
     /// Returns the public modulus length, in bytes.
-    pub fn modulus_len_bytes(&self) -> usize {
+    pub(crate) fn modulus_len_bytes(&self) -> usize {
         let _entry = Entry::new_public();
         self.0.public_key().modulus_len_bytes()
     }
@@ -398,7 +393,7 @@ impl SigningKey {
     /// RSASSA-PKCS1-v1_5 is described in
     /// [RFC8017](https://datatracker.ietf.org/doc/html/rfc8017#section-8.2)
     /// (and earlier standards, including the original PKCS#1 standard).
-    pub fn sign_pkcs1_sha256<'a>(
+    pub(crate) fn sign_pkcs1_sha256<'a>(
         &self,
         signature: &'a mut [u8],
         message: &[u8],
@@ -417,7 +412,7 @@ impl SigningKey {
     /// RSASSA-PKCS1-v1_5 is described in
     /// [RFC8017](https://datatracker.ietf.org/doc/html/rfc8017#section-8.2)
     /// (and earlier standards, including the original PKCS#1 standard).
-    pub fn sign_pkcs1_sha384<'a>(
+    pub(crate) fn sign_pkcs1_sha384<'a>(
         &self,
         signature: &'a mut [u8],
         message: &[u8],
@@ -436,7 +431,7 @@ impl SigningKey {
     /// RSASSA-PKCS1-v1_5 is described in
     /// [RFC8017](https://datatracker.ietf.org/doc/html/rfc8017#section-8.2)
     /// (and earlier standards, including the original PKCS#1 standard).
-    pub fn sign_pkcs1_sha512<'a>(
+    pub(crate) fn sign_pkcs1_sha512<'a>(
         &self,
         signature: &'a mut [u8],
         message: &[u8],
@@ -458,7 +453,7 @@ impl SigningKey {
     /// RSASSA-PSS is described in
     /// [RFC8017](https://datatracker.ietf.org/doc/html/rfc8017#section-8.1)
     /// (and earlier standards, including the original PKCS#1 standard).
-    pub fn sign_pss_sha256<'a>(
+    pub(crate) fn sign_pss_sha256<'a>(
         &self,
         signature: &'a mut [u8],
         message: &[u8],
@@ -479,7 +474,7 @@ impl SigningKey {
     /// RSASSA-PSS is described in
     /// [RFC8017](https://datatracker.ietf.org/doc/html/rfc8017#section-8.1)
     /// (and earlier standards, including the original PKCS#1 standard).
-    pub fn sign_pss_sha384<'a>(
+    pub(crate) fn sign_pss_sha384<'a>(
         &self,
         signature: &'a mut [u8],
         message: &[u8],
@@ -500,7 +495,7 @@ impl SigningKey {
     /// RSASSA-PSS is described in
     /// [RFC8017](https://datatracker.ietf.org/doc/html/rfc8017#section-8.1)
     /// (and earlier standards, including the original PKCS#1 standard).
-    pub fn sign_pss_sha512<'a>(
+    pub(crate) fn sign_pss_sha512<'a>(
         &self,
         signature: &'a mut [u8],
         message: &[u8],

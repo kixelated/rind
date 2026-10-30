@@ -93,7 +93,7 @@ describes `main`, and changes alongside the code it describes.
 
 | Algorithm | x86_64 | aarch64 | armv7 |
 |---|---|---|---|
-| AES-128-GCM, AES-256-GCM | Graviola | Graviola | crypto extension: [aws-lc] AES and GHASH (copied), rind GCM; otherwise: [libcrux-aes] |
+| AES-128-GCM, AES-256-GCM | Graviola | [s2n-bignum] CTR and GHASH of whole blocks ✓, run from a copy of the input since its proofs exclude in-place operation; Graviola key schedule, H powers, and GHASH of the AAD, final partial block, and lengths | crypto extension: [aws-lc] AES and GHASH (copied), rind GCM; otherwise: [libcrux-aes] |
 | AES block (header protection), AES-CTR (SRTP) | Graviola block, rind CTR | Graviola block, rind CTR | crypto extension: [aws-lc] block and CTR (copied); otherwise: [libcrux-aes] block (copied), rind CTR |
 | ChaCha20 (header protection) | Graviola | Graviola | [HACL\*] block function ✓ (copied), rind keystream |
 | ChaCha20-Poly1305, XChaCha20-Poly1305 | Graviola | Graviola | [HACL\*] ChaCha20 block function and Poly1305 ✓; Graviola AEAD; rind HChaCha20 |
@@ -226,13 +226,15 @@ libcrux's. Its SHA512 is always the pure Rust one.
 SHA384/SHA512 on x86_64 has an AVX2 by-4 implementation, plus an AVX2 interleaved
 single block implementation.
 
-On x86_64 and aarch64, AES and GHASH always use intrinsics (there are no fallbacks).
+On x86_64 and aarch64, AES and GHASH always use the CPU's AES and carry-less multiply
+instructions (there are no fallbacks).
 
 On x86_64, we have a stitched by-8 AES-CTR and a by-8 GHASH (they are not currently
 interleaved; this is future work.)  There is also an optional AVX-512 by-16 AES-CTR
 and GHASH.  It uses dynamic CPU feature detection, so AVX-512 is not required at runtime.
 
-On aarch64 we have a stitched by-8 AES-CTR and by-8 GHASH (not currently interleaved).
+On aarch64, AES-GCM runs s2n-bignum's verified kernels, which interleave a by-4
+AES-CTR and GHASH over whole blocks.
 
 32-bit `arm` decides once per process from `AT_HWCAP2`: with the crypto
 extension, AES and AES-GCM keys use aws-lc's `aesv8-armx` and `ghashv8-armx`

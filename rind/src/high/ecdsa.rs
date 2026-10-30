@@ -5,7 +5,7 @@ use super::asn1::{self, Type};
 use super::curve::{
     Curve, MAX_SCALAR_LEN, MAX_UNCOMPRESSED_PUBLIC_KEY_LEN, PrivateKey, PublicKey, Scalar,
 };
-use super::hash::{Hash, HashContext, SignatureHash};
+use super::hash::{Hash, SignatureHash};
 use super::hmac_drbg::HmacDrbg;
 use super::pkcs8;
 use crate::error::{Error, KeyFormatError};
@@ -13,25 +13,21 @@ use crate::low::{Entry, ct};
 use crate::mid::rng::{RandomSource, SystemRandom};
 
 /// An ECDSA signing key, on curve `C`.
-///
-/// You can make one of these by loading a key from a file
-/// with [`Self::from_pkcs8_der()`] or [`Self::from_sec1_der()`],
-/// or by generating a random key using [`Self::generate()`].
-pub struct SigningKey<C: Curve> {
+pub(crate) struct SigningKey<C: Curve> {
     // Private, so the scalar cannot be reused for ECDH.
     private_key: C::PrivateKey,
 }
 
 impl<C: Curve> SigningKey<C> {
     /// Generate a new random key.
-    pub fn generate() -> Result<Self, Error> {
+    pub(crate) fn generate() -> Result<Self, Error> {
         let _entry = Entry::new_secret();
         let private_key = C::generate_random_key(&mut SystemRandom)?;
         Ok(Self { private_key })
     }
 
     /// Load an ECDSA private key in PKCS#8 format.
-    pub fn from_pkcs8_der(bytes: &[u8]) -> Result<Self, Error> {
+    pub(crate) fn from_pkcs8_der(bytes: &[u8]) -> Result<Self, Error> {
         let _entry = Entry::new_secret();
         pkcs8::Key::decode(
             bytes,
@@ -46,7 +42,7 @@ impl<C: Curve> SigningKey<C> {
     /// The encoding is written to the start of `output`, and the used span is
     /// returned.  [`Error::WrongLength`] is returned if `output` is not sufficient
     /// to contain the full encoding.
-    pub fn to_pkcs8_der<'a>(&self, output: &'a mut [u8]) -> Result<&'a [u8], Error> {
+    pub(crate) fn to_pkcs8_der<'a>(&self, output: &'a mut [u8]) -> Result<&'a [u8], Error> {
         let _entry = Entry::new_secret();
 
         let mut sec1_buf = [0u8; MAX_SCALAR_LEN + MAX_UNCOMPRESSED_PUBLIC_KEY_LEN + 128];
@@ -62,7 +58,7 @@ impl<C: Curve> SigningKey<C> {
     }
 
     /// Load an ECDSA private key in SEC.1 format.
-    pub fn from_sec1_der(bytes: &[u8]) -> Result<Self, Error> {
+    pub(crate) fn from_sec1_der(bytes: &[u8]) -> Result<Self, Error> {
         let _entry = Entry::new_secret();
         let ecpk = asn1::pkix::EcPrivateKey::from_bytes(bytes).map_err(KeyFormatError::Asn1)?;
 
@@ -75,29 +71,68 @@ impl<C: Curve> SigningKey<C> {
             _ => return Err(KeyFormatError::MismatchedSec1Curve.into()),
         }
 
-        let private_key = C::PrivateKey::from_bytes(ecpk.privateKey.as_octets())?;
+        let key = Self {
+            private_key: C::PrivateKey::from_bytes(ecpk.privateKey.as_octets())?,
+        };
 
-        if let Some(expected_public_key) = ecpk.publicKey.inner() {
-            let mut encoded_public_key_buf = [0u8; MAX_UNCOMPRESSED_PUBLIC_KEY_LEN];
-            let encoded_public_key =
-                private_key.public_key_encode_uncompressed(&mut encoded_public_key_buf)?;
-
-            if encoded_public_key != expected_public_key.as_octets() {
-                return Err(KeyFormatError::MismatchedSec1PublicKey.into());
-            }
+        if let Some(expected_public_key) = ecpk.publicKey.inner()
+            && !key.has_public_key(expected_public_key.as_octets())?
+        {
+            return Err(KeyFormatError::MismatchedSec1PublicKey.into());
         }
 
-        Ok(Self { private_key })
+        Ok(key)
     }
 
-    /// Encode this private key in SEC.1 DER format.
+    /// Load an ECDSA private key from its fixed-length big-endian scalar,
+    /// checking it against `public_key`, an X9.62 uncompressed point.
+    pub(crate) fn from_private_key_and_public_key(
+        private_key: &[u8],
+        public_key: &[u8],
+    ) -> Result<Self, Error> {
+        let _entry = Entry::new_secret();
+        if private_key.len() != C::Scalar::LEN_BYTES {
+            return Err(Error::WrongLength);
+        }
+
+        let key = Self {
+            private_key: C::PrivateKey::from_bytes(private_key)?,
+        };
+        match key.has_public_key(public_key)? {
+            true => Ok(key),
+            false => Err(KeyFormatError::MismatchedPublicKey.into()),
+        }
+    }
+
+    fn has_public_key(&self, public_key: &[u8]) -> Result<bool, Error> {
+        let mut encoded = [0u8; MAX_UNCOMPRESSED_PUBLIC_KEY_LEN];
+        Ok(self.public_key_uncompressed(&mut encoded)? == public_key)
+    }
+
+    /// Encode this private key's scalar, big-endian and fixed-length.
     ///
     /// The encoding is written to the start of `output`, and the used span is
     /// returned.  [`Error::WrongLength`] is returned if `output` is not sufficient
     /// to contain the full encoding.
-    pub fn to_sec1_der<'a>(&self, output: &'a mut [u8]) -> Result<&'a [u8], Error> {
+    pub(crate) fn to_private_key_be<'a>(&self, output: &'a mut [u8]) -> Result<&'a [u8], Error> {
         let _entry = Entry::new_secret();
-        self.to_sec1_der_detail(Some(C::oid()), output)
+        let output = output
+            .get_mut(..C::Scalar::LEN_BYTES)
+            .ok_or(Error::WrongLength)?;
+        self.private_key.encode(output)?;
+
+        // The caller owns the encoding, as with `to_sec1_der_detail`.
+        ct::public_slice(output);
+        Ok(output)
+    }
+
+    /// Encode this private key's public key as an X9.62 uncompressed point.
+    pub(crate) fn public_key_uncompressed<'a>(
+        &self,
+        output: &'a mut [u8],
+    ) -> Result<&'a [u8], Error> {
+        let _entry = Entry::new_secret();
+        self.private_key.public_key_encode_uncompressed(output)
     }
 
     fn to_sec1_der_detail<'a>(
@@ -133,22 +168,12 @@ impl<C: Curve> SigningKey<C> {
         Ok(output)
     }
 
-    /// Returns the corresponding public key.
-    pub fn public_key(&self) -> Result<VerifyingKey<C>, Error> {
-        let _entry = Entry::new_secret();
-        let mut encoded = [0u8; MAX_UNCOMPRESSED_PUBLIC_KEY_LEN];
-        let encoded = self
-            .private_key
-            .public_key_encode_uncompressed(&mut encoded)?;
-        VerifyingKey::from_x962_uncompressed(encoded)
-    }
-
     /// Encode this private key's corresponding public key in SubjectPublicKeyInfo DER format.
     ///
     /// The encoding is written to the start of `output`, and the used span is
     /// returned.  [`Error::WrongLength`] is returned if `output` is not sufficient
     /// to contain the full encoding.
-    pub fn to_spki_der<'a>(&self, output: &'a mut [u8]) -> Result<&'a [u8], Error> {
+    pub(crate) fn to_spki_der<'a>(&self, output: &'a mut [u8]) -> Result<&'a [u8], Error> {
         let _entry = Entry::new_secret();
         let mut pub_key_buffer = [0u8; MAX_UNCOMPRESSED_PUBLIC_KEY_LEN];
         let pub_key_buffer = self
@@ -171,15 +196,14 @@ impl<C: Curve> SigningKey<C> {
 
     /// ECDSA signing, returning a fixed-length signature.
     ///
-    /// The `message` is hashed using `H`.  The message is a sequence of byte
-    /// slices, so some workloads can avoid joining it into one buffer beforehand.
+    /// The `message` is hashed using `H`.
     ///
     /// `signature` is the output buffer; `Error::WrongLength` is returned
     /// if it is not long enough.  The used prefix of this buffer is returned
     /// on success.
-    pub fn sign<'a, H: SignatureHash>(
+    pub(crate) fn sign<'a, H: SignatureHash>(
         &self,
-        message: &[&[u8]],
+        message: &[u8],
         signature: &'a mut [u8],
     ) -> Result<&'a [u8], Error> {
         let _entry = Entry::new_secret();
@@ -192,9 +216,9 @@ impl<C: Curve> SigningKey<C> {
     ///
     /// This calls [`Self::sign()`] and then does a straightforward conversion
     /// from fixed length to ASN.1 -- see that function's documentation for more.
-    pub fn sign_asn1<'a, H: SignatureHash>(
+    pub(crate) fn sign_asn1<'a, H: SignatureHash>(
         &self,
-        message: &[&[u8]],
+        message: &[u8],
         asn1_signature: &'a mut [u8],
     ) -> Result<&'a [u8], Error> {
         let _entry = Entry::new_secret();
@@ -234,7 +258,7 @@ impl<C: Curve> SigningKey<C> {
     /// also allows for it, it is the `personalization_string` input.
     fn rfc6979_sign_with_random<'a, H: Hash>(
         &self,
-        message: &[&[u8]],
+        message: &[u8],
         random: &[u8],
         signature: &'a mut [u8],
     ) -> Result<&'a [u8], Error> {
@@ -242,11 +266,7 @@ impl<C: Curve> SigningKey<C> {
             .get_mut(..C::Scalar::LEN_BYTES * 2)
             .ok_or(Error::WrongLength)?;
 
-        let mut ctx = H::new();
-        for m in message {
-            ctx.update(m);
-        }
-        let hash = ctx.finish();
+        let hash = H::hash(message);
 
         let mut encoded_private_key_buf = [0u8; MAX_SCALAR_LEN];
         let encoded_private_key = self.private_key.encode(&mut encoded_private_key_buf)?;
@@ -276,30 +296,28 @@ impl<C: Curve> SigningKey<C> {
 }
 
 /// An ECDSA verification key, on curve `C`.
-pub struct VerifyingKey<C: Curve> {
-    /// The public key.
-    pub public_key: C::PublicKey,
+pub(crate) struct VerifyingKey<C: Curve> {
+    public_key: C::PublicKey,
 }
 
 impl<C: Curve> VerifyingKey<C> {
     /// Create a `VerifyingKey` by decoding an X9.62 uncompressed point.
-    pub fn from_x962_uncompressed(encoded: &[u8]) -> Result<Self, Error> {
+    pub(crate) fn from_x962_uncompressed(encoded: &[u8]) -> Result<Self, Error> {
         let _entry = Entry::new_public();
         C::PublicKey::from_x962_uncompressed(encoded).map(|public_key| Self { public_key })
     }
 
     /// Verify an ECDSA fixed-length signature.
     ///
-    /// The `message` is hashed with `H`.  The message is presented as a sequence of byte
-    /// slices (effectively concatenated by this function).
+    /// The `message` is hashed with `H`.
     ///
     /// `signature` is the purported signature.
     ///
     /// Returns `Ok(())` when the signature is valid, or an error if not (typically --
     /// but not limited to -- `Error::BadSignature`).
-    pub fn verify<H: SignatureHash>(
+    pub(crate) fn verify<H: SignatureHash>(
         &self,
-        message: &[&[u8]],
+        message: &[u8],
         signature: &[u8],
     ) -> Result<(), Error> {
         let _entry = Entry::new_public();
@@ -314,11 +332,7 @@ impl<C: Curve> VerifyingKey<C> {
             .map_err(|_| Error::BadSignature)?;
 
         // 2. Use the hash function established during the setup procedure to compute the hash value:
-        let mut ctx = H::new();
-        for m in message {
-            ctx.update(m);
-        }
-        let hash = ctx.finish();
+        let hash = H::hash(message);
 
         // 3. Derive an integer e from H as follows: (...)
         let e = hash_to_scalar::<C>(hash.as_ref())?;
@@ -331,9 +345,9 @@ impl<C: Curve> VerifyingKey<C> {
     ///
     /// This does a straightforward conversion from ASN.1 to fixed length,
     /// and then calls [`Self::verify()`] -- see the documentation for more.
-    pub fn verify_asn1<H: SignatureHash>(
+    pub(crate) fn verify_asn1<H: SignatureHash>(
         &self,
-        message: &[&[u8]],
+        message: &[u8],
         signature: &[u8],
     ) -> Result<(), Error> {
         let _entry = Entry::new_public();
@@ -463,33 +477,33 @@ mod tests {
         };
 
         let mut buffer = [0u8; 256];
-        let message = [&b"hello"[..], &b"world"[..]];
+        let message = b"hello world";
 
-        let signature = sk.sign::<hash::Sha256>(&message, &mut buffer).unwrap();
-        vk.verify::<hash::Sha256>(&message, signature).unwrap();
+        let signature = sk.sign::<hash::Sha256>(message, &mut buffer).unwrap();
+        vk.verify::<hash::Sha256>(message, signature).unwrap();
 
-        let signature = sk.sign::<hash::Sha384>(&message, &mut buffer).unwrap();
-        vk.verify::<hash::Sha384>(&message, signature).unwrap();
+        let signature = sk.sign::<hash::Sha384>(message, &mut buffer).unwrap();
+        vk.verify::<hash::Sha384>(message, signature).unwrap();
 
-        let signature = sk.sign::<hash::Sha512>(&message, &mut buffer).unwrap();
-        vk.verify::<hash::Sha512>(&message, signature).unwrap();
+        let signature = sk.sign::<hash::Sha512>(message, &mut buffer).unwrap();
+        vk.verify::<hash::Sha512>(message, signature).unwrap();
 
         if std::env::var_os("SLOW_TESTS").is_some() {
             // check for invalid asn1 with p=1/256
             for _ in 0..1024 {
-                let signature = sk.sign_asn1::<hash::Sha256>(&message, &mut buffer).unwrap();
-                vk.verify_asn1::<hash::Sha256>(&message, signature).unwrap();
+                let signature = sk.sign_asn1::<hash::Sha256>(message, &mut buffer).unwrap();
+                vk.verify_asn1::<hash::Sha256>(message, signature).unwrap();
             }
         }
 
-        let signature = sk.sign_asn1::<hash::Sha384>(&message, &mut buffer).unwrap();
-        vk.verify_asn1::<hash::Sha384>(&message, signature).unwrap();
+        let signature = sk.sign_asn1::<hash::Sha384>(message, &mut buffer).unwrap();
+        vk.verify_asn1::<hash::Sha384>(message, signature).unwrap();
 
-        let signature = sk.sign_asn1::<hash::Sha512>(&message, &mut buffer).unwrap();
-        vk.verify_asn1::<hash::Sha512>(&message, signature).unwrap();
+        let signature = sk.sign_asn1::<hash::Sha512>(message, &mut buffer).unwrap();
+        vk.verify_asn1::<hash::Sha512>(message, signature).unwrap();
 
         assert_eq!(
-            sk.sign_asn1::<hash::Sha256>(&message, &mut [0u8; 8]),
+            sk.sign_asn1::<hash::Sha256>(message, &mut [0u8; 8]),
             Err(Error::WrongLength)
         );
         assert_eq!(sk.to_spki_der(&mut [0u8; 8]), Err(Error::WrongLength));
@@ -499,10 +513,10 @@ mod tests {
         let loaded = SigningKey::<C>::from_sec1_der(sec1_der).unwrap();
         let mut buf = [0u8; 256];
         assert!(buf.len() > sec1_der.len());
-        let encoded = loaded.to_sec1_der(&mut buf).unwrap();
+        let encoded = loaded.to_sec1_der_detail(Some(C::oid()), &mut buf).unwrap();
         assert_eq!(sec1_der, encoded);
         assert_eq!(
-            loaded.to_sec1_der(&mut buf[..sec1_der.len() - 1]),
+            loaded.to_sec1_der_detail(Some(C::oid()), &mut buf[..sec1_der.len() - 1]),
             Err(Error::WrongLength)
         );
     }
@@ -540,7 +554,7 @@ mod tests {
         // base case
         verify
             .verify_asn1::<hash::Sha256>(
-                &[b"hello"],
+                b"hello",
                 &[
                     0x30, 0x43, 0x02, 0x1f, 0x40, 0x1a, 0x29, 0x85, 0xde, 0xb3, 0x75, 0xd4, 0x81,
                     0x70, 0x6f, 0x6c, 0x26, 0xea, 0x70, 0x44, 0x30, 0xcd, 0xf5, 0x94, 0x9a, 0x3c,
@@ -556,7 +570,7 @@ mod tests {
         assert_eq!(
             verify
                 .verify_asn1::<hash::Sha256>(
-                    &[b"hello"],
+                    b"hello",
                     &[
                         0x30, 0x44, 0x02, 0x20, 0x00, 0x40, 0x1a, 0x29, 0x85, 0xde, 0xb3, 0x75,
                         0xd4, 0x81, 0x70, 0x6f, 0x6c, 0x26, 0xea, 0x70, 0x44, 0x30, 0xcd, 0xf5,
@@ -589,7 +603,7 @@ mod tests {
         };
         let mut signature = [0u8; 64];
 
-        k.rfc6979_sign_with_random::<hash::Sha256>(&[b"sample"], &[], &mut signature)
+        k.rfc6979_sign_with_random::<hash::Sha256>(b"sample", &[], &mut signature)
             .unwrap();
         assert_eq!(
             signature,
@@ -601,14 +615,13 @@ mod tests {
                 0x4d, 0xc4, 0xab, 0x2f, 0x84, 0x3a, 0xcd, 0xa8,
             ]
         );
-        v.verify::<hash::Sha256>(&[b"sample"], &signature).unwrap();
+        v.verify::<hash::Sha256>(b"sample", &signature).unwrap();
 
         let mut asn1_sig = [0u8; 128];
         let asn1_sig = SigningKey::<curve::P256>::fixed_to_asn1(&signature, &mut asn1_sig).unwrap();
-        v.verify_asn1::<hash::Sha256>(&[b"sample"], asn1_sig)
-            .unwrap();
+        v.verify_asn1::<hash::Sha256>(b"sample", asn1_sig).unwrap();
 
-        k.rfc6979_sign_with_random::<hash::Sha256>(&[b"test"], &[], &mut signature)
+        k.rfc6979_sign_with_random::<hash::Sha256>(b"test", &[], &mut signature)
             .unwrap();
         assert_eq!(
             signature,
@@ -620,13 +633,13 @@ mod tests {
                 0x0c, 0xc8, 0x42, 0x50, 0xe4, 0x6f, 0x00, 0x83,
             ]
         );
-        v.verify::<hash::Sha256>(&[b"test"], &signature).unwrap();
+        v.verify::<hash::Sha256>(b"test", &signature).unwrap();
 
         let mut asn1_sig = [0u8; 128];
         let asn1_sig = SigningKey::<curve::P256>::fixed_to_asn1(&signature, &mut asn1_sig).unwrap();
-        v.verify_asn1::<hash::Sha256>(&[b"test"], asn1_sig).unwrap();
+        v.verify_asn1::<hash::Sha256>(b"test", asn1_sig).unwrap();
 
-        k.rfc6979_sign_with_random::<hash::Sha512>(&[b"sample"], &[], &mut signature)
+        k.rfc6979_sign_with_random::<hash::Sha512>(b"sample", &[], &mut signature)
             .unwrap();
         assert_eq!(
             signature,
@@ -638,14 +651,13 @@ mod tests {
                 0x65, 0x54, 0xf6, 0x1f, 0xae, 0x33, 0x02, 0xfe,
             ]
         );
-        v.verify::<hash::Sha512>(&[b"sample"], &signature).unwrap();
+        v.verify::<hash::Sha512>(b"sample", &signature).unwrap();
 
         let mut asn1_sig = [0u8; 128];
         let asn1_sig = SigningKey::<curve::P256>::fixed_to_asn1(&signature, &mut asn1_sig).unwrap();
-        v.verify_asn1::<hash::Sha512>(&[b"sample"], asn1_sig)
-            .unwrap();
+        v.verify_asn1::<hash::Sha512>(b"sample", asn1_sig).unwrap();
 
-        k.rfc6979_sign_with_random::<hash::Sha512>(&[b"test"], &[], &mut signature)
+        k.rfc6979_sign_with_random::<hash::Sha512>(b"test", &[], &mut signature)
             .unwrap();
         assert_eq!(
             signature,
@@ -657,18 +669,18 @@ mod tests {
                 0x75, 0x19, 0xe8, 0x40, 0xd1, 0x19, 0x4e, 0x55,
             ]
         );
-        v.verify::<hash::Sha512>(&[b"test"], &signature).unwrap();
+        v.verify::<hash::Sha512>(b"test", &signature).unwrap();
 
         let mut asn1_sig = [0u8; 128];
         let asn1_sig = SigningKey::<curve::P256>::fixed_to_asn1(&signature, &mut asn1_sig).unwrap();
-        v.verify_asn1::<hash::Sha512>(&[b"test"], asn1_sig).unwrap();
+        v.verify_asn1::<hash::Sha512>(b"test", asn1_sig).unwrap();
 
         // This is an extra test vector from
         // <https://github.com/C2SP/CCTV/tree/main/RFC6979>
         // that exercises the rejection sampling in
         // `p256::PrivateKey::generate()`
 
-        k.rfc6979_sign_with_random::<hash::Sha256>(&[b"wv[vnX"], &[], &mut signature)
+        k.rfc6979_sign_with_random::<hash::Sha256>(b"wv[vnX", &[], &mut signature)
             .unwrap();
         assert_eq!(
             signature,
@@ -680,7 +692,7 @@ mod tests {
                 0x35, 0xfa, 0x41, 0x1c, 0x68, 0xd2, 0xba, 0x33
             ]
         );
-        v.verify::<hash::Sha256>(&[b"wv[vnX"], &signature).unwrap();
+        v.verify::<hash::Sha256>(b"wv[vnX", &signature).unwrap();
     }
 
     #[test]
@@ -728,15 +740,9 @@ mod tests {
                                         .unwrap();
 
                                 let result = match self.param.as_ref() {
-                                    "P-256,SHA-256" => {
-                                        vkey.verify::<hash::Sha256>(&[&self.msg], &sig)
-                                    }
-                                    "P-256,SHA-384" => {
-                                        vkey.verify::<hash::Sha384>(&[&self.msg], &sig)
-                                    }
-                                    "P-256,SHA-512" => {
-                                        vkey.verify::<hash::Sha512>(&[&self.msg], &sig)
-                                    }
+                                    "P-256,SHA-256" => vkey.verify::<hash::Sha256>(&self.msg, &sig),
+                                    "P-256,SHA-384" => vkey.verify::<hash::Sha384>(&self.msg, &sig),
+                                    "P-256,SHA-512" => vkey.verify::<hash::Sha512>(&self.msg, &sig),
                                     _ => todo!("unhandled param"),
                                 };
 
@@ -770,15 +776,9 @@ mod tests {
                                         .unwrap();
 
                                 let result = match self.param.as_ref() {
-                                    "P-384,SHA-256" => {
-                                        vkey.verify::<hash::Sha256>(&[&self.msg], &sig)
-                                    }
-                                    "P-384,SHA-384" => {
-                                        vkey.verify::<hash::Sha384>(&[&self.msg], &sig)
-                                    }
-                                    "P-384,SHA-512" => {
-                                        vkey.verify::<hash::Sha512>(&[&self.msg], &sig)
-                                    }
+                                    "P-384,SHA-256" => vkey.verify::<hash::Sha256>(&self.msg, &sig),
+                                    "P-384,SHA-384" => vkey.verify::<hash::Sha384>(&self.msg, &sig),
+                                    "P-384,SHA-512" => vkey.verify::<hash::Sha512>(&self.msg, &sig),
                                     _ => todo!("unhandled param"),
                                 };
 

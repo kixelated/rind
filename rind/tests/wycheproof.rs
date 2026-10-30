@@ -7,10 +7,8 @@ use rind::aead::{
     RandomizedNonceKey, UnboundKey,
 };
 use rind::cipher::ChaCha20;
-use rind::hashing::hkdf::Prk;
-use rind::hashing::{LegacySha1, Sha256, Sha384, Sha512};
-use rind::hmac;
-use rind::signing::{ecdsa, eddsa, rsa};
+use rind::signature;
+use rind::{hkdf, hmac};
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
@@ -29,9 +27,6 @@ struct TestGroup {
 
     #[serde(default, rename(deserialize = "publicKeyAsn"), with = "hex::serde")]
     public_key_asn: Vec<u8>,
-
-    #[serde(default, rename(deserialize = "publicKeyDer"), with = "hex::serde")]
-    public_key_der: Vec<u8>,
 
     #[serde(default, rename(deserialize = "privateKeyPkcs8"), with = "hex::serde")]
     private_key_pkcs8: Vec<u8>,
@@ -88,6 +83,8 @@ struct Test {
 struct PublicKey {
     #[serde(default, with = "hex::serde")]
     uncompressed: Vec<u8>,
+    #[serde(default, with = "hex::serde")]
+    pk: Vec<u8>,
 }
 
 #[derive(Copy, Clone, Deserialize, Debug, PartialEq)]
@@ -192,9 +189,7 @@ fn truncated(tag: &[u8], expected: &[u8]) -> Result<(), Error> {
 
 #[test]
 fn hkdf_tests() {
-    type Expand = fn(&[u8], &[u8], &[u8], &mut [u8]) -> Result<(), Error>;
-
-    fn check(file: &str, expand: Expand) {
+    fn check(file: &str, algorithm: hkdf::Algorithm) {
         let data_file = File::open(file).expect("failed to open data file");
         let reader = BufReader::new(data_file);
         let tests: TestFile = serde_json::from_reader(reader).expect("invalid test JSON");
@@ -206,7 +201,11 @@ fn hkdf_tests() {
                 summary.start(&test);
 
                 let mut okm = vec![0u8; test.size];
-                let result = expand(&test.salt, &test.ikm, &test.info, &mut okm);
+                let prk = hkdf::Salt::new(algorithm, &test.salt).extract(&test.ikm);
+                let info = [test.info.as_slice()];
+                let result = prk
+                    .expand(&info, okm.len())
+                    .and_then(|expanded| expanded.fill(&mut okm));
 
                 match (test.result, result) {
                     (ExpectedResult::Valid, Ok(())) => assert_eq!(okm, test.okm),
@@ -218,30 +217,51 @@ fn hkdf_tests() {
     }
 
     check(
-        "../thirdparty/wycheproof/testvectors_v1/hkdf_sha1_test.json",
-        |salt, ikm, info, out| Prk::<LegacySha1>::extract(salt, ikm).expand(&[info], out),
-    );
-    check(
         "../thirdparty/wycheproof/testvectors_v1/hkdf_sha256_test.json",
-        |salt, ikm, info, out| Prk::<Sha256>::extract(salt, ikm).expand(&[info], out),
+        hkdf::HKDF_SHA256,
     );
     check(
         "../thirdparty/wycheproof/testvectors_v1/hkdf_sha384_test.json",
-        |salt, ikm, info, out| Prk::<Sha384>::extract(salt, ikm).expand(&[info], out),
+        hkdf::HKDF_SHA384,
     );
     check(
         "../thirdparty/wycheproof/testvectors_v1/hkdf_sha512_test.json",
-        |salt, ikm, info, out| Prk::<Sha512>::extract(salt, ikm).expand(&[info], out),
+        hkdf::HKDF_SHA512,
     );
 }
 
 #[test]
-fn test_verify_ecdsa_p256() {
-    for file in [
-        "ecdsa_secp256r1_sha256_p1363_test.json",
-        "ecdsa_secp256r1_sha256_test.json",
-        "ecdsa_secp256r1_sha512_p1363_test.json",
-        "ecdsa_secp256r1_sha512_test.json",
+fn test_verify_ecdsa() {
+    // Each file whose curve, hash, and encoding has a constant.
+    for (file, algorithm) in [
+        (
+            "ecdsa_secp256r1_sha256_p1363_test.json",
+            &signature::ECDSA_P256_SHA256_FIXED,
+        ),
+        (
+            "ecdsa_secp256r1_sha256_test.json",
+            &signature::ECDSA_P256_SHA256_ASN1,
+        ),
+        (
+            "ecdsa_secp256r1_sha512_test.json",
+            &signature::ECDSA_P256_SHA512_ASN1,
+        ),
+        (
+            "ecdsa_secp384r1_sha256_test.json",
+            &signature::ECDSA_P384_SHA256_ASN1,
+        ),
+        (
+            "ecdsa_secp384r1_sha384_p1363_test.json",
+            &signature::ECDSA_P384_SHA384_FIXED,
+        ),
+        (
+            "ecdsa_secp384r1_sha384_test.json",
+            &signature::ECDSA_P384_SHA384_ASN1,
+        ),
+        (
+            "ecdsa_secp384r1_sha512_test.json",
+            &signature::ECDSA_P384_SHA512_ASN1,
+        ),
     ] {
         let data_file = File::open(format!("../thirdparty/wycheproof/testvectors_v1/{file}"))
             .unwrap_or_else(|_| panic!("failed to open data file {}", file));
@@ -253,89 +273,13 @@ fn test_verify_ecdsa_p256() {
         for group in tests.groups {
             summary.group(&group);
 
-            let public_key = ecdsa::VerifyingKey::<ecdsa::P256>::from_x962_uncompressed(
-                &group.public_key.uncompressed,
-            )
-            .unwrap();
+            let public_key =
+                signature::UnparsedPublicKey::new(algorithm, &group.public_key.uncompressed);
 
             for test in group.tests {
                 summary.start(&test);
 
-                let result = match (group.typ.as_ref(), group.sha.as_ref()) {
-                    ("EcdsaP1363Verify", "SHA-256") => {
-                        public_key.verify::<Sha256>(&[&test.msg], &test.sig)
-                    }
-                    ("EcdsaVerify", "SHA-256") => {
-                        public_key.verify_asn1::<Sha256>(&[&test.msg], &test.sig)
-                    }
-                    ("EcdsaP1363Verify", "SHA-512") => {
-                        public_key.verify::<Sha512>(&[&test.msg], &test.sig)
-                    }
-                    ("EcdsaVerify", "SHA-512") => {
-                        public_key.verify_asn1::<Sha512>(&[&test.msg], &test.sig)
-                    }
-                    _ => todo!("other ecdsa hashes"),
-                };
-
-                match (test.result, result) {
-                    (ExpectedResult::Valid, Ok(())) => {}
-                    (
-                        ExpectedResult::Invalid,
-                        Err(Error::BadSignature) | Err(Error::WrongLength),
-                    ) => {}
-                    _ => panic!("expected {:?} got {:?}", test.result, result),
-                }
-            }
-        }
-    }
-}
-
-#[test]
-fn test_verify_ecdsa_p384() {
-    for file in [
-        "ecdsa_secp384r1_sha256_test.json",
-        "ecdsa_secp384r1_sha384_p1363_test.json",
-        "ecdsa_secp384r1_sha384_test.json",
-        "ecdsa_secp384r1_sha512_p1363_test.json",
-        "ecdsa_secp384r1_sha512_test.json",
-    ] {
-        let data_file = File::open(format!("../thirdparty/wycheproof/testvectors_v1/{file}"))
-            .expect("failed to open data file");
-
-        let reader = BufReader::new(data_file);
-        let tests: TestFile = serde_json::from_reader(reader).expect("invalid test JSON");
-        let mut summary = Summary::new();
-
-        for group in tests.groups {
-            summary.group(&group);
-
-            let public_key = ecdsa::VerifyingKey::<ecdsa::P384>::from_x962_uncompressed(
-                &group.public_key.uncompressed,
-            )
-            .unwrap();
-
-            for test in group.tests {
-                summary.start(&test);
-
-                let result = match (group.typ.as_ref(), group.sha.as_ref()) {
-                    ("EcdsaVerify", "SHA-256") => {
-                        public_key.verify_asn1::<Sha256>(&[&test.msg], &test.sig)
-                    }
-                    ("EcdsaP1363Verify", "SHA-384") => {
-                        public_key.verify::<Sha384>(&[&test.msg], &test.sig)
-                    }
-                    ("EcdsaVerify", "SHA-384") => {
-                        public_key.verify_asn1::<Sha384>(&[&test.msg], &test.sig)
-                    }
-                    ("EcdsaP1363Verify", "SHA-512") => {
-                        public_key.verify::<Sha512>(&[&test.msg], &test.sig)
-                    }
-                    ("EcdsaVerify", "SHA-512") => {
-                        public_key.verify_asn1::<Sha512>(&[&test.msg], &test.sig)
-                    }
-                    _ => todo!("other ecdsa hashes"),
-                };
-
+                let result = public_key.verify(&test.msg, &test.sig);
                 match (test.result, result) {
                     (ExpectedResult::Valid, Ok(())) => {}
                     (
@@ -495,19 +439,18 @@ fn test_rsa_pkcs1_verify() {
         for group in tests.groups {
             summary.group(&group);
 
-            let key = rsa::VerifyingKey::from_pkcs1_der(&group.public_key_asn).unwrap();
-            println!("key is {key:?}");
+            let algorithm = match group.sha.as_ref() {
+                "SHA-256" => &signature::RSA_PKCS1_2048_8192_SHA256,
+                "SHA-384" => &signature::RSA_PKCS1_2048_8192_SHA384,
+                "SHA-512" => &signature::RSA_PKCS1_2048_8192_SHA512,
+                other => panic!("unhandled sha {other:?}"),
+            };
+            let key = signature::UnparsedPublicKey::new(algorithm, &group.public_key_asn);
 
             for test in group.tests {
                 summary.start(&test);
 
-                let result = match group.sha.as_ref() {
-                    "SHA-256" => key.verify_pkcs1_sha256(&test.sig, &test.msg),
-                    "SHA-384" => key.verify_pkcs1_sha384(&test.sig, &test.msg),
-                    "SHA-512" => key.verify_pkcs1_sha512(&test.sig, &test.msg),
-                    other => panic!("unhandled sha {other:?}"),
-                };
-
+                let result = key.verify(&test.msg, &test.sig);
                 match (test.result, &result) {
                     (ExpectedResult::Valid, Ok(())) => {}
                     (
@@ -540,28 +483,27 @@ fn test_rsa_pkcs1_sign() {
         for group in tests.groups {
             summary.group(&group);
 
-            if !matches!(group.sha.as_ref(), "SHA-256" | "SHA-384" | "SHA-512") {
-                summary.skipped(&format!("pkcs1 signing with {} not supported", group.sha));
-                continue;
-            }
+            let padding = match group.sha.as_ref() {
+                "SHA-256" => &signature::RSA_PKCS1_SHA256,
+                "SHA-384" => &signature::RSA_PKCS1_SHA384,
+                "SHA-512" => &signature::RSA_PKCS1_SHA512,
+                other => {
+                    summary.skipped(&format!("pkcs1 signing with {other} not supported"));
+                    continue;
+                }
+            };
 
-            let key = rsa::SigningKey::from_pkcs8_der(&group.private_key_pkcs8).unwrap();
+            let key = signature::RsaKeyPair::from_pkcs8(&group.private_key_pkcs8).unwrap();
 
             for test in group.tests {
                 summary.start(&test);
 
-                let mut signature = [0u8; 512];
-                let signature = match group.sha.as_ref() {
-                    "SHA-256" => key.sign_pkcs1_sha256(&mut signature, &test.msg),
-                    "SHA-384" => key.sign_pkcs1_sha384(&mut signature, &test.msg),
-                    "SHA-512" => key.sign_pkcs1_sha512(&mut signature, &test.msg),
-                    other => panic!("unhandled sha {other:?}"),
-                }
-                .unwrap();
+                let mut signature = vec![0u8; key.public_modulus_len()];
+                key.sign(padding, &test.msg, &mut signature).unwrap();
 
                 // Every case is valid or acceptable (a small public exponent),
                 // and PKCS#1 v1.5 signing is deterministic.
-                assert_eq!(signature, &test.sig[..]);
+                assert_eq!(signature, test.sig);
             }
         }
     }
@@ -589,13 +531,10 @@ fn test_rsa_pss_verify() {
         for group in tests.groups {
             summary.group(&group);
 
-            let key = rsa::VerifyingKey::from_pkcs1_der(&group.public_key_asn).unwrap();
-            println!("key is {key:?}");
-
-            match (group.sha.as_ref(), group.mgf_sha.as_ref(), group.salt_len) {
-                ("SHA-256", "SHA-256", 32) => {}
-                ("SHA-384", "SHA-384", 48) => {}
-                ("SHA-512", "SHA-512", 64) => {}
+            let algorithm = match (group.sha.as_ref(), group.mgf_sha.as_ref(), group.salt_len) {
+                ("SHA-256", "SHA-256", 32) => &signature::RSA_PSS_2048_8192_SHA256,
+                ("SHA-384", "SHA-384", 48) => &signature::RSA_PSS_2048_8192_SHA384,
+                ("SHA-512", "SHA-512", 64) => &signature::RSA_PSS_2048_8192_SHA512,
                 other => {
                     summary.skipped(&format!(
                         "pss with sha={} mgf={} salt_len={} not supported",
@@ -603,18 +542,13 @@ fn test_rsa_pss_verify() {
                     ));
                     continue;
                 }
-            }
+            };
+            let key = signature::UnparsedPublicKey::new(algorithm, &group.public_key_asn);
 
             for test in group.tests {
                 summary.start(&test);
 
-                let result = match group.sha.as_ref() {
-                    "SHA-256" => key.verify_pss_sha256(&test.sig, &test.msg),
-                    "SHA-384" => key.verify_pss_sha384(&test.sig, &test.msg),
-                    "SHA-512" => key.verify_pss_sha512(&test.sig, &test.msg),
-                    other => panic!("unhandled sha {other:?}"),
-                };
-
+                let result = key.verify(&test.msg, &test.sig);
                 match (test.result, &result) {
                     (ExpectedResult::Valid, Ok(())) => {}
                     (
@@ -641,13 +575,12 @@ fn test_ed25519_verify() {
     for group in tests.groups {
         summary.group(&group);
 
-        let key = eddsa::Ed25519VerifyingKey::from_spki_der(&group.public_key_der).unwrap();
-        println!("key is {key:?}");
+        let key = signature::UnparsedPublicKey::new(&signature::ED25519, &group.public_key.pk);
 
         for test in group.tests {
             summary.start(&test);
 
-            let result = key.verify(&test.sig, &test.msg);
+            let result = key.verify(&test.msg, &test.sig);
             match (test.result, result) {
                 // "acceptable" cases are small- and mixed-order public keys
                 (ExpectedResult::Valid | ExpectedResult::Acceptable, Ok(())) => {}

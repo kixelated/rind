@@ -4,9 +4,10 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use ::aws_lc_rs::encoding::AsDer;
+use ::aws_lc_rs::signature;
 use dimpl::crypto::{CryptoProvider, Dtls12CipherSuite, Dtls13CipherSuite, NamedGroup, aws_lc_rs};
 use dimpl::{Config, Dtls, DtlsCertificate, Output, ProtocolVersion};
-use rind::signing::ecdsa;
 
 const DTLS12: [Dtls12CipherSuite; 3] = [
     Dtls12CipherSuite::ECDHE_ECDSA_AES128_GCM_SHA256,
@@ -74,10 +75,9 @@ impl Side {
             .to_vec();
 
         let pkcs8 = key.serialize_der();
-        let private_key = match (self.format, self.curve) {
-            (KeyFormat::Pkcs8, _) => pkcs8,
-            (KeyFormat::Sec1, Curve::P256) => sec1::<ecdsa::P256>(&pkcs8),
-            (KeyFormat::Sec1, Curve::P384) => sec1::<ecdsa::P384>(&pkcs8),
+        let private_key = match self.format {
+            KeyFormat::Pkcs8 => pkcs8,
+            KeyFormat::Sec1 => sec1(self.curve, &pkcs8),
         };
         DtlsCertificate {
             certificate,
@@ -86,9 +86,14 @@ impl Side {
     }
 }
 
-fn sec1<C: ecdsa::Curve>(pkcs8: &[u8]) -> Vec<u8> {
-    let key = ecdsa::SigningKey::<C>::from_pkcs8_der(pkcs8).unwrap();
-    key.to_sec1_der(&mut [0; 256]).unwrap().to_vec()
+/// Re-encodes a PKCS#8 key as SEC1, which rind does not write.
+fn sec1(curve: Curve, pkcs8: &[u8]) -> Vec<u8> {
+    let algorithm = match curve {
+        Curve::P256 => &signature::ECDSA_P256_SHA256_ASN1_SIGNING,
+        Curve::P384 => &signature::ECDSA_P384_SHA384_ASN1_SIGNING,
+    };
+    let key = signature::EcdsaKeyPair::from_pkcs8(algorithm, pkcs8).unwrap();
+    key.private_key().as_der().unwrap().as_ref().to_vec()
 }
 
 fn endpoint(side: Side, suite: Suite, group: NamedGroup, now: Instant) -> (Dtls, Vec<u8>) {

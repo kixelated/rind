@@ -13,8 +13,7 @@ mod precomp;
 
 /// A P-256 public key.
 #[derive(Clone, Debug)]
-pub struct PublicKey {
-    point: AffineMontPoint,
+pub(crate) struct PublicKey {
     precomp_w5: JacobianMontPointTableW5,
 }
 
@@ -26,22 +25,15 @@ impl PublicKey {
     /// This must be exactly 65 bytes in length, using the X9.62
     /// uncompressed encoding.  An error is returned if a coordinate
     /// is not below the field prime, or the point is not on the curve.
-    pub fn from_x962_uncompressed(bytes: &[u8]) -> Result<Self, Error> {
+    pub(crate) fn from_x962_uncompressed(bytes: &[u8]) -> Result<Self, Error> {
         let _entry = low::Entry::new_public();
         let point = AffineMontPoint::from_x962_uncompressed(bytes)?;
         Ok(Self::from_affine(point))
     }
 
-    /// Encodes this public key using the X9.62 uncompressed encoding.
-    pub fn as_bytes_uncompressed(&self) -> [u8; Self::BYTES] {
-        let _entry = low::Entry::new_public();
-        self.point.as_bytes_uncompressed()
-    }
-
     fn from_affine(point: AffineMontPoint) -> Self {
         Self {
             precomp_w5: point.public_precomp_w5(),
-            point,
         }
     }
 
@@ -161,7 +153,7 @@ impl fmt::Debug for PrivateKey {
 ///
 /// This backs ECDSA, so it can be serialized and deserialized. Its
 /// Diffie-Hellman operation is only for tests with known scalars.
-pub struct StaticPrivateKey(PrivateKey);
+pub(crate) struct StaticPrivateKey(PrivateKey);
 
 impl StaticPrivateKey {
     /// Generate a new random private key using the system RNG.
@@ -784,7 +776,7 @@ impl FieldElement {
 }
 
 #[derive(Default)]
-pub struct Scalar([u64; 4]);
+pub(crate) struct Scalar([u64; 4]);
 
 impl Scalar {
     pub(crate) const BYTES: usize = 32;
@@ -1210,8 +1202,7 @@ mod tests {
         println!("pub = {public:x?}");
         const EXPECTED: &[u8; 65] = b"\x04\xcb\x8a\x14\x1c\xd7\xe4\x07\xaf\x69\xa5\x01\x88\xe9\x1c\xe5\x5d\xcc\xfd\x33\x48\xda\xba\x4a\x9c\x46\x64\x33\x2e\x95\x59\xb6\x81\x44\xfc\x1a\x61\xd8\x41\xe4\xdb\x80\x1b\x33\x51\x20\x12\x1d\x0b\xa4\x84\xb3\xc9\x53\xb3\x1d\x35\x1d\x7f\xa2\x13\x97\xd1\x25\x47";
         assert_eq!(&public, EXPECTED);
-        let public_key = PublicKey::from_x962_uncompressed(&public).unwrap();
-        assert_eq!(&public_key.as_bytes_uncompressed(), EXPECTED);
+        PublicKey::from_x962_uncompressed(&public).unwrap();
     }
 
     #[test]

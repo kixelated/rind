@@ -30,6 +30,13 @@ pub(crate) struct RsaPrivateKey {
     iqmp: SecretRsaPosIntModP,
 }
 
+impl Drop for RsaPrivateKey {
+    fn drop(&mut self) {
+        // Not secret, but wiping it lets `tests/zeroing.rs` check every byte.
+        low::zeroise_value(&mut self.public);
+    }
+}
+
 impl RsaPrivateKey {
     pub(crate) fn new(
         p: RsaPosIntModP,

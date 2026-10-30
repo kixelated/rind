@@ -421,8 +421,8 @@ pub(crate) fn curve25519_x25519base(res: &mut [u64; 4], scalar: &[u64; 4]) {
         Q!("    mov             " "rax, [rsp]"),
         Q!("    and             " "rax, 8"),
 
-        Q!("    lea             " "r10, [rip + {Lcurve25519_x25519base_edwards25519_0g}]"),
-        Q!("    lea             " "r11, [rip + {Lcurve25519_x25519base_edwards25519_8g}]"),
+        Q!("    lea             " "r10, [rip + {curve25519_x25519base_constant}]"),
+        Q!("    lea             " "r11, [r10 + 8 * 12]"),
 
         Q!("    mov             " "rax, [r10]"),
         Q!("    mov             " "rcx, [r11]"),
@@ -506,7 +506,7 @@ pub(crate) fn curve25519_x25519base(res: &mut [u64; 4], scalar: &[u64; 4]) {
         // l >= 9 case cannot arise on the last iteration.
 
         Q!("    mov             " i!() ", 4"),
-        Q!("    lea             " "rax, [rip + {Lcurve25519_x25519base_edwards25519_gtable}]"),
+        Q!("    lea             " "rax, [r10 + 8 * 24]"),
         Q!("    mov             " tab!() ", rax"),
         Q!("    mov             " bias!() ", 0"),
 
@@ -2279,9 +2279,7 @@ pub(crate) fn curve25519_x25519base(res: &mut [u64; 4], scalar: &[u64; 4]) {
         Q!("    pop             " "rbx"),
         inout("rdi") res.as_mut_ptr() => _,
         inout("rsi") scalar.as_ptr() => _,
-        Lcurve25519_x25519base_edwards25519_0g = sym Lcurve25519_x25519base_edwards25519_0g,
-        Lcurve25519_x25519base_edwards25519_8g = sym Lcurve25519_x25519base_edwards25519_8g,
-        Lcurve25519_x25519base_edwards25519_gtable = sym Lcurve25519_x25519base_edwards25519_gtable,
+        curve25519_x25519base_constant = sym curve25519_x25519base_constant,
         // clobbers
         out("r10") _,
         out("r11") _,
@@ -2299,17 +2297,12 @@ pub(crate) fn curve25519_x25519base(res: &mut [u64; 4], scalar: &[u64; 4]) {
 }
 
 // ****************************************************************************
-// The precomputed data (all read-only). This is currently part of the same
-// text section, which gives position-independent code with simple PC-relative
-// addressing. However it could be put in a separate section via something like
-//
-// .section .rodata
+// The precomputed data (all read-only).
 // ****************************************************************************
 
-// 2^254 * G and (2^254 + 8) * G in extended-projective coordinates
-// but with z = 1 assumed and hence left out, so they are (X,Y,T) only.
-
-static Lcurve25519_x25519base_edwards25519_0g: [u64; 12] = [
+static curve25519_x25519base_constant: [u64; 6072] = [
+    // 2^254 * G and (2^254 + 8) * G in extended-projective coordinates
+    // but with z = 1 assumed and hence left out, so they are (X,Y,T) only.
     0x251037f7cf4e861d,
     0x10ede0fb19fb128f,
     0x96c033b175f5e2c8,
@@ -2322,9 +2315,6 @@ static Lcurve25519_x25519base_edwards25519_0g: [u64; 12] = [
     0x855e4ff0de1230ff,
     0x72e302a348492870,
     0x1253c19e53dbe1bc,
-];
-
-static Lcurve25519_x25519base_edwards25519_8g: [u64; 12] = [
     0x331d086e0d9abcaa,
     0x1e23c96d311a10c9,
     0x96d0f95e58c13478,
@@ -2339,9 +2329,7 @@ static Lcurve25519_x25519base_edwards25519_8g: [u64; 12] = [
     0x5e6d8901138cf386,
     // Precomputed table of multiples of generator for edwards25519
     // all in precomputed extended-projective (y-x,x+y,2*d*x*y) triples.
-];
 
-static Lcurve25519_x25519base_edwards25519_gtable: [u64; 6048] = [
     // 2^4 * 1 * G
     0x7ec851ca553e2df3,
     0xa71284cba64878b3,

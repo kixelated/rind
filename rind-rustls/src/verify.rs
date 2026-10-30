@@ -1,5 +1,4 @@
-use rind::hashing;
-use rind::signing::{ecdsa, eddsa, rsa};
+use rind::signature::{self, VerificationAlgorithm};
 use rustls::SignatureScheme;
 use rustls::crypto::WebPkiSupportedAlgorithms;
 use rustls::pki_types::{
@@ -41,78 +40,99 @@ pub(crate) static ALGORITHMS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorit
     ],
 };
 
-static ECDSA_P256_SHA256: &dyn SignatureVerificationAlgorithm = &EcdsaP256Verify {
+static ECDSA_P256_SHA256: &dyn SignatureVerificationAlgorithm = &Verify {
+    public_key_alg_id: alg_id::ECDSA_P256,
     signature_alg_id: alg_id::ECDSA_SHA256,
-    verify: |key, signature, message| key.verify_asn1::<hashing::Sha256>(&[message], signature),
+    algorithm: &signature::ECDSA_P256_SHA256_ASN1,
 };
 
-static ECDSA_P256_SHA384: &dyn SignatureVerificationAlgorithm = &EcdsaP256Verify {
+static ECDSA_P256_SHA384: &dyn SignatureVerificationAlgorithm = &Verify {
+    public_key_alg_id: alg_id::ECDSA_P256,
     signature_alg_id: alg_id::ECDSA_SHA384,
-    verify: |key, signature, message| key.verify_asn1::<hashing::Sha384>(&[message], signature),
+    algorithm: &signature::ECDSA_P256_SHA384_ASN1,
 };
 
-static ECDSA_P256_SHA512: &dyn SignatureVerificationAlgorithm = &EcdsaP256Verify {
+static ECDSA_P256_SHA512: &dyn SignatureVerificationAlgorithm = &Verify {
+    public_key_alg_id: alg_id::ECDSA_P256,
     signature_alg_id: alg_id::ECDSA_SHA512,
-    verify: |key, signature, message| key.verify_asn1::<hashing::Sha512>(&[message], signature),
+    algorithm: &signature::ECDSA_P256_SHA512_ASN1,
 };
 
-static ECDSA_P384_SHA256: &dyn SignatureVerificationAlgorithm = &EcdsaP384Verify {
+static ECDSA_P384_SHA256: &dyn SignatureVerificationAlgorithm = &Verify {
+    public_key_alg_id: alg_id::ECDSA_P384,
     signature_alg_id: alg_id::ECDSA_SHA256,
-    verify: |key, signature, message| key.verify_asn1::<hashing::Sha256>(&[message], signature),
+    algorithm: &signature::ECDSA_P384_SHA256_ASN1,
 };
 
-static ECDSA_P384_SHA384: &dyn SignatureVerificationAlgorithm = &EcdsaP384Verify {
+static ECDSA_P384_SHA384: &dyn SignatureVerificationAlgorithm = &Verify {
+    public_key_alg_id: alg_id::ECDSA_P384,
     signature_alg_id: alg_id::ECDSA_SHA384,
-    verify: |key, signature, message| key.verify_asn1::<hashing::Sha384>(&[message], signature),
+    algorithm: &signature::ECDSA_P384_SHA384_ASN1,
 };
 
-static ECDSA_P384_SHA512: &dyn SignatureVerificationAlgorithm = &EcdsaP384Verify {
+static ECDSA_P384_SHA512: &dyn SignatureVerificationAlgorithm = &Verify {
+    public_key_alg_id: alg_id::ECDSA_P384,
     signature_alg_id: alg_id::ECDSA_SHA512,
-    verify: |key, signature, message| key.verify_asn1::<hashing::Sha512>(&[message], signature),
+    algorithm: &signature::ECDSA_P384_SHA512_ASN1,
 };
 
-static ED25519: &dyn SignatureVerificationAlgorithm = &Ed25519Verify;
+static ED25519: &dyn SignatureVerificationAlgorithm = &Verify {
+    public_key_alg_id: alg_id::ED25519,
+    signature_alg_id: alg_id::ED25519,
+    algorithm: &signature::ED25519,
+};
 
-static RSA_PSS_SHA256: &dyn SignatureVerificationAlgorithm = &RsaVerify {
+static RSA_PSS_SHA256: &dyn SignatureVerificationAlgorithm = &Verify {
+    public_key_alg_id: alg_id::RSA_ENCRYPTION,
     signature_alg_id: alg_id::RSA_PSS_SHA256,
-    verify: |key, signature, message| key.verify_pss_sha256(signature, message),
+    algorithm: &signature::RSA_PSS_2048_8192_SHA256,
 };
 
-static RSA_PSS_SHA384: &dyn SignatureVerificationAlgorithm = &RsaVerify {
+static RSA_PSS_SHA384: &dyn SignatureVerificationAlgorithm = &Verify {
+    public_key_alg_id: alg_id::RSA_ENCRYPTION,
     signature_alg_id: alg_id::RSA_PSS_SHA384,
-    verify: |key, signature, message| key.verify_pss_sha384(signature, message),
+    algorithm: &signature::RSA_PSS_2048_8192_SHA384,
 };
 
-static RSA_PSS_SHA512: &dyn SignatureVerificationAlgorithm = &RsaVerify {
+static RSA_PSS_SHA512: &dyn SignatureVerificationAlgorithm = &Verify {
+    public_key_alg_id: alg_id::RSA_ENCRYPTION,
     signature_alg_id: alg_id::RSA_PSS_SHA512,
-    verify: |key, signature, message| key.verify_pss_sha512(signature, message),
+    algorithm: &signature::RSA_PSS_2048_8192_SHA512,
 };
 
-static RSA_PKCS1_SHA256: &dyn SignatureVerificationAlgorithm = &RsaVerify {
+static RSA_PKCS1_SHA256: &dyn SignatureVerificationAlgorithm = &Verify {
+    public_key_alg_id: alg_id::RSA_ENCRYPTION,
     signature_alg_id: alg_id::RSA_PKCS1_SHA256,
-    verify: |key, signature, message| key.verify_pkcs1_sha256(signature, message),
+    algorithm: &signature::RSA_PKCS1_2048_8192_SHA256,
 };
 
-static RSA_PKCS1_SHA384: &dyn SignatureVerificationAlgorithm = &RsaVerify {
+static RSA_PKCS1_SHA384: &dyn SignatureVerificationAlgorithm = &Verify {
+    public_key_alg_id: alg_id::RSA_ENCRYPTION,
     signature_alg_id: alg_id::RSA_PKCS1_SHA384,
-    verify: |key, signature, message| key.verify_pkcs1_sha384(signature, message),
+    algorithm: &signature::RSA_PKCS1_2048_8192_SHA384,
 };
 
-static RSA_PKCS1_SHA512: &dyn SignatureVerificationAlgorithm = &RsaVerify {
+static RSA_PKCS1_SHA512: &dyn SignatureVerificationAlgorithm = &Verify {
+    public_key_alg_id: alg_id::RSA_ENCRYPTION,
     signature_alg_id: alg_id::RSA_PKCS1_SHA512,
-    verify: |key, signature, message| key.verify_pkcs1_sha512(signature, message),
+    algorithm: &signature::RSA_PKCS1_2048_8192_SHA512,
 };
 
+/// A webpki algorithm: its identifiers, and the rind constant that verifies it.
+///
+/// webpki hands over the `subjectPublicKey` bit string, which is the encoding
+/// each constant takes: an X9.62 point, a PKCS#1 `RSAPublicKey`, or Ed25519's
+/// 32 bytes.
 #[derive(Debug)]
-struct RsaVerify {
+struct Verify {
+    public_key_alg_id: AlgorithmIdentifier,
     signature_alg_id: AlgorithmIdentifier,
-    #[allow(clippy::type_complexity)]
-    verify: fn(&rsa::VerifyingKey, &[u8], &[u8]) -> Result<(), rind::Error>,
+    algorithm: &'static dyn VerificationAlgorithm,
 }
 
-impl SignatureVerificationAlgorithm for RsaVerify {
+impl SignatureVerificationAlgorithm for Verify {
     fn public_key_alg_id(&self) -> AlgorithmIdentifier {
-        alg_id::RSA_ENCRYPTION
+        self.public_key_alg_id
     }
 
     fn signature_alg_id(&self) -> AlgorithmIdentifier {
@@ -125,127 +145,26 @@ impl SignatureVerificationAlgorithm for RsaVerify {
         message: &[u8],
         signature: &[u8],
     ) -> Result<(), InvalidSignature> {
-        rsa::VerifyingKey::from_pkcs1_der(public_key)
-            .and_then(|pk| (self.verify)(&pk, signature, message))
-            .map_err(|_| InvalidSignature)
-    }
-}
-
-#[derive(Debug)]
-struct EcdsaP256Verify {
-    signature_alg_id: AlgorithmIdentifier,
-    #[allow(clippy::type_complexity)]
-    verify: fn(&ecdsa::VerifyingKey<ecdsa::P256>, &[u8], &[u8]) -> Result<(), rind::Error>,
-}
-
-impl SignatureVerificationAlgorithm for EcdsaP256Verify {
-    fn public_key_alg_id(&self) -> AlgorithmIdentifier {
-        alg_id::ECDSA_P256
-    }
-
-    fn signature_alg_id(&self) -> AlgorithmIdentifier {
-        self.signature_alg_id
-    }
-
-    fn verify_signature(
-        &self,
-        public_key: &[u8],
-        message: &[u8],
-        signature: &[u8],
-    ) -> Result<(), InvalidSignature> {
-        <ecdsa::P256 as ecdsa::Curve>::PublicKey::from_x962_uncompressed(public_key)
-            .and_then(|public_key| {
-                (self.verify)(&ecdsa::VerifyingKey { public_key }, signature, message)
-            })
-            .map_err(|_| InvalidSignature)
-    }
-}
-
-#[derive(Debug)]
-struct EcdsaP384Verify {
-    signature_alg_id: AlgorithmIdentifier,
-    #[allow(clippy::type_complexity)]
-    verify: fn(&ecdsa::VerifyingKey<ecdsa::P384>, &[u8], &[u8]) -> Result<(), rind::Error>,
-}
-
-impl SignatureVerificationAlgorithm for EcdsaP384Verify {
-    fn public_key_alg_id(&self) -> AlgorithmIdentifier {
-        alg_id::ECDSA_P384
-    }
-
-    fn signature_alg_id(&self) -> AlgorithmIdentifier {
-        self.signature_alg_id
-    }
-
-    fn verify_signature(
-        &self,
-        public_key: &[u8],
-        message: &[u8],
-        signature: &[u8],
-    ) -> Result<(), InvalidSignature> {
-        <ecdsa::P384 as ecdsa::Curve>::PublicKey::from_x962_uncompressed(public_key)
-            .and_then(|public_key| {
-                (self.verify)(&ecdsa::VerifyingKey { public_key }, signature, message)
-            })
-            .map_err(|_| InvalidSignature)
-    }
-}
-
-#[derive(Debug)]
-struct Ed25519Verify;
-
-impl SignatureVerificationAlgorithm for Ed25519Verify {
-    fn public_key_alg_id(&self) -> AlgorithmIdentifier {
-        alg_id::ED25519
-    }
-
-    fn signature_alg_id(&self) -> AlgorithmIdentifier {
-        alg_id::ED25519
-    }
-
-    fn verify_signature(
-        &self,
-        public_key: &[u8],
-        message: &[u8],
-        signature: &[u8],
-    ) -> Result<(), InvalidSignature> {
-        eddsa::Ed25519VerifyingKey::from_bytes(public_key)
-            .and_then(|public_key| public_key.verify(signature, message))
+        signature::UnparsedPublicKey::new(self.algorithm, public_key)
+            .verify(message, signature)
             .map_err(|_| InvalidSignature)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use rind::random;
+    use rind::signature::{
+        ECDSA_P256_SHA256_ASN1_SIGNING, ECDSA_P384_SHA384_ASN1_SIGNING, EcdsaKeyPair,
+        Ed25519KeyPair, KeyPair, RsaKeyPair,
+    };
 
     use super::*;
 
-    macro_rules! test_verify {
-        ($algorithm:ident, $signature:expr, $signing_key:expr, $hash:ty) => {
-            assert_eq!($algorithm.signature_alg_id(), $signature);
-            let mut message = [0u8; 64];
-            assert!(random::fill(&mut message).is_ok());
-            let mut signature = [0u8; 128];
-            let signature = $signing_key
-                .sign_asn1::<$hash>(&[&message], &mut signature)
-                .unwrap();
-            assert!(
-                $algorithm
-                    .verify_signature(
-                        &$signing_key
-                            .public_key()
-                            .unwrap()
-                            .public_key
-                            .as_bytes_uncompressed(),
-                        &message,
-                        &signature
-                    )
-                    .is_ok()
-            );
-        };
+    fn message() -> [u8; 64] {
+        let mut message = [0u8; 64];
+        random::fill(&mut message).unwrap();
+        message
     }
 
     // TLS 1.3 binds each ECDSA scheme to a curve and verifies with the first
@@ -262,103 +181,99 @@ mod tests {
         }
     }
 
+    // A signature verifies under its own algorithm, and under no other
+    // algorithm for the same key type. rind signs ECDSA only with each
+    // curve's own hash; Wycheproof covers the other pairs.
     #[test]
-    fn test_ecdsap256_verify() {
-        let signing_key = Arc::new(
-            ecdsa::SigningKey::<ecdsa::P256>::from_pkcs8_der(include_bytes!(
-                "../../rind/src/high/ecdsa/secp256r1.pkcs8.der"
-            ))
-            .unwrap(),
-        );
-        test_verify!(
-            ECDSA_P256_SHA256,
-            alg_id::ECDSA_SHA256,
-            signing_key,
-            hashing::Sha256
-        );
-        test_verify!(
-            ECDSA_P256_SHA384,
-            alg_id::ECDSA_SHA384,
-            signing_key,
-            hashing::Sha384
-        );
-        test_verify!(
-            ECDSA_P256_SHA512,
-            alg_id::ECDSA_SHA512,
-            signing_key,
-            hashing::Sha512
-        );
+    fn test_ecdsa_verify() {
+        for (pkcs8, signing, algorithm, others) in [
+            (
+                &include_bytes!("../../rind/src/high/ecdsa/secp256r1.pkcs8.der")[..],
+                &ECDSA_P256_SHA256_ASN1_SIGNING,
+                ECDSA_P256_SHA256,
+                [ECDSA_P256_SHA384, ECDSA_P256_SHA512, ECDSA_P384_SHA256],
+            ),
+            (
+                &include_bytes!("../../rind/src/high/ecdsa/secp384r1.pkcs8.der")[..],
+                &ECDSA_P384_SHA384_ASN1_SIGNING,
+                ECDSA_P384_SHA384,
+                [ECDSA_P384_SHA256, ECDSA_P384_SHA512, ECDSA_P256_SHA384],
+            ),
+        ] {
+            let key = EcdsaKeyPair::from_pkcs8(signing, pkcs8).unwrap();
+            let message = message();
+            let signature = key.sign(&message).unwrap();
+            let public_key = key.public_key().as_ref();
+            algorithm
+                .verify_signature(public_key, &message, signature.as_ref())
+                .unwrap();
+            for other in others {
+                assert!(
+                    other
+                        .verify_signature(public_key, &message, signature.as_ref())
+                        .is_err()
+                );
+            }
+        }
     }
 
     #[test]
-    fn test_ecdsap384_verify() {
-        let signing_key = Arc::new(
-            ecdsa::SigningKey::<ecdsa::P384>::from_pkcs8_der(include_bytes!(
-                "../../rind/src/high/ecdsa/secp384r1.pkcs8.der"
-            ))
-            .unwrap(),
-        );
-        test_verify!(
-            ECDSA_P384_SHA256,
-            alg_id::ECDSA_SHA256,
-            signing_key,
-            hashing::Sha256
-        );
-        test_verify!(
-            ECDSA_P384_SHA384,
-            alg_id::ECDSA_SHA384,
-            signing_key,
-            hashing::Sha384
-        );
-        test_verify!(
-            ECDSA_P384_SHA512,
-            alg_id::ECDSA_SHA512,
-            signing_key,
-            hashing::Sha512
-        );
+    fn test_ed25519_verify() {
+        let key = Ed25519KeyPair::generate().unwrap();
+        let message = message();
+        let signature = key.sign(&message);
+        ED25519
+            .verify_signature(key.public_key().as_ref(), &message, signature.as_ref())
+            .unwrap();
     }
 
     #[test]
     fn test_rsa_verify() {
-        let signing_key = Arc::new(
-            rsa::SigningKey::from_pkcs8_der(include_bytes!(
-                "../../rind/src/high/rsa/rsa2048.pkcs8.der"
-            ))
-            .unwrap(),
-        );
-        let mut message = [0u8; 64];
-        assert!(random::fill(&mut message).is_ok());
-
-        assert_eq!(RSA_PSS_SHA256.signature_alg_id(), alg_id::RSA_PSS_SHA256);
-        let mut signature = [0u8; 256];
-        let signature = signing_key
-            .sign_pss_sha256(&mut signature, &message)
-            .unwrap();
-        let mut public_key = [0u8; 512];
-        let public_key = signing_key
-            .public_key()
-            .to_pkcs1_der(&mut public_key)
-            .unwrap();
-        assert!(
-            RSA_PSS_SHA256
-                .verify_signature(public_key, &message, signature)
-                .is_ok()
-        );
-
-        assert_eq!(RSA_PSS_SHA384.signature_alg_id(), alg_id::RSA_PSS_SHA384);
-        let mut signature = [0u8; 256];
-        let signature = signing_key
-            .sign_pss_sha384(&mut signature, &message)
-            .unwrap();
-        let mut public_key = [0u8; 512];
-        let public_key = signing_key
-            .public_key()
-            .to_pkcs1_der(&mut public_key)
-            .unwrap();
-        assert!(
-            RSA_PSS_SHA384
-                .verify_signature(public_key, &message, signature)
-                .is_ok()
-        );
+        let key =
+            RsaKeyPair::from_pkcs8(include_bytes!("../../rind/src/high/rsa/rsa2048.pkcs8.der"))
+                .unwrap();
+        let message = message();
+        let schemes = [
+            (
+                RSA_PSS_SHA256,
+                alg_id::RSA_PSS_SHA256,
+                &signature::RSA_PSS_SHA256,
+            ),
+            (
+                RSA_PSS_SHA384,
+                alg_id::RSA_PSS_SHA384,
+                &signature::RSA_PSS_SHA384,
+            ),
+            (
+                RSA_PSS_SHA512,
+                alg_id::RSA_PSS_SHA512,
+                &signature::RSA_PSS_SHA512,
+            ),
+            (
+                RSA_PKCS1_SHA256,
+                alg_id::RSA_PKCS1_SHA256,
+                &signature::RSA_PKCS1_SHA256,
+            ),
+            (
+                RSA_PKCS1_SHA384,
+                alg_id::RSA_PKCS1_SHA384,
+                &signature::RSA_PKCS1_SHA384,
+            ),
+            (
+                RSA_PKCS1_SHA512,
+                alg_id::RSA_PKCS1_SHA512,
+                &signature::RSA_PKCS1_SHA512,
+            ),
+        ];
+        for (i, (algorithm, alg_id, padding)) in schemes.iter().enumerate() {
+            assert_eq!(algorithm.signature_alg_id(), *alg_id);
+            let mut signature = [0u8; 256];
+            key.sign(padding, &message, &mut signature).unwrap();
+            for (j, (other, ..)) in schemes.iter().enumerate() {
+                let result =
+                    other.verify_signature(key.public_key().as_ref(), &message, &signature);
+                assert_eq!(result.is_ok(), i == j);
+            }
+        }
     }
 }

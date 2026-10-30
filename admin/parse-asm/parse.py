@@ -219,6 +219,9 @@ def parse_file(f, visit):
         elif l.startswith(".balign 4"):
             visit(Type.ALIGN, contexts, "4")
         elif l.strip().startswith("."):
+            l, _, comment = l.partition("//")
+            if comment:
+                visit(Type.COMMENT, comment.strip())
             parts = [x.strip() for x in l.strip().split()]
             visit(Type.DIRECTIVE, contexts, *parts)
         else:
@@ -297,7 +300,7 @@ def extract_header_comment(file, ignore="#!", prefix="#"):
     return comment_lines
 
 
-def assemble_and_disassemble(file, tool_prefix):
+def assemble_and_disassemble(file, tool_prefix, defines=[]):
     comment_lines = []
     for line in file:
         if line.startswith("#"):
@@ -308,6 +311,7 @@ def assemble_and_disassemble(file, tool_prefix):
         [
             tool_prefix + "cpp",
             "-I" + path.dirname(file.name) + "/../../include",
+            *["-D" + d for d in defines],
             "-o",
             "preprocessed.S",
             file.name,
