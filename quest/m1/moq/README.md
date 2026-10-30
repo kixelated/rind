@@ -72,7 +72,6 @@ RustCrypto dependency.
 - [Publish rind-instant-acme](/quest/m1/moq/instant-acme-publish.md) - switch to the 0.9 release and publish
 - [ctgrind on armv7](/quest/m1/moq/armv7-ctgrind.md) - the constant-time check runs on the armv7 build
 - [SHA-1 AVX2 rounds in Rust](/quest/m1/moq/sha1-rust.md) - no new inline assembly in the SHA-1 path
-- [Ed25519 wipes match aws-lc](/quest/m1/moq/ed25519-wipes.md) - the hashed seed, hash, and nonce are cleared as aws-lc does
 - [Vector registers match aws-lc](/quest/m1/moq/vector-clear.md) - no register clearing beyond aws-lc, unless needed for speed
 - [Learn from aws-lc-rs's API](/quest/m1/moq/api/README.md) - aws-lc-rs-shaped `aead`, `agreement`, `kem`, `signature`, `digest`, `hmac`, `hkdf`, and `rand` before the first release
 - [Release](/quest/m1/moq/release.md) - publish the rind release MoQ switches to
