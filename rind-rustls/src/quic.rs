@@ -10,7 +10,7 @@ pub(crate) struct AesGcm(pub(crate) usize);
 impl quic::Algorithm for AesGcm {
     fn packet_key(&self, key: AeadKey, iv: Iv) -> Box<dyn quic::PacketKey> {
         Box::new(PacketKey {
-            aead: aead::AesGcm::new(key.as_ref()),
+            aead: aead::AesGcm::new(key.as_ref()).unwrap(),
             iv,
         })
     }

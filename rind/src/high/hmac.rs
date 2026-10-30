@@ -57,10 +57,14 @@ impl<H: Hash> Hmac<H> {
     /// Complete the HMAC signing operation, consuming it.
     ///
     /// The HMAC output (sometimes called a "signature", or "tag") is returned.
-    pub fn finish(mut self) -> HashOutput {
-        let inner_output = self.inner.finish();
-        self.outer.update(inner_output.as_ref());
-        self.outer.finish()
+    pub fn finish(self) -> HashOutput {
+        // Finish copies of the states rather than moving them out, so `self`
+        // wipes the originals in place when it drops.
+        let mut inner_output = self.inner.clone().finish();
+        let mut outer = self.outer.clone();
+        outer.update(inner_output.as_ref());
+        zeroise(inner_output.as_mut());
+        outer.finish()
     }
 
     /// Complete the HMAC signing operation and compare the result against `expected_tag`.

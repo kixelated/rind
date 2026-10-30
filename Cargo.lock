@@ -2940,7 +2940,6 @@ dependencies = [
  "libcrux-macros",
  "libcrux-ml-kem",
  "libcrux-p256",
- "libcrux-sha2",
  "libcrux-traits",
  "proptest",
  "serde",

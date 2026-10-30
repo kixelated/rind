@@ -571,12 +571,14 @@ fn test_aes_gcm() {
         for test in group.tests {
             summary.start(&test);
 
-            if test.key.len() == 24 {
-                summary.skipped("aes-192 not supported");
-                continue;
-            }
-
-            let ctx = AesGcm::new(&test.key);
+            let ctx = match AesGcm::new(&test.key) {
+                Ok(ctx) => ctx,
+                Err(Error::WrongLength) if test.key.len() == 24 => {
+                    summary.skipped("aes-192 not supported");
+                    continue;
+                }
+                Err(e) => panic!("key refused: {e:?}"),
+            };
             let nonce = match test.iv.len() {
                 12 => test.iv.try_into().unwrap(),
                 _ => {
@@ -626,12 +628,14 @@ fn test_aes_gmac() {
         for test in group.tests {
             summary.start(&test);
 
-            if test.key.len() == 24 {
-                summary.skipped("aes-192 not supported");
-                continue;
-            }
-
-            let ctx = AesGcm::new(&test.key);
+            let ctx = match AesGcm::new(&test.key) {
+                Ok(ctx) => ctx,
+                Err(Error::WrongLength) if test.key.len() == 24 => {
+                    summary.skipped("aes-192 not supported");
+                    continue;
+                }
+                Err(e) => panic!("key refused: {e:?}"),
+            };
             let nonce = match test.iv.len() {
                 12 => test.iv.try_into().unwrap(),
                 _ => {
