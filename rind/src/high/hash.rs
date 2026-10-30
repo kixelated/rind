@@ -8,7 +8,7 @@ use crate::mid::{sha1, sha2};
 
 /// One block of hash function input.
 #[derive(Copy, Clone)]
-pub struct HashBlock {
+pub(crate) struct HashBlock {
     buf: [u8; 128],
     len: usize,
 }
@@ -38,10 +38,9 @@ impl DerefMut for HashBlock {
 
 /// A generic trait over supported hash functions.
 ///
-/// This exists so (eg.) HMAC may be generic. It is not exported, so callers
-/// hash through [`crate::digest`] and only name an implementor as a type
-/// parameter.
-pub trait Hash {
+/// This exists so (eg.) HMAC may be generic. It is not exported: callers
+/// hash through [`crate::digest`] and name a hash by its algorithm constant.
+pub(crate) trait Hash {
     /// The associated context type.
     type Context: HashContext;
 
@@ -79,7 +78,7 @@ pub(crate) trait SignatureHash: Hash {}
 /// prefix can be computed, without reprocessing the prefix.
 /// This property is essential to efficiently compute HMAC
 /// when used for PBKDF2.
-pub trait HashContext: Clone {
+pub(crate) trait HashContext: Clone {
     /// Hash the given `bytes`.
     fn update(&mut self, bytes: &[u8]);
 
@@ -94,7 +93,7 @@ pub trait HashContext: Clone {
 /// HMAC-SHA1 does not rely on collision resistance, and remains
 /// required by STUN (RFC 8489) and SRTP (RFC 3711).
 #[derive(Clone)]
-pub struct LegacySha1;
+pub(crate) struct LegacySha1;
 
 impl Hash for LegacySha1 {
     type Context = sha1::Sha1Context;
@@ -123,7 +122,7 @@ impl HashContext for sha1::Sha1Context {
 ///
 /// SHA256 is standardized in [FIPS180](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf).
 #[derive(Clone)]
-pub struct Sha256;
+pub(crate) struct Sha256;
 
 impl Hash for Sha256 {
     type Context = sha2::Sha256Context;
@@ -154,7 +153,7 @@ impl HashContext for sha2::Sha256Context {
 ///
 /// SHA384 is standardized in [FIPS180](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf).
 #[derive(Clone)]
-pub struct Sha384;
+pub(crate) struct Sha384;
 
 impl Hash for Sha384 {
     type Context = sha2::Sha384Context;
@@ -185,7 +184,7 @@ impl HashContext for sha2::Sha384Context {
 ///
 /// SHA512 is standardized in [FIPS180](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf).
 #[derive(Clone)]
-pub struct Sha512;
+pub(crate) struct Sha512;
 
 impl Hash for Sha512 {
     type Context = sha2::Sha512Context;

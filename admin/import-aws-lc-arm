@@ -1,0 +1,157 @@
+#!/usr/bin/env python3
+"""Regenerates rind/src/low/arm/aws_lc/*.s from aws-lc's AArch32 assembly.
+
+Usage: admin/import-aws-lc-arm <aws-lc checkout at REV>
+
+Each output is aws-lc's pregenerated `generated-src/linux-arm` file, run
+through cpp for ARM mode, cut down to the routines rind calls and the
+constants they load, then escaped for `global_asm!`: braces doubled, each
+routine's name a `{name}` operand that rind binds to a crate-version qualified
+symbol, and each `.L` label tagged with its file, since `global_asm!` blocks
+can share an assembler scope. Undoing those three edits gives aws-lc's text
+line for line.
+"""
+
+import os
+import re
+import subprocess
+import sys
+
+REV = "91c93a8eb860e51482a871a8772cb9b1b310baea"
+
+# ARM mode, little-endian, built for ARMv7 with the ARMv8 routines kept, as
+# aws-lc builds them for 32-bit Android and Linux.
+CPP = [
+    "cpp",
+    "-traditional-cpp",
+    "-P",
+    "-undef",
+    "-nostdinc",
+    "-D__ARMEL__",
+    "-D__ARM_ARCH=7",
+    "-D__ARM_MAX_ARCH__=8",
+    "-DOPENSSL_ARM",
+    "-D__ELF__",
+    "-DAARCH64_VALID_CALL_TARGET=",
+    "-",
+]
+
+IMPORTS = [
+    {
+        "source": "aesv8-armx.S",
+        "tag": "aes",
+        "perlasm": "crypto/fipsmodule/aes/asm/aesv8-armx.pl",
+        "copyright": "Copyright 2014-2016 The OpenSSL Project Authors. All Rights Reserved.",
+        "constants": [(".Lrcon:", 3)],
+        "routines": [
+            "aes_hw_set_encrypt_key",
+            "aes_hw_encrypt",
+            "aes_hw_ctr32_encrypt_blocks",
+        ],
+    },
+    {
+        "source": "ghashv8-armx.S",
+        "tag": "ghash",
+        "perlasm": "crypto/fipsmodule/modes/asm/ghashv8-armx.pl",
+        "copyright": "Copyright 2014-2020 The OpenSSL Project Authors. All Rights Reserved.",
+        "constants": [],
+        "routines": ["gcm_init_v8", "gcm_ghash_v8"],
+    },
+    {
+        "source": "sha1-armv4-large.S",
+        "tag": "sha1",
+        "perlasm": "crypto/fipsmodule/sha/asm/sha1-armv4-large.pl",
+        "copyright": "Copyright 2007-2016 The OpenSSL Project Authors. All Rights Reserved.",
+        "constants": [(".LK_00_19:.word", 3)],
+        "routines": ["sha1_block_data_order_hw"],
+    },
+    {
+        "source": "sha256-armv4.S",
+        "tag": "sha256",
+        "perlasm": "crypto/fipsmodule/sha/asm/sha256-armv4.pl",
+        "copyright": "Copyright 2007-2016 The OpenSSL Project Authors. All Rights Reserved.",
+        "constants": [("K256:", 16), (".LK256_shortcut_hw:", 2)],
+        "routines": ["sha256_block_data_order_hw"],
+    },
+]
+
+
+def preprocess(path):
+    # The headers only define what CPP already does, or AArch64 macros.
+    include = re.compile(r"#\s*include <openssl/")
+    with open(path) as f:
+        text = "".join(line for line in f if not include.match(line))
+    out = subprocess.run(CPP, input=text, capture_output=True, text=True, check=True)
+    return out.stdout.splitlines()
+
+
+def find(lines, words, start=0):
+    for i in range(start, len(lines)):
+        if lines[i].split() == words:
+            return i
+    sys.exit(f"missing line: {' '.join(words)}")
+
+
+def constant(lines, label, following):
+    """`label`'s line and the `following` lines, after any `.align` before it."""
+    for i, line in enumerate(lines):
+        if line.startswith(label):
+            if lines[i - 1].split()[:1] == [".align"]:
+                i -= 1
+                following += 1
+            return lines[i : i + 1 + following]
+    sys.exit(f"missing constant: {label}")
+
+
+def routine(lines, name):
+    """`name` from its `.globl` through its `.size`."""
+    start = find(lines, [".globl", name])
+    end = find(lines, [".size", f"{name},.-{name}"], start)
+    return lines[start : end + 1]
+
+
+def escape(lines, routines, tag):
+    names = re.compile(r"\b(" + "|".join(routines) + r")\b")
+    labels = re.compile(r"(?<![\w.])\.L(\w+)")
+    for line in lines:
+        line = line.replace("{", "{{").replace("}", "}}")
+        line = labels.sub(rf".L{tag}_\1", line)
+        yield names.sub(r"{\1}", line)
+
+
+def main():
+    if len(sys.argv) != 2:
+        sys.exit(__doc__)
+    aws_lc = sys.argv[1]
+    rev = subprocess.run(
+        ["git", "-C", aws_lc, "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    if rev != REV:
+        sys.exit(f"aws-lc is at {rev}, expected {REV}")
+
+    out_dir = os.path.join(os.path.dirname(__file__), "..", "rind", "src", "low", "arm", "aws_lc")
+    for spec in IMPORTS:
+        source = os.path.join("generated-src", "linux-arm", "crypto", "fipsmodule", spec["source"])
+        lines = preprocess(os.path.join(aws_lc, source))
+
+        body = []
+        for label, following in spec["constants"]:
+            body += constant(lines, label, following)
+        for name in spec["routines"]:
+            body += routine(lines, name)
+
+        header = [
+            f"@ {spec['copyright']}",
+            "@ SPDX-License-Identifier: Apache-2.0",
+            "@",
+            f"@ Generated by admin/import-aws-lc-arm from aws-lc {REV}:",
+            f"@ {source}, which aws-lc generates from {spec['perlasm']}.",
+            "@ Do not edit by hand.",
+        ]
+        out = os.path.join(out_dir, spec["source"].removesuffix(".S") + ".s")
+        with open(out, "w") as f:
+            f.write("\n".join(header + list(escape(body, spec["routines"], spec["tag"]))) + "\n")
+
+
+if __name__ == "__main__":
+    main()

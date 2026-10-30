@@ -12,6 +12,8 @@
 
 #![allow(clippy::needless_range_loop)]
 
+use super::aesv8_armx::AesHwKey;
+use super::cpu::HaveCryptoExt;
 use crate::low;
 
 pub(crate) type State = [u16; 8];
@@ -471,6 +473,8 @@ fn key_expansion_step(next: &mut State, prev: &State) {
 pub(crate) enum AesKey {
     Aes128([State; 11]),
     Aes256([State; 15]),
+    /// The crypto extension's, which the key picks when the CPU has it.
+    Hw(AesHwKey),
 }
 
 impl AesKey {
@@ -478,10 +482,11 @@ impl AesKey {
     ///
     /// `key` must be 16 or 32 bytes in length (AES-192 not supported).
     pub(crate) fn new(key: &[u8]) -> Self {
-        match key.len() {
-            16 => Self::Aes128(key_expansion128(key)),
-            32 => Self::Aes256(key_expansion256(key)),
-            24 => panic!("aes-192 not supported"),
+        match (key.len(), HaveCryptoExt::check()) {
+            (16 | 32, Some(token)) => Self::Hw(AesHwKey::new(key, token)),
+            (16, None) => Self::Aes128(key_expansion128(key)),
+            (32, None) => Self::Aes256(key_expansion256(key)),
+            (24, _) => panic!("aes-192 not supported"),
             _ => panic!("invalid aes key size"),
         }
     }
@@ -490,6 +495,7 @@ impl AesKey {
         match self {
             Self::Aes128(keyex) => block_cipher(keyex, inout),
             Self::Aes256(keyex) => block_cipher(keyex, inout),
+            Self::Hw(key) => key.encrypt_block(inout),
         }
     }
 }
@@ -547,4 +553,49 @@ fn key_expansion256(key: &[u8]) -> [State; 15] {
     aes_keygen_assist0(&mut keyex[14], &prev1, 0x40);
     key_expansion_step(&mut keyex[14], &prev0);
     keyex
+}
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod tests {
+    use super::*;
+    use crate::low::aes_ctr;
+
+    // Every other test sees only the path the CPU picks, so the crypto
+    // extension's AES is checked against the portable code here: each key
+    // size, single blocks, and counter mode across the 32-bit counter's wrap.
+    #[test]
+    fn hw_matches_portable() {
+        let Some(token) = HaveCryptoExt::check() else {
+            return;
+        };
+        let bytes = |n: usize, seed: u32| -> Vec<u8> {
+            (0..n as u32)
+                .map(|i| (i.wrapping_add(seed).wrapping_mul(0x9e3779b9) >> 24) as u8)
+                .collect()
+        };
+        for (key_len, seed) in [16, 32].into_iter().zip(1..) {
+            let key = bytes(key_len, seed);
+            let portable = match key_len {
+                16 => AesKey::Aes128(key_expansion128(&key)),
+                _ => AesKey::Aes256(key_expansion256(&key)),
+            };
+            let hw = AesKey::Hw(AesHwKey::new(&key, token));
+
+            let mut want: [u8; 16] = bytes(16, seed).try_into().unwrap();
+            let mut got = want;
+            portable.encrypt_block(&mut want);
+            hw.encrypt_block(&mut got);
+            assert_eq!(got, want, "{key_len}-byte key block");
+
+            let nonce = bytes(12, seed).try_into().unwrap();
+            for counter in [0, 1, u32::MAX - 3, u32::MAX] {
+                let mut want: [u8; 128] = bytes(128, counter).try_into().unwrap();
+                let mut got = want;
+                aes_ctr::apply_8(&portable, &nonce, counter, &mut want);
+                aes_ctr::apply_8(&hw, &nonce, counter, &mut got);
+                assert_eq!(got, want, "{key_len}-byte key, counter {counter}");
+            }
+        }
+    }
 }

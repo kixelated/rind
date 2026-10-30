@@ -2995,6 +2995,7 @@ dependencies = [
  "fiat-crypto",
  "getrandom 0.4.3",
  "hex",
+ "libc",
  "libcrux-aes",
  "libcrux-ed25519",
  "libcrux-hacl-rs",

@@ -50,9 +50,11 @@ but there is also a public API for general-purpose use.
   (This is most x86_64 CPUs made since around ~2014.)
 - 32-bit `arm` (tested on `armv7-unknown-linux-gnueabihf`, and built for
   `armv7-linux-androideabi`) runs portable Rust instead, mostly from
-  [libcrux] (see [Algorithms](#algorithms)), and needs no CPU features. An Ed25519
-  public key that is not a curve point is refused when verifying rather than
-  when decoding.
+  [libcrux] (see [Algorithms](#algorithms)), and needs no CPU features. Where
+  the CPU has the ARMv8 crypto extension, as most 32-bit Android devices do,
+  AES, GHASH, SHA1, and SHA256 run [aws-lc]'s assembly for it instead. An
+  Ed25519 public key that is not a curve point is refused when verifying
+  rather than when decoding.
 
 Every operation panics on a CPU missing one of these. Call `rind::cpu::check()`
 at startup to get an error naming the missing feature instead.
@@ -89,12 +91,12 @@ describes `main`, and changes alongside the code it describes.
 
 | Algorithm | x86_64 | aarch64 | armv7 |
 |---|---|---|---|
-| AES-128-GCM, AES-256-GCM | Graviola | Graviola | [libcrux-aes] |
-| AES block (header protection), AES-CTR (SRTP) | Graviola block, rind CTR | Graviola block, rind CTR | [libcrux-aes] block (copied), rind CTR |
+| AES-128-GCM, AES-256-GCM | Graviola | [s2n-bignum] CTR and GHASH of whole blocks ✓, run from a copy of the input since its proofs exclude in-place operation; Graviola key schedule, H powers, and GHASH of the AAD, final partial block, and lengths | crypto extension: [aws-lc] AES and GHASH (copied), rind GCM; otherwise: [libcrux-aes] |
+| AES block (header protection), AES-CTR (SRTP) | Graviola block, rind CTR | Graviola block, rind CTR | crypto extension: [aws-lc] block and CTR (copied); otherwise: [libcrux-aes] block (copied), rind CTR |
 | ChaCha20 (header protection) | Graviola | Graviola | [HACL\*] block function ✓ (copied), rind keystream |
 | ChaCha20-Poly1305, XChaCha20-Poly1305 | Graviola | Graviola | [HACL\*] ChaCha20 block function and Poly1305 ✓; Graviola AEAD; rind HChaCha20 |
-| SHA-1 (legacy only) | rind | rind | rind |
-| SHA-256, SHA-384, SHA-512 | Graviola | Graviola | Graviola |
+| SHA-1 (legacy only) | rind | rind | crypto extension: [aws-lc] (copied); otherwise: rind |
+| SHA-256, SHA-384, SHA-512 | Graviola | Graviola | crypto extension: [aws-lc] SHA-256 (copied); otherwise: Graviola SHA-256; Graviola SHA-384 and SHA-512 |
 | HMAC | Graviola | Graviola | Graviola |
 | HKDF | rind | rind | rind |
 | X25519 | [s2n-bignum] ✓ | [s2n-bignum] ✓ | [HACL\*] ✓ |
@@ -116,6 +118,7 @@ The tests use [Wycheproof]'s vectors.
 | [HACL\*] | dependency, through libcrux-hacl-rs, libcrux-p256, libcrux-ed25519, and libcrux-poly1305; copied: the ChaCha20 block function, from libcrux-chacha20poly1305 | Apache-2.0 | [F\* proofs](https://github.com/hacl-star/hacl-star) of memory safety, functional correctness, and secret independence of the F\* source. libcrux's Rust is compiled mechanically from HACL\*'s verified C, and that step is not itself verified. |
 | [libcrux-ml-kem] | dependency | Apache-2.0 | [hax and F\* proofs](https://github.com/cryspen/libcrux/blob/main/libcrux-ml-kem/proofs/verification_status.md) of panic freedom and functional correctness for its portable arithmetic, NTT, serialization, and high-level code. Its SHA-3, from libcrux-sha3, is unverified. |
 | [libcrux-aes] | dependency for AES-GCM; copied: the block cipher | Apache-2.0 | nothing: libcrux marks it pre-verification |
+| [aws-lc] | copied: its 32-bit ARM assembly for the ARMv8 crypto extension (AES, GHASH, SHA-1, SHA-256), which aws-lc takes from OpenSSL, imported into Rust `global_asm!` by `admin/import-aws-lc-arm` | Apache-2.0 | nothing: aws-lc's proofs cover its x86_64 and aarch64 code, not this |
 | [fiat-crypto] | dependency | MIT OR Apache-2.0 OR BSD-1-Clause | [Coq proofs](https://github.com/mit-plv/fiat-crypto) that each generated field operation is correct. rind's point formulas, inversion, and table lookup over them are not covered. |
 
 rind's own code is licensed under Apache-2.0 OR ISC OR MIT-0. Copied code
@@ -137,6 +140,7 @@ different one, updates this table and [LICENSE] in the same PR.
 [libcrux-ml-kem]: https://github.com/cryspen/libcrux/tree/main/libcrux-ml-kem
 [libcrux-aes]: https://github.com/cryspen/libcrux/tree/main/crates/algorithms/aes
 [libcrux]: https://github.com/cryspen/libcrux
+[aws-lc]: https://github.com/aws/aws-lc
 [fiat-crypto]: https://github.com/mit-plv/fiat-crypto
 [Wycheproof]: https://github.com/C2SP/wycheproof
 [LICENSE]: https://github.com/moq-dev/rind/blob/main/LICENSE
@@ -212,20 +216,28 @@ have some different options depending on CPU features:
 SHA1 and SHA256 have straightforward implementations using hashing intrinsics
 (aka "SHA-NI" on x86_64, "sha" extension on aarch64). Without SHA-NI, x86_64
 selects at runtime an AVX2 message schedule with scalar rounds for SHA1 and
-SHA256, as aws-lc does. 32-bit `arm` always runs the pure
-Rust SHA1, SHA256, and SHA512: libcrux has no SHA1, and the pure Rust SHA256
-is faster than libcrux's.
+SHA256, as aws-lc does. 32-bit `arm` runs aws-lc's SHA1 and SHA256 assembly
+where the CPU has the crypto extension, and the pure Rust SHA1 and SHA256
+otherwise: libcrux has no SHA1, and the pure Rust SHA256 is faster than
+libcrux's. Its SHA512 is always the pure Rust one.
 
 SHA384/SHA512 on x86_64 has an AVX2 by-4 implementation, plus an AVX2 interleaved
 single block implementation.
 
-On x86_64 and aarch64, AES and GHASH always use intrinsics (there are no fallbacks).
+On x86_64 and aarch64, AES and GHASH always use the CPU's AES and carry-less multiply
+instructions (there are no fallbacks).
 
 On x86_64, we have a stitched by-8 AES-CTR and a by-8 GHASH (they are not currently
 interleaved; this is future work.)  There is also an optional AVX-512 by-16 AES-CTR
 and GHASH.  It uses dynamic CPU feature detection, so AVX-512 is not required at runtime.
 
-On aarch64 we have a stitched by-8 AES-CTR and by-8 GHASH (not currently interleaved).
+On aarch64, AES-GCM runs s2n-bignum's verified kernels, which interleave a by-4
+AES-CTR and GHASH over whole blocks.
+
+32-bit `arm` decides once per process from `AT_HWCAP2`: with the crypto
+extension, AES and AES-GCM keys use aws-lc's `aesv8-armx` and `ghashv8-armx`
+assembly, composed as aws-lc does on that architecture; without it, libcrux's
+bitsliced AES and AES-GCM.
 
 ## Architecture
 

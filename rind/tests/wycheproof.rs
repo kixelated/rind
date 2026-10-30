@@ -7,10 +7,8 @@ use rind::aead::{
     RandomizedNonceKey, UnboundKey,
 };
 use rind::cipher::ChaCha20;
-use rind::hashing::hkdf::Prk;
-use rind::hashing::{LegacySha1, Sha256, Sha384, Sha512};
-use rind::hmac;
 use rind::signature;
+use rind::{hkdf, hmac};
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
@@ -191,9 +189,7 @@ fn truncated(tag: &[u8], expected: &[u8]) -> Result<(), Error> {
 
 #[test]
 fn hkdf_tests() {
-    type Expand = fn(&[u8], &[u8], &[u8], &mut [u8]) -> Result<(), Error>;
-
-    fn check(file: &str, expand: Expand) {
+    fn check(file: &str, algorithm: hkdf::Algorithm) {
         let data_file = File::open(file).expect("failed to open data file");
         let reader = BufReader::new(data_file);
         let tests: TestFile = serde_json::from_reader(reader).expect("invalid test JSON");
@@ -205,7 +201,11 @@ fn hkdf_tests() {
                 summary.start(&test);
 
                 let mut okm = vec![0u8; test.size];
-                let result = expand(&test.salt, &test.ikm, &test.info, &mut okm);
+                let prk = hkdf::Salt::new(algorithm, &test.salt).extract(&test.ikm);
+                let info = [test.info.as_slice()];
+                let result = prk
+                    .expand(&info, okm.len())
+                    .and_then(|expanded| expanded.fill(&mut okm));
 
                 match (test.result, result) {
                     (ExpectedResult::Valid, Ok(())) => assert_eq!(okm, test.okm),
@@ -217,20 +217,16 @@ fn hkdf_tests() {
     }
 
     check(
-        "../thirdparty/wycheproof/testvectors_v1/hkdf_sha1_test.json",
-        |salt, ikm, info, out| Prk::<LegacySha1>::extract(salt, ikm).expand(&[info], out),
-    );
-    check(
         "../thirdparty/wycheproof/testvectors_v1/hkdf_sha256_test.json",
-        |salt, ikm, info, out| Prk::<Sha256>::extract(salt, ikm).expand(&[info], out),
+        hkdf::HKDF_SHA256,
     );
     check(
         "../thirdparty/wycheproof/testvectors_v1/hkdf_sha384_test.json",
-        |salt, ikm, info, out| Prk::<Sha384>::extract(salt, ikm).expand(&[info], out),
+        hkdf::HKDF_SHA384,
     );
     check(
         "../thirdparty/wycheproof/testvectors_v1/hkdf_sha512_test.json",
-        |salt, ikm, info, out| Prk::<Sha512>::extract(salt, ikm).expand(&[info], out),
+        hkdf::HKDF_SHA512,
     );
 }
 

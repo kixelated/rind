@@ -241,24 +241,22 @@ mod cipher {
 }
 
 mod hkdf {
-    use aws_lc_rs::hkdf::{self, HKDF_SHA256, HKDF_SHA384, HKDF_SHA512, KeyType};
+    use aws_lc_rs::{aead as their_aead, hkdf as theirs, hmac as their_hmac};
     use proptest::collection::vec;
     use proptest::prelude::*;
-    use rind::Error;
-    use rind::hashing::hkdf::Prk;
-    use rind::hashing::{Sha256, Sha384, Sha512};
+    use rind::{Error, aead, hkdf, hmac};
 
     struct Len(usize);
 
-    impl KeyType for Len {
+    impl theirs::KeyType for Len {
         fn len(&self) -> usize {
             self.0
         }
     }
 
     fn check(
-        expand: impl FnOnce(&[&[u8]], &mut [u8]) -> Result<(), Error>,
-        alg: hkdf::Algorithm,
+        ours: hkdf::Algorithm,
+        theirs: theirs::Algorithm,
         salt: &[u8],
         ikm: &[u8],
         info: &[Vec<u8>],
@@ -266,20 +264,23 @@ mod hkdf {
     ) -> Result<(), TestCaseError> {
         let info: Vec<&[u8]> = info.iter().map(Vec::as_slice).collect();
 
-        let mut ours = vec![0u8; len];
-        let result = expand(&info, &mut ours);
+        let mut ours_out = vec![0u8; len];
+        let prk = hkdf::Salt::new(ours, salt).extract(ikm);
+        let result = prk
+            .expand(&info, len)
+            .and_then(|okm| okm.fill(&mut ours_out));
 
-        let prk = hkdf::Salt::new(alg, salt).extract(ikm);
+        let prk = theirs::Salt::new(theirs, salt).extract(ikm);
         match prk.expand(&info, Len(len)) {
             Ok(okm) => {
                 result.unwrap();
-                let mut theirs = vec![0u8; len];
-                okm.fill(&mut theirs).unwrap();
-                prop_assert_eq!(ours, theirs);
+                let mut theirs_out = vec![0u8; len];
+                okm.fill(&mut theirs_out).unwrap();
+                prop_assert_eq!(ours_out, theirs_out);
             }
             Err(_) => {
                 prop_assert_eq!(result, Err(Error::WrongLength));
-                prop_assert!(ours.iter().all(|b| *b == 0));
+                prop_assert!(ours_out.iter().all(|b| *b == 0));
             }
         }
         Ok(())
@@ -299,8 +300,7 @@ mod hkdf {
             info in vec(vec(any::<u8>(), 0..100), 0..4),
             len in out_len(32),
         ) {
-            let expand = |info: &[&[u8]], out: &mut [u8]| Prk::<Sha256>::extract(&salt, &ikm).expand(info, out);
-            check(expand, HKDF_SHA256, &salt, &ikm, &info, len)?;
+            check(hkdf::HKDF_SHA256, theirs::HKDF_SHA256, &salt, &ikm, &info, len)?;
         }
 
         #[test]
@@ -310,8 +310,7 @@ mod hkdf {
             info in vec(vec(any::<u8>(), 0..100), 0..4),
             len in out_len(48),
         ) {
-            let expand = |info: &[&[u8]], out: &mut [u8]| Prk::<Sha384>::extract(&salt, &ikm).expand(info, out);
-            check(expand, HKDF_SHA384, &salt, &ikm, &info, len)?;
+            check(hkdf::HKDF_SHA384, theirs::HKDF_SHA384, &salt, &ikm, &info, len)?;
         }
 
         #[test]
@@ -321,8 +320,63 @@ mod hkdf {
             info in vec(vec(any::<u8>(), 0..100), 0..4),
             len in out_len(64),
         ) {
-            let expand = |info: &[&[u8]], out: &mut [u8]| Prk::<Sha512>::extract(&salt, &ikm).expand(info, out);
-            check(expand, HKDF_SHA512, &salt, &ikm, &info, len)?;
+            check(hkdf::HKDF_SHA512, theirs::HKDF_SHA512, &salt, &ikm, &info, len)?;
+        }
+
+        // Keys built straight from an `Okm` match aws-lc-rs's conversions.
+        #[test]
+        fn keys(
+            ikm in vec(any::<u8>(), 0..100),
+            info in vec(vec(any::<u8>(), 0..50), 0..3),
+            msg in vec(any::<u8>(), 0..100),
+        ) {
+            let info: Vec<&[u8]> = info.iter().map(Vec::as_slice).collect();
+            let ours = hkdf::Salt::new(hkdf::HKDF_SHA256, b"salt").extract(&ikm);
+            let theirs = theirs::Salt::new(theirs::HKDF_SHA256, b"salt").extract(&ikm);
+
+            for (ours_alg, theirs_alg) in [
+                (&aead::AES_128_GCM, &their_aead::AES_128_GCM),
+                (&aead::AES_256_GCM, &their_aead::AES_256_GCM),
+                (&aead::CHACHA20_POLY1305, &their_aead::CHACHA20_POLY1305),
+            ] {
+                let ours_key = aead::LessSafeKey::new(aead::UnboundKey::from(
+                    ours.expand(&info, ours_alg).unwrap(),
+                ));
+                let mut ours_sealed = msg.clone();
+                ours_key
+                    .seal_in_place_append_tag(
+                        aead::Nonce::assume_unique_for_key([0; 12]),
+                        aead::Aad::empty(),
+                        &mut ours_sealed,
+                    )
+                    .unwrap();
+
+                let theirs_key = their_aead::LessSafeKey::new(their_aead::UnboundKey::from(
+                    theirs.expand(&info, theirs_alg).unwrap(),
+                ));
+                let mut theirs_sealed = msg.clone();
+                theirs_key
+                    .seal_in_place_append_tag(
+                        their_aead::Nonce::assume_unique_for_key([0; 12]),
+                        their_aead::Aad::empty(),
+                        &mut theirs_sealed,
+                    )
+                    .unwrap();
+                prop_assert_eq!(ours_sealed, theirs_sealed);
+            }
+
+            for (ours_alg, theirs_alg) in [
+                (hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY, their_hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY),
+                (hmac::HMAC_SHA256, their_hmac::HMAC_SHA256),
+                (hmac::HMAC_SHA384, their_hmac::HMAC_SHA384),
+                (hmac::HMAC_SHA512, their_hmac::HMAC_SHA512),
+            ] {
+                let ours_key = hmac::Key::from(ours.expand(&info, ours_alg).unwrap());
+                let theirs_key = their_hmac::Key::from(theirs.expand(&info, theirs_alg).unwrap());
+                let ours_tag = hmac::sign(&ours_key, &msg);
+                let theirs_tag = their_hmac::sign(&theirs_key, &msg);
+                prop_assert_eq!(ours_tag.as_ref(), theirs_tag.as_ref());
+            }
         }
     }
 }
