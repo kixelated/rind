@@ -18,8 +18,8 @@ use crate::mid::rng::{RandomSource, SystemRandom};
 /// with [`Self::from_pkcs8_der()`] or [`Self::from_sec1_der()`],
 /// or by generating a random key using [`Self::generate()`].
 pub struct SigningKey<C: Curve> {
-    /// The private key.
-    pub private_key: C::PrivateKey,
+    // Private, so the scalar cannot be reused for ECDH.
+    private_key: C::PrivateKey,
 }
 
 impl<C: Curve> SigningKey<C> {
@@ -131,6 +131,16 @@ impl<C: Curve> SigningKey<C> {
         let output = output.get(..used).ok_or(Error::WrongLength)?;
         ct::public_slice(output);
         Ok(output)
+    }
+
+    /// Returns the corresponding public key.
+    pub fn public_key(&self) -> Result<VerifyingKey<C>, Error> {
+        let _entry = Entry::new_secret();
+        let mut encoded = [0u8; MAX_UNCOMPRESSED_PUBLIC_KEY_LEN];
+        let encoded = self
+            .private_key
+            .public_key_encode_uncompressed(&mut encoded)?;
+        VerifyingKey::from_x962_uncompressed(encoded)
     }
 
     /// Encode this private key's corresponding public key in SubjectPublicKeyInfo DER format.

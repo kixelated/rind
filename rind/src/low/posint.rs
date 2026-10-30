@@ -975,7 +975,7 @@ mod tests {
     #[test]
     fn to_bytes() {
         let mut buf = [0xff; 8];
-        assert_eq!(PosInt::<2>::zero().to_bytes(&mut buf).unwrap(), &[]);
+        assert!(PosInt::<2>::zero().to_bytes(&mut buf).unwrap().is_empty());
 
         let all_bits_set = PosInt::<2>::from_bytes(&[0xff; 16]).unwrap();
         assert_eq!(

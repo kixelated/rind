@@ -71,7 +71,6 @@ RustCrypto dependency.
 - [libcrux releases its bignum constant-time fix](/quest/m1/moq/libcrux-ct-fixes.md) - waiting on libcrux's fix, then dropping its armv7 ctgrind suppression
 - [armv7 ctgrind on PRs](/quest/m1/moq/armv7-ctgrind-pr.md) - the release job gates PRs if it is fast enough
 - [Publish rind-instant-acme](/quest/m1/moq/instant-acme-publish.md) - switch to the 0.9 release and publish
-- [Vector registers match aws-lc](/quest/m1/moq/vector-clear.md) - no register clearing beyond aws-lc, unless needed for speed
 - [Attribute every algorithm's source](/quest/m1/moq/attribution.md) - the README credits each algorithm's source and marks the formally verified ones
 - [Leave graviola's fork network](/quest/m1/moq/detach-fork.md) - waiting on the maintainer to detach the GitHub fork
 - [Learn from aws-lc-rs's API](/quest/m1/moq/api/README.md) - aws-lc-rs-shaped `aead`, `agreement`, `kem`, `signature`, `digest`, `hmac`, `hkdf`, and `rand` before the first release

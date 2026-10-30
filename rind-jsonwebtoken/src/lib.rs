@@ -294,17 +294,19 @@ fn ec_pub_components_from_private_key(
         Algorithm::ES256 => (
             EllipticCurve::P256,
             ecdsa::SigningKey::<ecdsa::P256>::from_pkcs8_der(der)
+                .and_then(|key| key.public_key())
                 .map_err(|_| ErrorKind::InvalidEcdsaKey)?
-                .private_key
-                .public_key_uncompressed()
+                .public_key
+                .as_bytes_uncompressed()
                 .to_vec(),
         ),
         Algorithm::ES384 => (
             EllipticCurve::P384,
             ecdsa::SigningKey::<ecdsa::P384>::from_pkcs8_der(der)
+                .and_then(|key| key.public_key())
                 .map_err(|_| ErrorKind::InvalidEcdsaKey)?
-                .private_key
-                .public_key_uncompressed()
+                .public_key
+                .as_bytes_uncompressed()
                 .to_vec(),
         ),
         _ => return Err(ErrorKind::InvalidEcdsaKey.into()),

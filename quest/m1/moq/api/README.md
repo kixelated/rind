@@ -111,5 +111,4 @@ onto this shape.
 ## Required
 
 - [Typed HKDF output](/quest/m1/moq/api/hkdf.md) - `hkdf::Salt`, `Prk`, and an `Okm` whose length matches the key it becomes
-- [Key agreement and KEM constants](/quest/m1/moq/api/agreement.md) - ephemeral ECDH and ML-KEM-768 behind `agreement` and `kem`
 - [Signature key pairs](/quest/m1/moq/api/signature.md) - ECDSA, RSA, and Ed25519 key pairs and verification algorithms bound to constants
