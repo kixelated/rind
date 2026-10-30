@@ -363,7 +363,7 @@ mod tests {
         // Under `admin/ctgrind`, nothing may branch on or index by the hash.
         let output = Sha256::hash(b"message");
         let full = output.as_ref().to_vec();
-        crate::low::ct::secret_slice(output.as_ref());
+        ct::secret_slice(output.as_ref());
 
         assert_eq!(output.truncated_ct_equal::<1>(&full[..1]), Ok(()));
         assert_eq!(output.truncated_ct_equal::<32>(&full), Ok(()));
