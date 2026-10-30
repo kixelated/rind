@@ -190,11 +190,11 @@ pub struct TlsAesGcm(pub usize);
 
 impl Tls13AeadAlgorithm for TlsAesGcm {
     fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter> {
-        Box::new(GcmTls13Cipher(AesGcm::new(key.as_ref()), iv))
+        Box::new(GcmTls13Cipher(AesGcm::new(key.as_ref()).unwrap(), iv))
     }
 
     fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter> {
-        Box::new(GcmTls13Cipher(AesGcm::new(key.as_ref()), iv))
+        Box::new(GcmTls13Cipher(AesGcm::new(key.as_ref()).unwrap(), iv))
     }
 
     fn key_len(&self) -> usize {
@@ -222,12 +222,15 @@ impl Tls12AeadAlgorithm for TlsAesGcm {
         explicit: &[u8],
     ) -> Box<dyn MessageEncrypter> {
         let iv = gcm_iv(write_iv, explicit);
-        Box::new(GcmTls12MessageEncrypter(AesGcm::new(key.as_ref()), iv))
+        Box::new(GcmTls12MessageEncrypter(
+            AesGcm::new(key.as_ref()).unwrap(),
+            iv,
+        ))
     }
 
     fn decrypter(&self, key: AeadKey, iv: &[u8]) -> Box<dyn MessageDecrypter> {
         Box::new(GcmTls12MessageDecrypter(
-            AesGcm::new(key.as_ref()),
+            AesGcm::new(key.as_ref()).unwrap(),
             iv.try_into().unwrap(),
         ))
     }
