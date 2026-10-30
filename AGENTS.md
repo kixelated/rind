@@ -1,4 +1,4 @@
-rind is a pure-Rust cryptography library for [MoQ](https://github.com/moq-dev/moq), forked from [graviola](https://github.com/ctz/graviola).
+rind is a pure-Rust cryptography library for [MoQ](https://github.com/moq-dev/moq), derived from [graviola](https://github.com/ctz/graviola), which it no longer tracks.
 This is one Rust workspace: the `rind` library, its `rind-<consumer>` adapter crates such as `rind-rustls`, and the unpublished bench, cpuid, and fuzz crates.
 
 # Context
@@ -21,7 +21,6 @@ This is one Rust workspace: the `rind` library, its `rind-<consumer>` adapter cr
 - Wipe secrets a value owns (keys, keyed state) on drop, as aws-lc does. Don't wipe stack temporaries, scratch, or copies inside a call: safe Rust cannot read them, so it costs speed for nothing.
 - Reproduce bugs before fixing them. Tests must be worth their weight long-term: cover edge cases, not old bugs or trivial values.
 - Keep the PR to one problem: no unrelated refactors, formatting churn, or drive-by changes. Fix every instance of that problem and the gaps it exposes in the same PR.
-- Keep graviola's layering and style so upstream changes still merge: add new primitives as new modules rather than reshaping existing ones.
 - Land the ideal implementation now rather than a partial one plus follow-ups; split off only work that is independently landable.
 - Be adversarial: attack your own approach, reports, reviews, and other PRs as hard as anyone else's.
 - When a decision is the maintainer's (API shape, naming, scope) or you are unsure, ask with an interactive prompt of 2-3 options and a recommendation.
