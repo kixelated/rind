@@ -3,6 +3,7 @@
 
 use crate::Error;
 use crate::high::asn1;
+use crate::low::zeroise;
 use crate::mid::p256;
 use crate::mid::p384;
 use crate::mid::rng::RandomSource;
@@ -40,7 +41,7 @@ pub trait PrivateKey<C: Curve + ?Sized> {
     where
         Self: Sized;
 
-    /// Encode this private key's value into `out`.
+    /// Encode this private key's value into `out`, still secret.
     ///
     /// The written prefix of `out` is returned.
     fn encode<'a>(&self, out: &'a mut [u8]) -> Result<&'a [u8], Error>;
@@ -151,7 +152,9 @@ impl PrivateKey<P256> for p256::StaticPrivateKey {
 
     fn encode<'a>(&self, out: &'a mut [u8]) -> Result<&'a [u8], Error> {
         if let Some(out) = out.get_mut(0..32) {
-            out.copy_from_slice(&self.as_bytes());
+            let mut bytes = self.secret_bytes();
+            out.copy_from_slice(&bytes);
+            zeroise(&mut bytes);
             Ok(out)
         } else {
             Err(Error::OutOfRange)
@@ -241,7 +244,9 @@ impl PrivateKey<P384> for p384::StaticPrivateKey {
 
     fn encode<'a>(&self, out: &'a mut [u8]) -> Result<&'a [u8], Error> {
         if let Some(out) = out.get_mut(0..48) {
-            out.copy_from_slice(&self.as_bytes());
+            let mut bytes = self.secret_bytes();
+            out.copy_from_slice(&bytes);
+            zeroise(&mut bytes);
             Ok(out)
         } else {
             Err(Error::OutOfRange)

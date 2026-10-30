@@ -147,10 +147,10 @@ fn hmac() {
 fn aes_gcm() {
     use rind::aead::AesGcm;
 
-    let aes128 = AesGcm::new(&[0xffu8; 16]);
+    let aes128 = AesGcm::new(&[0xffu8; 16]).unwrap();
     check_zeroed_on_drop(Box::pin(aes128));
 
-    let aes256 = AesGcm::new(&[0xffu8; 32]);
+    let aes256 = AesGcm::new(&[0xffu8; 32]).unwrap();
     check_zeroed_on_drop(Box::pin(aes256));
 }
 

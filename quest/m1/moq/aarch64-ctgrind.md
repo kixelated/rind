@@ -18,5 +18,5 @@ Decided by the maintainer on 2026-10-29, from the follow-ups of
   [kixelated/rind#19](https://github.com/kixelated/rind/pull/19) did;
   report one in upstream assembly to graviola or s2n-bignum without blocking
   on the fix.
-- [ctgrind covers every secret](/quest/m1/moq/ctgrind-gaps.md) does not wait
-  on this: its marks are checked here once both land.
+- Its job checks the marks [kixelated/rind#39](https://github.com/kixelated/rind/pull/39)
+  added on the aarch64 backend.
