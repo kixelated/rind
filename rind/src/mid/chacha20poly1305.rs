@@ -75,7 +75,7 @@ impl ChaCha20Poly1305 {
         let mut actual_tag = [0u8; 16];
         self.cipher(nonce, aad, cipher_inout, &mut actual_tag, false);
 
-        if ct_equal(&actual_tag, tag) {
+        if low::ct::into_public(ct_equal(&actual_tag, tag)) {
             low::ct::public_slice(cipher_inout);
             Ok(())
         } else {

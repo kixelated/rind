@@ -77,6 +77,11 @@ impl DecapKey {
     pub fn keygen_internal(seed: &[u8; 64]) -> Self {
         // libcrux takes `d || z`, as FIPS-203's ML-KEM.KeyGen_internal does.
         let (dk, ek) = portable::generate_key_pair(*seed).into_parts();
+        // Mark the key after libcrux derives it, since its matrix sampling
+        // branches on rho, which is public but derived from the secret seed.
+        // `dk` is `dk_pke || ek || H(ek) || z`; only `dk_pke` and `z` are secret.
+        low::ct::secret_slice(&dk.as_slice()[..1152]);
+        low::ct::secret_slice(&dk.as_slice()[2368..]);
         Self {
             dk,
             ek: EncapKey(ek),
@@ -131,8 +136,12 @@ impl EncapKey {
 
     #[doc(hidden)]
     pub fn encaps_internal(self, m: Message) -> (SharedSecret, Ciphertext) {
+        low::ct::secret_slice(&m.0);
         let (c, k) = portable::encapsulate(&self.0, m.0);
-        (SharedSecret(k), Ciphertext(*c.as_slice()))
+        (
+            SharedSecret(k),
+            Ciphertext(low::ct::into_public(*c.as_slice())),
+        )
     }
 }
 
