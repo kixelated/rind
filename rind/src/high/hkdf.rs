@@ -35,11 +35,10 @@ impl<H: Hash> Prk<H> {
     pub fn extract(salt: &[u8], ikm: &[u8]) -> Self {
         let mut hmac = Hmac::<H>::new(salt);
         hmac.update(ikm);
-        let mut prk = hmac.finish();
+        let prk = hmac.finish();
 
         let mut key = [0u8; 64];
         key[..prk.as_ref().len()].copy_from_slice(prk.as_ref());
-        zeroise(prk.as_mut());
 
         Self {
             key,
