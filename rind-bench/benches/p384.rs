@@ -78,13 +78,13 @@ fn ecdh(c: &mut Criterion) {
 
     group.bench_function("rind", |b| {
         b.iter(|| {
-            let our_private_key = rind::key_agreement::p384::PrivateKey::new_random().unwrap();
-            let our_public_key = our_private_key.public_key_uncompressed();
+            use rind::agreement::*;
+            let our_private_key = EphemeralPrivateKey::generate(&ECDH_P384).unwrap();
+            let our_public_key = our_private_key.compute_public_key();
             black_box(our_public_key);
 
-            let peer =
-                rind::key_agreement::p384::PublicKey::from_x962_uncompressed(PUBLIC_KEY).unwrap();
-            let secret = our_private_key.diffie_hellman(&peer).unwrap();
+            let peer = UnparsedPublicKey::new(&ECDH_P384, PUBLIC_KEY);
+            let secret = agree_ephemeral(our_private_key, &peer).unwrap();
             black_box(secret);
         })
     });
@@ -128,8 +128,9 @@ fn keygen(c: &mut Criterion) {
 
     group.bench_function("rind", |b| {
         b.iter(|| {
-            let our_private_key = rind::key_agreement::p384::PrivateKey::new_random().unwrap();
-            black_box(our_private_key.public_key_uncompressed());
+            use rind::agreement::*;
+            let our_private_key = EphemeralPrivateKey::generate(&ECDH_P384).unwrap();
+            black_box(our_private_key.compute_public_key());
         })
     });
 }
@@ -262,9 +263,8 @@ fn ecdsa_sign(c: &mut Criterion) {
 
     group.bench_function("rind", |b| {
         use rind::hashing::Sha384;
-        use rind::signing::ecdsa::{Curve, P384, SigningKey};
-        let private_key = <P384 as Curve>::PrivateKey::new_random().unwrap();
-        let signing_key = SigningKey::<P384> { private_key };
+        use rind::signing::ecdsa::{P384, SigningKey};
+        let signing_key = SigningKey::<P384>::generate().unwrap();
 
         b.iter(|| {
             let mut signature = [0u8; 96];

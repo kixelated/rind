@@ -1,6 +1,4 @@
-use rind::digest;
-use rind::hashing::LegacySha1;
-use rind::hashing::hmac::Hmac;
+use rind::{digest, hmac};
 use str0m_proto::crypto::{Sha1HmacProvider, Sha1Provider, Sha256Provider};
 
 pub(crate) static SHA1_HMAC: RindSha1Hmac = RindSha1Hmac;
@@ -12,11 +10,12 @@ pub(crate) struct RindSha1Hmac;
 
 impl Sha1HmacProvider for RindSha1Hmac {
     fn sha1_hmac(&self, key: &[u8], payloads: &[&[u8]]) -> [u8; 20] {
-        let mut hmac = Hmac::<LegacySha1>::new(key);
+        let key = hmac::Key::new(hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY, key);
+        let mut ctx = hmac::Context::with_key(&key);
         for payload in payloads {
-            hmac.update(payload);
+            ctx.update(payload);
         }
-        hmac.finish().as_ref().try_into().unwrap()
+        ctx.sign().as_ref().try_into().unwrap()
     }
 }
 

@@ -27,9 +27,8 @@ crate built with `cargo install` also compiles no C.
 
 Repo:
 
-- A GitHub fork, keeping graviola's history for a later rebase or upstreaming.
-  Fork only: no upstream PRs until rind carries MoQ, then revisit
-  ([Revisit upstreaming](/quest/m3/upstream.md)).
+- Began as a GitHub fork of graviola; it stopped tracking graviola on
+  2026-10-30 (maintainer) and is reshaped freely.
 - Adapters are separate crates named `rind-<consumer>`, so a third-party major
   bump never forces a rind major bump. The prefix keeps them grouped under
   rind's own name rather than borrowing the consumer's.
@@ -72,6 +71,6 @@ RustCrypto dependency.
 - [libcrux releases its bignum constant-time fix](/quest/m1/moq/libcrux-ct-fixes.md) - waiting on libcrux's fix, then dropping its armv7 ctgrind suppression
 - [armv7 ctgrind on PRs](/quest/m1/moq/armv7-ctgrind-pr.md) - the release job gates PRs if it is fast enough
 - [Publish rind-instant-acme](/quest/m1/moq/instant-acme-publish.md) - switch to the 0.9 release and publish
-- [Vector registers match aws-lc](/quest/m1/moq/vector-clear.md) - no register clearing beyond aws-lc, unless needed for speed
+- [Leave graviola's fork network](/quest/m1/moq/detach-fork.md) - waiting on the maintainer to detach the GitHub fork
 - [Learn from aws-lc-rs's API](/quest/m1/moq/api/README.md) - aws-lc-rs-shaped `aead`, `agreement`, `kem`, `signature`, `digest`, `hmac`, `hkdf`, and `rand` before the first release
 - [Release](/quest/m1/moq/release.md) - publish the rind release MoQ switches to

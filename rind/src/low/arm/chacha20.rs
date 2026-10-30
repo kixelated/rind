@@ -1,4 +1,6 @@
-// Copyright the HACL* and libcrux authors.
+// Copyright (c) 2016-2022 INRIA, CMU and Microsoft Corporation
+// Copyright (c) 2022-2023 HACL* Contributors
+// Copyright 2023 Cryspen Sarl
 // SPDX-License-Identifier: Apache-2.0
 //
 // ChaCha20, from HACL*'s verified `Hacl_Chacha20` as libcrux-chacha20poly1305

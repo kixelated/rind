@@ -62,3 +62,34 @@ pub(crate) fn process_cavp(filename: impl AsRef<Path>, sink: &mut dyn CavpSink) 
         }
     }
 }
+
+/// Reads every test from the Wycheproof vector file `name`.
+pub(crate) fn wycheproof<T: serde::de::DeserializeOwned>(name: &str) -> Vec<T> {
+    #[derive(serde::Deserialize)]
+    struct TestFile<T> {
+        #[serde(rename = "testGroups")]
+        groups: Vec<TestGroup<T>>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct TestGroup<T> {
+        tests: Vec<T>,
+    }
+
+    let path = format!("../thirdparty/wycheproof/testvectors_v1/{name}");
+    let file = File::open(&path).unwrap_or_else(|_| panic!("cannot open {path}"));
+    let file: TestFile<T> =
+        serde_json::from_reader(BufReader::new(file)).expect("invalid test JSON");
+    let tests: Vec<T> = file.groups.into_iter().flat_map(|g| g.tests).collect();
+    assert!(!tests.is_empty(), "{path} has no tests");
+    tests
+}
+
+/// A Wycheproof test's expected result.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum Expected {
+    Valid,
+    Invalid,
+    Acceptable,
+}

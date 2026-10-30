@@ -66,7 +66,13 @@ pub fn all() -> Vec<Key> {
         Algorithm::ES256,
         "rind",
         EncodingKey::from_ec_der(p256.to_pkcs8_der(&mut [0; 256]).unwrap()),
-        DecodingKey::from_ec_der(&p256.private_key.public_key_uncompressed()),
+        DecodingKey::from_ec_der(
+            &p256
+                .public_key()
+                .unwrap()
+                .public_key
+                .as_bytes_uncompressed(),
+        ),
     ));
     keys.push(aws_lc_ecdsa(
         Algorithm::ES256,
@@ -78,7 +84,13 @@ pub fn all() -> Vec<Key> {
         Algorithm::ES384,
         "rind",
         EncodingKey::from_ec_der(p384.to_pkcs8_der(&mut [0; 256]).unwrap()),
-        DecodingKey::from_ec_der(&p384.private_key.public_key_uncompressed()),
+        DecodingKey::from_ec_der(
+            &p384
+                .public_key()
+                .unwrap()
+                .public_key
+                .as_bytes_uncompressed(),
+        ),
     ));
     keys.push(aws_lc_ecdsa(
         Algorithm::ES384,

@@ -235,7 +235,11 @@ mod tests {
             assert!(
                 $algorithm
                     .verify_signature(
-                        &$signing_key.private_key.public_key_uncompressed(),
+                        &$signing_key
+                            .public_key()
+                            .unwrap()
+                            .public_key
+                            .as_bytes_uncompressed(),
                         &message,
                         &signature
                     )
