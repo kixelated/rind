@@ -5,8 +5,8 @@ use rind::Error;
 use rind::aead::{AesGcm, ChaCha20Poly1305, XChaCha20Poly1305};
 use rind::cipher::ChaCha20;
 use rind::hashing::hkdf::Prk;
-use rind::hashing::hmac::Hmac;
 use rind::hashing::{LegacySha1, Sha256, Sha384, Sha512};
+use rind::hmac;
 use rind::key_agreement::{mlkem768, p256, p384, x25519};
 use rind::signing::{ecdsa, eddsa, rsa};
 use serde::Deserialize;
@@ -169,125 +169,36 @@ impl Drop for Summary {
 }
 
 #[test]
-fn hmac_sha1_tests() {
-    let data_file = File::open("../thirdparty/wycheproof/testvectors_v1/hmac_sha1_test.json")
-        .expect("failed to open data file");
+fn hmac_tests() {
+    for (file, algorithm) in [
+        ("hmac_sha1_test.json", hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY),
+        ("hmac_sha256_test.json", hmac::HMAC_SHA256),
+        ("hmac_sha384_test.json", hmac::HMAC_SHA384),
+        ("hmac_sha512_test.json", hmac::HMAC_SHA512),
+    ] {
+        let data_file = File::open(format!("../thirdparty/wycheproof/testvectors_v1/{file}"))
+            .unwrap_or_else(|_| panic!("failed to open data file {file}"));
 
-    let reader = BufReader::new(data_file);
-    let tests: TestFile = serde_json::from_reader(reader).expect("invalid test JSON");
-    let mut summary = Summary::new();
+        let reader = BufReader::new(data_file);
+        let tests: TestFile = serde_json::from_reader(reader).expect("invalid test JSON");
+        let mut summary = Summary::new();
 
-    for group in tests.groups {
-        summary.group(&group);
-        for test in group.tests {
-            summary.start(&test);
+        for group in tests.groups {
+            summary.group(&group);
+            for test in group.tests {
+                summary.start(&test);
 
-            let mut ctx = Hmac::<LegacySha1>::new(test.key);
-            ctx.update(test.msg);
-            let result = match test.tag.len() {
-                20 => ctx.verify(&test.tag),
-                10 => truncated(ctx.finish().as_ref(), &test.tag),
-                _ => todo!("unhandled truncated hmac"),
-            };
+                let key = hmac::Key::new(algorithm, &test.key);
+                let result = match test.tag.len() == algorithm.tag_len() {
+                    true => hmac::verify(&key, &test.msg, &test.tag),
+                    false => truncated(hmac::sign(&key, &test.msg).as_ref(), &test.tag),
+                };
 
-            match (test.result, result) {
-                (ExpectedResult::Valid, Ok(())) => {}
-                (ExpectedResult::Invalid, Err(Error::BadSignature)) => {}
-                _ => panic!("expected {:?} got {:?}", test.result, result),
-            }
-        }
-    }
-}
-
-#[test]
-fn hmac_sha256_tests() {
-    let data_file = File::open("../thirdparty/wycheproof/testvectors_v1/hmac_sha256_test.json")
-        .expect("failed to open data file");
-
-    let reader = BufReader::new(data_file);
-    let tests: TestFile = serde_json::from_reader(reader).expect("invalid test JSON");
-    let mut summary = Summary::new();
-
-    for group in tests.groups {
-        summary.group(&group);
-        for test in group.tests {
-            summary.start(&test);
-
-            let mut ctx = Hmac::<Sha256>::new(test.key);
-            ctx.update(test.msg);
-            let result = match test.tag.len() {
-                32 => ctx.verify(&test.tag),
-                16 => truncated(ctx.finish().as_ref(), &test.tag),
-                _ => todo!("unhandled truncated hmac"),
-            };
-
-            match (test.result, result) {
-                (ExpectedResult::Valid, Ok(())) => {}
-                (ExpectedResult::Invalid, Err(Error::BadSignature)) => {}
-                _ => panic!("expected {:?} got {:?}", test.result, result),
-            }
-        }
-    }
-}
-
-#[test]
-fn hmac_sha384_tests() {
-    let data_file = File::open("../thirdparty/wycheproof/testvectors_v1/hmac_sha384_test.json")
-        .expect("failed to open data file");
-
-    let reader = BufReader::new(data_file);
-    let tests: TestFile = serde_json::from_reader(reader).expect("invalid test JSON");
-    let mut summary = Summary::new();
-
-    for group in tests.groups {
-        summary.group(&group);
-        for test in group.tests {
-            summary.start(&test);
-
-            let mut ctx = Hmac::<Sha384>::new(test.key);
-            ctx.update(test.msg);
-            let result = match test.tag.len() {
-                48 => ctx.verify(&test.tag),
-                24 => truncated(ctx.finish().as_ref(), &test.tag),
-                _ => todo!("unhandled truncated hmac"),
-            };
-
-            match (test.result, result) {
-                (ExpectedResult::Valid, Ok(())) => {}
-                (ExpectedResult::Invalid, Err(Error::BadSignature)) => {}
-                _ => panic!("expected {:?} got {:?}", test.result, result),
-            }
-        }
-    }
-}
-
-#[test]
-fn hmac_sha512_tests() {
-    let data_file = File::open("../thirdparty/wycheproof/testvectors_v1/hmac_sha512_test.json")
-        .expect("failed to open data file");
-
-    let reader = BufReader::new(data_file);
-    let tests: TestFile = serde_json::from_reader(reader).expect("invalid test JSON");
-    let mut summary = Summary::new();
-
-    for group in tests.groups {
-        summary.group(&group);
-
-        for test in group.tests {
-            summary.start(&test);
-
-            let mut ctx = Hmac::<Sha512>::new(test.key);
-            ctx.update(test.msg);
-            let result = match test.tag.len() {
-                64 => ctx.verify(&test.tag),
-                32 => truncated(ctx.finish().as_ref(), &test.tag),
-                _ => todo!("unhandled truncated hmac"),
-            };
-
-            match (test.result, result) {
-                (ExpectedResult::Valid, Ok(())) => {}
-                (ExpectedResult::Invalid, Err(Error::BadSignature)) => {}
-                _ => panic!("expected {:?} got {:?}", test.result, result),
+                match (test.result, result) {
+                    (ExpectedResult::Valid, Ok(())) => {}
+                    (ExpectedResult::Invalid, Err(Error::BadSignature)) => {}
+                    _ => panic!("expected {:?} got {:?}", test.result, result),
+                }
             }
         }
     }

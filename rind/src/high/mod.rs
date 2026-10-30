@@ -10,7 +10,7 @@ pub(super) mod ecdsa;
 pub(super) mod ed25519;
 pub(super) mod hash;
 pub mod hkdf;
-pub mod hmac;
+pub(super) mod hmac;
 pub(super) mod hmac_drbg;
 pub(super) mod pkcs1;
 pub(super) mod pkcs8;

@@ -184,13 +184,37 @@ pub mod digest {
     };
 }
 
-/// HMAC and HKDF, and the hash functions that parameterize them and signatures.
+/// Message authentication with HMAC.
+///
+/// A [`hmac::Key`] precomputes its keyed hash states once; each message then
+/// signs through a [`hmac::Context`] started from it, or the one-shot
+/// [`hmac::sign`] and [`hmac::verify`].
+///
+/// ```
+/// use rind::hmac;
+///
+/// let key = hmac::Key::new(hmac::HMAC_SHA256, b"secret");
+///
+/// let mut ctx = hmac::Context::with_key(&key);
+/// ctx.update(b"hello, ");
+/// ctx.update(b"world");
+/// let tag = ctx.sign();
+///
+/// hmac::verify(&key, b"hello, world", tag.as_ref()).unwrap();
+/// ```
+pub mod hmac {
+    pub use super::high::hmac::{
+        Algorithm, Context, HMAC_SHA1_FOR_LEGACY_USE_ONLY, HMAC_SHA256, HMAC_SHA384, HMAC_SHA512,
+        Key, Tag, sign, verify,
+    };
+}
+
+/// HKDF, and the hash functions that parameterize it and signatures.
 ///
 /// To hash a message, use [`digest`].
 pub mod hashing {
     pub use super::high::hash::{LegacySha1, Sha256, Sha384, Sha512};
     pub use super::high::hkdf;
-    pub use super::high::hmac;
 }
 
 /// Authenticated encryption.
