@@ -12,13 +12,11 @@
 use super::cpu::HaveCryptoExt;
 use crate::low::generic;
 
-// Each symbol carries rind's version, so two semver-incompatible copies of
-// rind can link into one binary.
 unsafe extern "C" {
-    #[link_name = concat!("rind_", env!("CARGO_PKG_VERSION"), "_sha1_block_data_order_hw")]
+    #[link_name = aws_lc_symbol!("sha1_block_data_order_hw")]
     fn sha1_block_data_order_hw(state: *mut [u32; 5], data: *const u8, blocks: usize);
 
-    #[link_name = concat!("rind_", env!("CARGO_PKG_VERSION"), "_sha256_block_data_order_hw")]
+    #[link_name = aws_lc_symbol!("sha256_block_data_order_hw")]
     fn sha256_block_data_order_hw(state: *mut [u32; 8], data: *const u8, blocks: usize);
 }
 

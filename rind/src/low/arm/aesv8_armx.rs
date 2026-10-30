@@ -10,16 +10,14 @@
 use super::cpu::HaveCryptoExt;
 use crate::low;
 
-// Each symbol carries rind's version, so two semver-incompatible copies of
-// rind can link into one binary.
 unsafe extern "C" {
-    #[link_name = concat!("rind_", env!("CARGO_PKG_VERSION"), "_aes_hw_set_encrypt_key")]
+    #[link_name = aws_lc_symbol!("aes_hw_set_encrypt_key")]
     fn aes_hw_set_encrypt_key(user_key: *const u8, bits: i32, key: *mut AesHwKey) -> i32;
 
-    #[link_name = concat!("rind_", env!("CARGO_PKG_VERSION"), "_aes_hw_encrypt")]
+    #[link_name = aws_lc_symbol!("aes_hw_encrypt")]
     fn aes_hw_encrypt(input: *const u8, output: *mut u8, key: *const AesHwKey);
 
-    #[link_name = concat!("rind_", env!("CARGO_PKG_VERSION"), "_aes_hw_ctr32_encrypt_blocks")]
+    #[link_name = aws_lc_symbol!("aes_hw_ctr32_encrypt_blocks")]
     fn aes_hw_ctr32_encrypt_blocks(
         input: *const u8,
         output: *mut u8,

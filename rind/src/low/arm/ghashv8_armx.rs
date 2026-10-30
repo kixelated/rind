@@ -11,13 +11,11 @@
 use super::cpu::HaveCryptoExt;
 use crate::low;
 
-// Each symbol carries rind's version, so two semver-incompatible copies of
-// rind can link into one binary.
 unsafe extern "C" {
-    #[link_name = concat!("rind_", env!("CARGO_PKG_VERSION"), "_gcm_init_v8")]
+    #[link_name = aws_lc_symbol!("gcm_init_v8")]
     fn gcm_init_v8(htable: *mut GhashTable, h: *const [u64; 2]);
 
-    #[link_name = concat!("rind_", env!("CARGO_PKG_VERSION"), "_gcm_ghash_v8")]
+    #[link_name = aws_lc_symbol!("gcm_ghash_v8")]
     fn gcm_ghash_v8(xi: *mut [u8; 16], htable: *const GhashTable, input: *const u8, len: usize);
 }
 
