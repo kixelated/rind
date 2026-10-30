@@ -1,7 +1,7 @@
 use std::fmt;
 
-use rind::aead::AesGcm;
-use rind::cipher::{Aes, AesCtr};
+use rind::aead::{self, Aad, LessSafeKey, Nonce, UnboundKey};
+use rind::cipher::{self, Aes, AesCtr};
 use str0m_proto::crypto::{
     AeadAes128GcmCipher, AeadAes256GcmCipher, Aes128CmSha1_80Cipher, CryptoError, SrtpProvider,
     SupportedAeadAes128Gcm, SupportedAeadAes256Gcm, SupportedAes128CmSha1_80,
@@ -28,38 +28,38 @@ impl SrtpProvider for RindSrtp {
     }
 
     fn srtp_aes_128_ecb_round(&self, key: &[u8], input: &[u8], output: &mut [u8]) {
-        ecb_round::<16>(key, input, output);
+        ecb_round(&cipher::AES_128, key, input, output);
     }
 
     fn srtp_aes_256_ecb_round(&self, key: &[u8], input: &[u8], output: &mut [u8]) {
-        ecb_round::<32>(key, input, output);
+        ecb_round(&cipher::AES_256, key, input, output);
     }
 }
 
 // str0m sizes these from its own types, never from a packet, and the trait has
 // no error path, so a mismatch is a str0m bug worth a panic.
-fn ecb_round<const KEY_LEN: usize>(key: &[u8], input: &[u8], output: &mut [u8]) {
-    assert_eq!(key.len(), KEY_LEN, "SRTP master key length");
+fn ecb_round(algorithm: &'static cipher::Algorithm, key: &[u8], input: &[u8], output: &mut [u8]) {
+    let aes = Aes::new(algorithm, key).expect("SRTP master key length");
     let mut block: [u8; 16] = input.try_into().expect("SRTP key derivation block");
-    Aes::new(key).unwrap().encrypt_block(&mut block);
+    aes.encrypt_block(&mut block);
     output[..16].copy_from_slice(&block);
 }
 
 impl SupportedAes128CmSha1_80 for RindSrtp {
     fn create_cipher(&self, key: [u8; 16], _encrypt: bool) -> Box<dyn Aes128CmSha1_80Cipher> {
-        Box::new(Cm(AesCtr::new(&key).unwrap()))
+        Box::new(Cm(AesCtr::new(&cipher::AES_128, &key).unwrap()))
     }
 }
 
 impl SupportedAeadAes128Gcm for RindSrtp {
     fn create_cipher(&self, key: [u8; 16], _encrypt: bool) -> Box<dyn AeadAes128GcmCipher> {
-        Box::new(Gcm(AesGcm::new(&key).unwrap()))
+        Box::new(Gcm::new(&aead::AES_128_GCM, &key))
     }
 }
 
 impl SupportedAeadAes256Gcm for RindSrtp {
     fn create_cipher(&self, key: [u8; 32], _encrypt: bool) -> Box<dyn AeadAes256GcmCipher> {
-        Box::new(Gcm(AesGcm::new(&key).unwrap()))
+        Box::new(Gcm::new(&aead::AES_256_GCM, &key))
     }
 }
 
@@ -111,7 +111,7 @@ impl Aes128CmSha1_80Cipher for Cm {
 }
 
 /// AES-GCM, keyed for one SRTP or SRTCP direction.
-struct Gcm(AesGcm);
+struct Gcm(LessSafeKey);
 
 impl fmt::Debug for Gcm {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -120,6 +120,11 @@ impl fmt::Debug for Gcm {
 }
 
 impl Gcm {
+    /// str0m passes the profile's key length.
+    fn new(algorithm: &'static aead::Algorithm, key: &[u8]) -> Self {
+        Self(LessSafeKey::new(UnboundKey::new(algorithm, key).unwrap()))
+    }
+
     /// Writes the ciphertext then the tag into `output`.
     fn seal(
         &self,
@@ -131,11 +136,18 @@ impl Gcm {
         let output = output
             .get_mut(..input.len() + TAG_LEN)
             .ok_or_else(|| CryptoError::Other("AES-GCM output too short".into()))?;
-        let (ciphertext, tag) = output.split_at_mut(input.len());
+        let (ciphertext, tag_out) = output.split_at_mut(input.len());
         ciphertext.copy_from_slice(input);
-        self.0
-            .encrypt(iv, aad, ciphertext, tag.try_into().unwrap())
-            .map_err(|e| CryptoError::Other(format!("AES-GCM failed: {e:?}")))
+        let tag = self
+            .0
+            .seal_in_place_separate_tag(
+                Nonce::assume_unique_for_key(*iv),
+                Aad::from(aad),
+                ciphertext,
+            )
+            .map_err(|e| CryptoError::Other(format!("AES-GCM failed: {e:?}")))?;
+        tag_out.copy_from_slice(tag.as_ref());
+        Ok(())
     }
 
     /// Opens `input`, the ciphertext then the tag, and returns the plaintext length.
@@ -165,7 +177,12 @@ impl Gcm {
         };
 
         self.0
-            .decrypt(iv, aad, plaintext, tag)
+            .open_in_place_separate_tag(
+                Nonce::assume_unique_for_key(*iv),
+                Aad::from(aad),
+                tag,
+                plaintext,
+            )
             .map_err(|e| CryptoError::Other(format!("AES-GCM failed: {e:?}")))?;
         Ok(ciphertext.len())
     }

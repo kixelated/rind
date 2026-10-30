@@ -329,97 +329,55 @@ const K: [u32; 4] = [0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xca62c1d6];
 
 /// The 80 rounds of FIPS 180-4, 6.1.2, for the block in words
 /// `LANE..LANE + 4` of each group of `wk`, calling `then(g)` after group `g`.
-///
-/// As in aws-lc's `sha1_block_data_order_avx2`, each round computes the next
-/// round's f(b, c, d) into a register it no longer needs, so no round copies
-/// one, and b is carried as ROTL30(b), the value the round after needs as c.
-/// LLVM's register allocation of the same rounds in Rust copies a register
-/// in nearly every round.
 #[inline]
 fn rounds<const LANE: usize>(state: &mut [u32; 5], wk: &Schedule, mut then: impl FnMut(usize)) {
-    let [a, b, c, d, e] = *state;
-    let (mut a, mut b30, mut c, mut d, mut e) = (a, b.rotate_left(30), c, d, e);
-    let mut f = d ^ (b & (c ^ d));
-    let wk = wk.as_flattened()[LANE..].as_ptr();
+    let [mut a, mut b, mut c, mut d, mut e] = *state;
 
-    // Round `$t`: e += W[t] + K[t] + f + ROTL5(a), then `$next` computes the
-    // next round's f from a, b30 and c into a, with `t` as scratch.
+    // Round `$t`, with `$f` as f(b, c, d).
     macro_rules! round {
-        ($next:literal, $t:literal) => {
-            // SAFETY: `wk` points at word `LANE` of 160, and the round reads
-            // word `LANE + 8 * (t / 4) + t % 4` of them, at most 159 for
-            // t < 80. See [crate::low::inline_assembly_safety] for the rest.
-            unsafe {
-                core::arch::asm!(
-                    "  add  {e:e}, dword ptr [{wk} + {offset}]",
-                    "  add  {e:e}, {f:e}",
-                    "  rorx {f:e}, {a:e}, 2",
-                    "  rorx {t:e}, {a:e}, 27",
-                    "  add  {e:e}, {t:e}",
-                    $next,
-                    wk = in(reg) wk,
-                    offset = const 4 * (8 * ($t / 4) + $t % 4),
-                    a = inout(reg) a,
-                    f = inout(reg) f,
-                    b30 = in(reg) b30,
-                    c = in(reg) c,
-                    e = inout(reg) e,
-                    t = out(reg) _,
-                    options(nostack, readonly, pure),
-                );
-            }
-            // a now holds the next f, f holds ROTL30(a), and e the new a.
-            (a, f, b30, c, d, e) = (e, a, f, b30, c, d);
+        ($f:ident, $t:literal) => {
+            e = e
+                .wrapping_add(a.rotate_left(5))
+                .wrapping_add($f(b, c, d))
+                .wrapping_add(wk[$t / 4][LANE + $t % 4]);
+            (a, b, c, d, e) = (e, a, b.rotate_left(30), c, d);
             if $t % 4 == 3 {
                 then($t / 4);
             }
         };
     }
-
-    // f = CH(a, b30, c) = c ^ (a & (b30 ^ c))
-    macro_rules! ch {
-        ($($t:literal)*) => {
-            $(round!(
-                "  mov  {t:e}, {b30:e}\n  xor  {t:e}, {c:e}\n  and  {a:e}, {t:e}\n  xor  {a:e}, {c:e}",
-                $t
-            );)*
+    macro_rules! rounds {
+        ($f:ident: $($t:literal)*) => {
+            $(round!($f, $t);)*
         };
     }
 
-    // f = PARITY(a, b30, c) = a ^ b30 ^ c
-    macro_rules! parity {
-        ($($t:literal)*) => {
-            $(round!("  xor  {a:e}, {b30:e}\n  xor  {a:e}, {c:e}", $t);)*
-        };
-    }
-
-    // f = MAJ(a, b30, c) = ((a ^ b30) & (b30 ^ c)) ^ b30, which is b30 where
-    // a and b30 agree and c where they differ.
-    macro_rules! maj {
-        ($($t:literal)*) => {
-            $(round!(
-                "  mov  {t:e}, {b30:e}\n  xor  {t:e}, {c:e}\n  xor  {a:e}, {b30:e}\n  and  {a:e}, {t:e}\n  xor  {a:e}, {b30:e}",
-                $t
-            );)*
-        };
-    }
-
-    // The last round of each twenty computes the next twenty's f, and the
-    // last round's is unused.
-    ch!(0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18);
-    parity!(19);
-    parity!(20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38);
-    maj!(39);
-    maj!(40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58);
-    parity!(59);
-    parity!(60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79);
-    let _ = f;
+    rounds!(ch: 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19);
+    rounds!(parity: 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39);
+    rounds!(maj: 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59);
+    rounds!(parity: 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79);
 
     state[0] = state[0].wrapping_add(a);
-    state[1] = state[1].wrapping_add(b30.rotate_left(2));
+    state[1] = state[1].wrapping_add(b);
     state[2] = state[2].wrapping_add(c);
     state[3] = state[3].wrapping_add(d);
     state[4] = state[4].wrapping_add(e);
+}
+
+#[inline(always)]
+fn ch(b: u32, c: u32, d: u32) -> u32 {
+    d ^ (b & (c ^ d))
+}
+
+#[inline(always)]
+fn parity(b: u32, c: u32, d: u32) -> u32 {
+    b ^ c ^ d
+}
+
+/// b where b and c agree, else d.
+#[inline(always)]
+fn maj(b: u32, c: u32, d: u32) -> u32 {
+    ((b ^ c) & (c ^ d)) ^ c
 }
 
 #[cfg(test)]

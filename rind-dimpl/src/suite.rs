@@ -5,8 +5,8 @@ use dimpl::crypto::{
     SupportedDtls12CipherSuite, SupportedDtls13CipherSuite, TmpBuf,
 };
 use dimpl::{CryptoError, CryptoOperation};
-use rind::aead::{AesGcm, ChaCha20Poly1305};
-use rind::cipher::{Aes, ChaCha20};
+use rind::aead::{self, LessSafeKey, UnboundKey};
+use rind::cipher::{self, Aes, ChaCha20};
 
 const TAG_LEN: usize = 16;
 
@@ -19,44 +19,36 @@ enum Algorithm {
 }
 
 impl Algorithm {
-    fn key_len(self) -> usize {
+    fn aead(self) -> &'static aead::Algorithm {
         match self {
-            Self::Aes128Gcm => 16,
-            Self::Aes256Gcm | Self::ChaCha20Poly1305 => 32,
+            Self::Aes128Gcm => &aead::AES_128_GCM,
+            Self::Aes256Gcm => &aead::AES_256_GCM,
+            Self::ChaCha20Poly1305 => &aead::CHACHA20_POLY1305,
         }
     }
 
     fn cipher(self, key: &[u8]) -> Result<Box<dyn Cipher>, CryptoError> {
         let actual = key.len().min(u16::MAX as usize) as u16;
-        let aead = match self {
-            // rind takes either AES key length, but the suite fixes one.
-            Self::Aes128Gcm | Self::Aes256Gcm if key.len() == self.key_len() => {
-                Aead::AesGcm(Box::new(
-                    AesGcm::new(key).map_err(|_| CryptoError::InvalidAesGcmKeySize { actual })?,
-                ))
-            }
-            Self::Aes128Gcm | Self::Aes256Gcm => {
-                return Err(CryptoError::InvalidAesGcmKeySize { actual });
-            }
-            Self::ChaCha20Poly1305 => Aead::ChaCha20Poly1305(ChaCha20Poly1305::new(
-                key.try_into()
-                    .map_err(|_| CryptoError::InvalidChacha20Poly1305KeySize { actual })?,
-            )),
-        };
-        Ok(Box::new(aead))
+        let key = UnboundKey::new(self.aead(), key).map_err(|_| match self {
+            Self::Aes128Gcm | Self::Aes256Gcm => CryptoError::InvalidAesGcmKeySize { actual },
+            Self::ChaCha20Poly1305 => CryptoError::InvalidChacha20Poly1305KeySize { actual },
+        })?;
+        Ok(Box::new(Aead(LessSafeKey::new(key))))
     }
 
     /// DTLS 1.3 record number protection (RFC 9147 section 4.2.3).
     fn mask(self, sn_key: &[u8], sample: &[u8; 16]) -> [u8; 16] {
         // dimpl derives `sn_key` at the suite's key length.
+        let aes = |algorithm| {
+            let mut mask = *sample;
+            Aes::new(algorithm, sn_key)
+                .expect("sn_key is the suite's AES key length")
+                .encrypt_block(&mut mask);
+            mask
+        };
         match self {
-            Self::Aes128Gcm | Self::Aes256Gcm => {
-                let mut mask = *sample;
-                Aes::new(sn_key)
-                    .expect("sn_key is an AES key length")
-                    .encrypt_block(&mut mask);
-                mask
-            }
+            Self::Aes128Gcm => aes(&cipher::AES_128),
+            Self::Aes256Gcm => aes(&cipher::AES_256),
             Self::ChaCha20Poly1305 => {
                 let key = sn_key.try_into().expect("sn_key is a ChaCha20 key length");
                 let [c0, c1, c2, c3, nonce @ ..] = sample;
@@ -71,30 +63,23 @@ impl Algorithm {
     }
 }
 
-enum Aead {
-    AesGcm(Box<AesGcm>),
-    ChaCha20Poly1305(ChaCha20Poly1305),
-}
+struct Aead(LessSafeKey);
 
 impl fmt::Debug for Aead {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::AesGcm(_) => "AesGcm",
-            Self::ChaCha20Poly1305(_) => "ChaCha20Poly1305",
-        })
+        f.write_str("Aead")
     }
 }
 
 impl Cipher for Aead {
     fn encrypt(&mut self, plaintext: &mut Buf, aad: Aad, nonce: Nonce) -> Result<(), CryptoError> {
-        let mut tag = [0u8; TAG_LEN];
-        match self {
-            Self::AesGcm(aead) => aead.encrypt(&nonce.0, &aad, plaintext, &mut tag),
-            Self::ChaCha20Poly1305(aead) => aead.encrypt(&nonce.0, &aad, plaintext, &mut tag),
-        }
-        .map_err(|_| CryptoError::OperationFailed(CryptoOperation::Encrypt))?;
-        plaintext.extend_from_slice(&tag);
-        Ok(())
+        self.0
+            .seal_in_place_append_tag(
+                aead::Nonce::assume_unique_for_key(nonce.0),
+                aead::Aad::from(&aad[..]),
+                plaintext,
+            )
+            .map_err(|_| CryptoError::OperationFailed(CryptoOperation::Encrypt))
     }
 
     fn decrypt(
@@ -111,12 +96,13 @@ impl Cipher for Aead {
             });
         };
 
-        let (body, tag) = ciphertext.as_mut().split_at_mut(plaintext_len);
-        match self {
-            Self::AesGcm(aead) => aead.decrypt(&nonce.0, &aad, body, tag),
-            Self::ChaCha20Poly1305(aead) => aead.decrypt(&nonce.0, &aad, body, tag),
-        }
-        .map_err(|_| CryptoError::OperationFailed(CryptoOperation::Decrypt))?;
+        self.0
+            .open_in_place(
+                aead::Nonce::assume_unique_for_key(nonce.0),
+                aead::Aad::from(&aad[..]),
+                ciphertext.as_mut(),
+            )
+            .map_err(|_| CryptoError::OperationFailed(CryptoOperation::Decrypt))?;
 
         ciphertext.truncate(plaintext_len);
         Ok(())
@@ -145,7 +131,7 @@ impl SupportedDtls12CipherSuite for Dtls12 {
             Algorithm::Aes128Gcm | Algorithm::Aes256Gcm => 4,
             Algorithm::ChaCha20Poly1305 => 12,
         };
-        (0, self.algorithm.key_len(), fixed_iv_len)
+        (0, self.algorithm.aead().key_len(), fixed_iv_len)
     }
 
     fn explicit_nonce_len(&self) -> usize {
@@ -181,7 +167,7 @@ impl SupportedDtls13CipherSuite for Dtls13 {
     }
 
     fn key_len(&self) -> usize {
-        self.algorithm.key_len()
+        self.algorithm.aead().key_len()
     }
 
     fn iv_len(&self) -> usize {

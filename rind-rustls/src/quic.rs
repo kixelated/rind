@@ -1,26 +1,46 @@
-use rind::aead;
-use rind::cipher::{Aes, ChaCha20};
+use rind::aead::{self, Aad, LessSafeKey, UnboundKey};
+use rind::cipher::{self, Aes, ChaCha20};
 use rustls::Error;
 use rustls::crypto::cipher::{AeadKey, Iv, Nonce};
 use rustls::quic;
 
-/// QUIC packet and header protection with AES-GCM, by key length in bytes.
-pub(crate) struct AesGcm(pub(crate) usize);
+/// QUIC packet and header protection with AES-GCM.
+pub(crate) struct AesGcm {
+    packet: &'static aead::Algorithm,
+    header: &'static cipher::Algorithm,
+}
+
+/// QUIC protection with AES-128-GCM.
+pub(crate) static AES_128_GCM: AesGcm = AesGcm {
+    packet: &aead::AES_128_GCM,
+    header: &cipher::AES_128,
+};
+
+/// QUIC protection with AES-256-GCM.
+pub(crate) static AES_256_GCM: AesGcm = AesGcm {
+    packet: &aead::AES_256_GCM,
+    header: &cipher::AES_256,
+};
 
 impl quic::Algorithm for AesGcm {
     fn packet_key(&self, key: AeadKey, iv: Iv) -> Box<dyn quic::PacketKey> {
         Box::new(PacketKey {
-            aead: aead::AesGcm::new(key.as_ref()).unwrap(),
+            key: LessSafeKey::new(UnboundKey::new(self.packet, key.as_ref()).unwrap()),
             iv,
+            // RFC 9001 section 6.6
+            confidentiality_limit: 1 << 23,
+            integrity_limit: 1 << 52,
         })
     }
 
     fn header_protection_key(&self, key: AeadKey) -> Box<dyn quic::HeaderProtectionKey> {
-        Box::new(HeaderProtectionKey(Aes::new(key.as_ref()).unwrap()))
+        Box::new(HeaderProtectionKey(
+            Aes::new(self.header, key.as_ref()).unwrap(),
+        ))
     }
 
     fn aead_key_len(&self) -> usize {
-        self.0
+        self.packet.key_len()
     }
 }
 
@@ -30,8 +50,11 @@ pub(crate) struct ChaCha20Poly1305;
 impl quic::Algorithm for ChaCha20Poly1305 {
     fn packet_key(&self, key: AeadKey, iv: Iv) -> Box<dyn quic::PacketKey> {
         Box::new(PacketKey {
-            aead: aead::ChaCha20Poly1305::new(key.as_ref().try_into().unwrap()),
+            key: LessSafeKey::new(UnboundKey::new(&aead::CHACHA20_POLY1305, key.as_ref()).unwrap()),
             iv,
+            // RFC 9001 section 6.6
+            confidentiality_limit: u64::MAX,
+            integrity_limit: 1 << 36,
         })
     }
 
@@ -42,101 +65,30 @@ impl quic::Algorithm for ChaCha20Poly1305 {
     }
 
     fn aead_key_len(&self) -> usize {
-        32
+        aead::CHACHA20_POLY1305.key_len()
     }
 }
 
-/// An AEAD that protects QUIC packet payloads.
-trait Aead: Send + Sync {
-    /// RFC 9001 section 6.6
-    const CONFIDENTIALITY_LIMIT: u64;
-    /// RFC 9001 section 6.6
-    const INTEGRITY_LIMIT: u64;
-
-    fn encrypt(
-        &self,
-        nonce: &[u8; 12],
-        aad: &[u8],
-        inout: &mut [u8],
-        tag: &mut [u8; TAG_LEN],
-    ) -> Result<(), rind::Error>;
-    fn decrypt(
-        &self,
-        nonce: &[u8; 12],
-        aad: &[u8],
-        inout: &mut [u8],
-        tag: &[u8],
-    ) -> Result<(), rind::Error>;
-}
-
-impl Aead for aead::AesGcm {
-    const CONFIDENTIALITY_LIMIT: u64 = 1 << 23;
-    const INTEGRITY_LIMIT: u64 = 1 << 52;
-
-    fn encrypt(
-        &self,
-        nonce: &[u8; 12],
-        aad: &[u8],
-        inout: &mut [u8],
-        tag: &mut [u8; TAG_LEN],
-    ) -> Result<(), rind::Error> {
-        self.encrypt(nonce, aad, inout, tag)
-    }
-
-    fn decrypt(
-        &self,
-        nonce: &[u8; 12],
-        aad: &[u8],
-        inout: &mut [u8],
-        tag: &[u8],
-    ) -> Result<(), rind::Error> {
-        self.decrypt(nonce, aad, inout, tag)
-    }
-}
-
-impl Aead for aead::ChaCha20Poly1305 {
-    const CONFIDENTIALITY_LIMIT: u64 = u64::MAX;
-    const INTEGRITY_LIMIT: u64 = 1 << 36;
-
-    fn encrypt(
-        &self,
-        nonce: &[u8; 12],
-        aad: &[u8],
-        inout: &mut [u8],
-        tag: &mut [u8; TAG_LEN],
-    ) -> Result<(), rind::Error> {
-        self.encrypt(nonce, aad, inout, tag)
-    }
-
-    fn decrypt(
-        &self,
-        nonce: &[u8; 12],
-        aad: &[u8],
-        inout: &mut [u8],
-        tag: &[u8],
-    ) -> Result<(), rind::Error> {
-        self.decrypt(nonce, aad, inout, tag)
-    }
-}
-
-struct PacketKey<A> {
-    aead: A,
+struct PacketKey {
+    key: LessSafeKey,
     iv: Iv,
+    confidentiality_limit: u64,
+    integrity_limit: u64,
 }
 
-impl<A: Aead> quic::PacketKey for PacketKey<A> {
+impl quic::PacketKey for PacketKey {
     fn encrypt_in_place(
         &self,
         packet_number: u64,
         header: &[u8],
         payload: &mut [u8],
     ) -> Result<quic::Tag, Error> {
-        let nonce = Nonce::new(&self.iv, packet_number);
-        let mut tag = [0u8; TAG_LEN];
-        self.aead
-            .encrypt(&nonce.0, header, payload, &mut tag)
+        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, packet_number).0);
+        let tag = self
+            .key
+            .seal_in_place_separate_tag(nonce, Aad::from(header), payload)
             .map_err(|_| Error::EncryptError)?;
-        Ok(quic::Tag::from(&tag[..]))
+        Ok(quic::Tag::from(tag.as_ref()))
     }
 
     fn decrypt_in_place<'a>(
@@ -145,14 +97,10 @@ impl<A: Aead> quic::PacketKey for PacketKey<A> {
         header: &[u8],
         payload: &'a mut [u8],
     ) -> Result<&'a [u8], Error> {
-        let plain_len = payload
-            .len()
-            .checked_sub(TAG_LEN)
-            .ok_or(Error::DecryptError)?;
-        let (plain, tag) = payload.split_at_mut(plain_len);
-        let nonce = Nonce::new(&self.iv, packet_number);
-        self.aead
-            .decrypt(&nonce.0, header, plain, tag)
+        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, packet_number).0);
+        let plain = self
+            .key
+            .open_in_place(nonce, Aad::from(header), payload)
             .map_err(|_| Error::DecryptError)?;
         Ok(plain)
     }
@@ -162,11 +110,11 @@ impl<A: Aead> quic::PacketKey for PacketKey<A> {
     }
 
     fn confidentiality_limit(&self) -> u64 {
-        A::CONFIDENTIALITY_LIMIT
+        self.confidentiality_limit
     }
 
     fn integrity_limit(&self) -> u64 {
-        A::INTEGRITY_LIMIT
+        self.integrity_limit
     }
 }
 

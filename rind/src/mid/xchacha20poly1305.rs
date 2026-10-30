@@ -10,13 +10,13 @@ use crate::low::{self, Entry, ct_equal, zeroise};
 /// A XChaCha20Poly1305 key.
 ///
 /// See [RFC7539](https://datatracker.ietf.org/doc/html/rfc7539).
-pub struct XChaCha20Poly1305 {
+pub(crate) struct XChaCha20Poly1305 {
     key: [u8; 32],
 }
 
 impl XChaCha20Poly1305 {
     /// Create a new [`XChaCha20Poly1305`] from 32 bytes of key material.
-    pub fn new(key: [u8; 32]) -> Self {
+    pub(crate) fn new(key: [u8; 32]) -> Self {
         low::ct::secret_slice(&key);
         Self { key }
     }
@@ -33,7 +33,7 @@ impl XChaCha20Poly1305 {
     /// Fails with [`Error::WrongLength`], leaving `cipher_inout` unchanged,
     /// if the message is longer than the 2^38 - 64 bytes its 32-bit block
     /// counter covers.
-    pub fn encrypt(
+    pub(crate) fn encrypt(
         &self,
         nonce: &[u8; 24],
         aad: &[u8],
@@ -63,7 +63,7 @@ impl XChaCha20Poly1305 {
     /// `Err(Error::WrongLength)`, leaving `cipher_inout` unchanged.
     /// Otherwise, `Err(Error::DecryptFailed)` is returned and `cipher_inout`
     /// is cleared.
-    pub fn decrypt(
+    pub(crate) fn decrypt(
         &self,
         nonce: &[u8; 24],
         aad: &[u8],

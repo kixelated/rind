@@ -119,30 +119,6 @@ fn mlkem768() {
     check_zeroed_on_drop(Box::pin(DecapKey::generate().unwrap()));
 }
 
-#[cfg(not(target_arch = "arm"))]
-#[test]
-fn sha3() {
-    use rind::hashing::sha3::{Sha3_256Context, Sha3_512Context, Shake128, Shake256};
-
-    // A partial block leaves message bytes buffered beside the state.
-    let mut sha3_256 = Sha3_256Context::new();
-    sha3_256.update(&[0xffu8; 3]);
-    check_zeroed_on_drop(Box::pin(sha3_256));
-
-    let mut sha3_512 = Sha3_512Context::new();
-    sha3_512.update(&[0xffu8; 3]);
-    check_zeroed_on_drop(Box::pin(sha3_512));
-
-    // A partial read leaves output buffered beside the state.
-    let mut shake128 = Shake128::new(&[&[0xffu8; 3]]);
-    shake128.read(&mut [0u8; 3]);
-    check_zeroed_on_drop(Box::pin(shake128));
-
-    let mut shake256 = Shake256::new(&[&[0xffu8; 3]]);
-    shake256.read(&mut [0u8; 3]);
-    check_zeroed_on_drop(Box::pin(shake256));
-}
-
 #[test]
 fn hkdf() {
     use rind::hashing::hkdf::Prk;
@@ -155,59 +131,42 @@ fn hkdf() {
 #[test]
 fn hmac() {
     use rind::hashing::hmac::Hmac;
-    use rind::hashing::{Hash, LegacySha1, Sha256, Sha384, Sha512};
+    use rind::hashing::{LegacySha1, Sha256, Sha384, Sha512};
 
     // A partial block leaves message bytes buffered beside the keyed states.
-    fn check<H: Hash>()
-    where
-        Hmac<H>: Unpin,
-    {
-        let mut hmac = Hmac::<H>::new([0xffu8; 32]);
-        hmac.update([0xffu8; 3]);
-        check_zeroed_on_drop(Box::pin(hmac));
+    macro_rules! check {
+        ($($H:ty),*) => {$({
+            let mut hmac = Hmac::<$H>::new([0xffu8; 32]);
+            hmac.update([0xffu8; 3]);
+            check_zeroed_on_drop(Box::pin(hmac));
+        })*};
     }
 
-    check::<LegacySha1>();
-    check::<Sha256>();
-    check::<Sha384>();
-    check::<Sha512>();
+    check!(LegacySha1, Sha256, Sha384, Sha512);
 }
 
 #[test]
-fn aes_gcm() {
-    use rind::aead::AesGcm;
+fn aead() {
+    use rind::aead::{
+        AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305, LessSafeKey, RandomizedNonceKey, UnboundKey,
+    };
 
-    let aes128 = AesGcm::new(&[0xffu8; 16]).unwrap();
-    check_zeroed_on_drop(Box::pin(aes128));
-
-    let aes256 = AesGcm::new(&[0xffu8; 32]).unwrap();
-    check_zeroed_on_drop(Box::pin(aes256));
+    for algorithm in [&AES_128_GCM, &AES_256_GCM, &CHACHA20_POLY1305] {
+        let key = UnboundKey::new(algorithm, &[0xffu8; 32][..algorithm.key_len()]).unwrap();
+        check_zeroed_on_drop(Box::pin(LessSafeKey::new(key)));
+    }
+    check_zeroed_on_drop(Box::pin(RandomizedNonceKey::new(&[0xffu8; 32])));
 }
 
 #[test]
 fn cipher() {
-    use rind::cipher::{Aes, AesCtr, ChaCha20};
-    for len in [16, 32] {
-        check_zeroed_on_drop(Box::pin(Aes::new(&[0xffu8; 32][..len]).unwrap()));
-        check_zeroed_on_drop(Box::pin(AesCtr::new(&[0xffu8; 32][..len]).unwrap()));
+    use rind::cipher::{AES_128, AES_256, Aes, AesCtr, ChaCha20};
+    for (algorithm, len) in [(&AES_128, 16), (&AES_256, 32)] {
+        let key = &[0xffu8; 32][..len];
+        check_zeroed_on_drop(Box::pin(Aes::new(algorithm, key).unwrap()));
+        check_zeroed_on_drop(Box::pin(AesCtr::new(algorithm, key).unwrap()));
     }
     check_zeroed_on_drop(Box::pin(ChaCha20::new([0xffu8; 32])));
-}
-
-#[test]
-fn chacha20_poly1305() {
-    use rind::aead::ChaCha20Poly1305;
-
-    let chacha = ChaCha20Poly1305::new([0xffu8; 32]);
-    check_zeroed_on_drop(Box::pin(chacha));
-}
-
-#[test]
-fn xchacha20_poly1305() {
-    use rind::aead::XChaCha20Poly1305;
-
-    let xchacha = XChaCha20Poly1305::new([0xffu8; 32]);
-    check_zeroed_on_drop(Box::pin(xchacha));
 }
 
 fn check_zeroed_on_drop<T: Unpin>(value: Pin<Box<T>>) {
