@@ -7,7 +7,7 @@
 //! <https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.186-5.pdf>
 
 use crate::Error;
-use crate::low::{PosInt, zeroise};
+use crate::low::PosInt;
 use crate::mid::rng::RandomSource;
 
 /// Supported RSA key sizes for key generation.
@@ -151,9 +151,6 @@ fn random_prime_one(
     let candidate = PosInt::from_bytes(&buffer[..bytes])?;
 
     if is_prime(&candidate, size, checks_random)? {
-        // this is the one we'll use, so it becomes sensitive on return.
-        zeroise(&mut buffer[..bytes]);
-
         Ok(Some(candidate))
     } else {
         Ok(None)

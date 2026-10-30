@@ -79,6 +79,6 @@ becomes `UnparsedPublicKey::new(&ECDSA_P256_SHA256_ASN1, pk).verify(msg, sig)`;
 
 Consumers: `rind-rustls` (`sign.rs`, `verify.rs`), `rind-jsonwebtoken`,
 `rind-object-store` (RSA PKCS#1 SHA-256), `rind-rcgen` (P-256), `rind-dimpl`
-(`sign.rs`), and the planned `rind-instant-acme`. MoQ: moq-auth's key
+(`sign.rs`), and `rind-instant-acme`. MoQ: moq-auth's key
 generation and JWK import for RSA-2048, P-256, P-384, and Ed25519, which today
 mixes aws-lc-rs with the `p256` and `p384` crates.
