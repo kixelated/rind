@@ -1,0 +1,33 @@
+# Memcheck findings in dependencies that rind cannot fix in its own code.
+
+# libcrux decides whether a tag verified, then branches on that decision. The
+# outcome is public, but libcrux does not declassify it for memcheck.
+{
+   libcrux-aes-gcm-decrypt-outcome
+   Memcheck:Cond
+   src:aes_gcm.rs:99
+   fun:*libcrux_aes*
+}
+
+# Unoptimised, libcrux's P-256 Diffie-Hellman branches on its check that the
+# private scalar is in range. rind's scalars always are, so the outcome is
+# public, but libcrux does not declassify it for memcheck.
+{
+   libcrux-p256-dh-scalar-check
+   Memcheck:Cond
+   src:p256.rs:1571
+   fun:*libcrux_p256*
+}
+
+# libcrux-hacl-rs bignum constant-time finding, reported privately; drop once
+# fixed (quest/m1/moq/libcrux-ct-fixes.md).
+{
+   libcrux-hacl-rs-bignum-modexp
+   Memcheck:Value4
+   fun:*bn_mod_exp_consttime_precomp_u64*
+}
+{
+   libcrux-hacl-rs-bignum-reduction
+   Memcheck:Cond
+   fun:*bn_almost_mont_reduction_u64*
+}

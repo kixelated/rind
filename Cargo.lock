@@ -2057,19 +2057,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libcrux-chacha20poly1305"
-version = "0.0.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ae27cbc4917bfd7759d7db19ea6dcf0279f195431942b59ff113aa34a2140a3"
-dependencies = [
- "libcrux-hacl-rs",
- "libcrux-macros",
- "libcrux-poly1305",
- "libcrux-secrets",
- "libcrux-traits",
-]
-
-[[package]]
 name = "libcrux-ed25519"
 version = "0.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3009,12 +2996,12 @@ dependencies = [
  "getrandom 0.4.3",
  "hex",
  "libcrux-aes",
- "libcrux-chacha20poly1305",
  "libcrux-ed25519",
  "libcrux-hacl-rs",
  "libcrux-macros",
  "libcrux-ml-kem",
  "libcrux-p256",
+ "libcrux-poly1305",
  "libcrux-traits",
  "proptest",
  "serde",
