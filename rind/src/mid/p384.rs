@@ -332,6 +332,33 @@ impl AffineMontPoint {
             .as_affine()
     }
 
+    /// Returns table[i - 1] if index > 0, or else the affine point at infinity
+    fn lookup_comb(table: &[u64; 192], index: u8) -> Self {
+        let mut r = Self::default();
+        low::bignum_aff_point_select_p384(&mut r.xy, table, index);
+        r
+    }
+
+    /// Returns table[i - 1] for a public index > 0
+    fn public_lookup_comb(table: &[u64; 192], index: u8) -> Self {
+        let offs = (index - 1) as usize * 12;
+        let mut r = Self::default();
+        r.xy.copy_from_slice(&table[offs..offs + 12]);
+        r
+    }
+
+    fn negate_y(&mut self) {
+        let neg_y = self.y().negate_mod_p();
+        self.xy[Self::Y].copy_from_slice(&neg_y.0);
+    }
+
+    fn maybe_negate_y(&mut self, sign: u8) {
+        let y = self.y();
+        let neg_y = y.negate_mod_p();
+        let result = FieldElement::select(&y, &neg_y, sign);
+        self.xy[Self::Y].copy_from_slice(&result.0);
+    }
+
     fn public_precomp_w5(&self) -> JacobianMontPointTableW5 {
         let mut r = [JacobianMontPoint::zero(); 16];
 
@@ -424,11 +451,63 @@ impl JacobianMontPoint {
     }
 
     fn base_multiply(scalar: &Scalar) -> Self {
-        Self::multiply_w5(scalar, &precomp::CURVE_GENERATOR_PRECOMP_W5)
+        Self::multiply_comb::<true>(scalar)
     }
 
     fn public_base_multiply(scalar: &Scalar) -> Self {
-        Self::public_multiply_w5(scalar, &precomp::CURVE_GENERATOR_PRECOMP_W5)
+        Self::multiply_comb::<false>(scalar)
+    }
+
+    /// `scalar * G`, for a `scalar` below n, by the comb layout of aws-lc's
+    /// `ec_nistp_scalar_mul_base`.
+    ///
+    /// Window `w` of the 77 Booth-recoded 5-bit windows is `4j + t` for
+    /// one tooth `t` in 0..4, and table `j` holds its multiples of
+    /// `2^(20j) G`.  So each tooth's windows are added straight from the
+    /// tables, and the 5 doublings between teeth supply the `2^(5t)`: 15
+    /// doublings in all, rather than 380.
+    ///
+    /// No addition doubles, which `p384_montjmixadd` cannot.  Scaled by
+    /// `2^(-5t)`, the accumulator and the table point are sums of digits of
+    /// distinct windows, so they are unequal integers unless both are zero
+    /// (infinity, which the addition handles).  Until window 76, which is
+    /// added last, each is below `2^380`, so they are unequal mod n too.  At
+    /// window 76, equal points would need the accumulator to be
+    /// `16 * 2^380 - n`, making `scalar` `2^385 - n`, which is above n.
+    fn multiply_comb<const SECRET: bool>(scalar: &Scalar) -> Self {
+        let mut windows = [(0u8, 0u8); 77];
+        for ((digit, sign, _), window) in scalar
+            .reversed_booth_recoded_w5()
+            .zip(windows.iter_mut().rev())
+        {
+            *window = (digit, sign);
+        }
+
+        let mut result = Self::infinity();
+        for tooth in (0..4).rev() {
+            if tooth != 3 {
+                result.double_inplace_n(5);
+            }
+
+            for (table, &(digit, sign)) in precomp::CURVE_GENERATOR_PRECOMP_COMB
+                .iter()
+                .zip(windows.iter().skip(tooth).step_by(4))
+            {
+                if SECRET {
+                    let mut tmp = AffineMontPoint::lookup_comb(table, digit);
+                    tmp.maybe_negate_y(sign);
+                    result.add_inplace_affine(&tmp, digit);
+                } else if digit > 0 {
+                    let mut tmp = AffineMontPoint::public_lookup_comb(table, digit);
+                    if sign > 0 {
+                        tmp.negate_y();
+                    }
+                    result.add_inplace_affine(&tmp, digit);
+                }
+            }
+        }
+
+        result
     }
 
     fn multiply_w5(scalar: &Scalar, precomp: &JacobianMontPointTableW5) -> Self {
@@ -484,13 +563,12 @@ impl JacobianMontPoint {
 
     fn as_affine(&self) -> AffineMontPoint {
         // recover (x, y) from (x / z ^ 2, x / z ^ 3, z)
-        let z2 = self.z().mont_sqr();
-        let z3 = self.z().mont_mul(&z2);
 
         // inversion calculated outside montgomery domain
         // (benchmarked vs addition chain in montgomery)
-        let z2_inv = z2.demont().inv().as_mont();
-        let z3_inv = z3.demont().inv().as_mont();
+        let z_inv = self.z().demont().inv().as_mont();
+        let z2_inv = z_inv.mont_sqr();
+        let z3_inv = z2_inv.mont_mul(&z_inv);
 
         let x = self.x().mont_mul(&z2_inv);
         let y = self.y().mont_mul(&z3_inv);
@@ -542,6 +620,15 @@ impl JacobianMontPoint {
         *self = r;
     }
 
+    /// Adds `p`, a table entry for `digit`, which is the affine point at
+    /// infinity when `digit` is zero.
+    fn add_inplace_affine(&mut self, p: &AffineMontPoint, digit: u8) {
+        let mut r = Self::infinity();
+        low::p384_montjmixadd(&mut r.xyz, &self.xyz, &p.xy);
+        // `p384_montjmixadd` cannot take an affine point at infinity.
+        *self = Self::select(self, &r, digit);
+    }
+
     #[must_use]
     fn add(&self, p: &Self) -> Self {
         let mut r = Self::infinity();
@@ -550,7 +637,6 @@ impl JacobianMontPoint {
     }
 
     /// Return p0 if select == 0, p1 otherwise
-    #[cfg(test)]
     #[must_use]
     fn select(p0: &Self, p1: &Self, select: u8) -> Self {
         let mut r = Self::zero();
@@ -888,6 +974,9 @@ impl Iterator for BoothRecodeW5 {
 /// 16 jacobian points
 type JacobianMontPointTableW5 = [u64; 288];
 
+/// 20 tables of 16 affine points
+type AffineMontPointTableComb = [[u64; 192]; 20];
+
 const CURVE_A_MONT: FieldElement = FieldElement([
     0x0000_0003_ffff_fffc,
     0xffff_fffc_0000_0000,
@@ -945,8 +1034,6 @@ const CURVE_ORDER_MM: [u64; 6] = [
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
-    use core::mem::size_of_val;
-
     use super::*;
 
     const CURVE_GENERATOR: AffineMontPoint = AffineMontPoint {
@@ -1123,22 +1210,21 @@ mod tests {
         println!("montify n = {:016x?}", Scalar::montifier().0);
     }
 
+    /// Checks each point of `admin/p384-precomp`'s table, which uses
+    /// Python's integers, against rind's own arithmetic.
     #[test]
-    fn base_point_precomp_w5() {
-        let precomp = CURVE_GENERATOR.public_precomp_w5();
-
-        println!(
-            "pub(super) static CURVE_GENERATOR_PRECOMP_W5: super::JacobianMontPointTableW5 = ["
-        );
-        for (i, point) in (1..).zip(precomp.as_chunks::<18>().0.iter()) {
-            println!("// {i}G");
-            for p in point {
-                println!("            0x{p:016x}, ");
+    fn base_point_precomp_comb() {
+        let mut base = JacobianMontPoint::from_affine(&CURVE_GENERATOR);
+        for table in &precomp::CURVE_GENERATOR_PRECOMP_COMB {
+            let mut multiple = base;
+            for (i, entry) in (1..).zip(table.as_chunks::<12>().0) {
+                assert_eq!(&multiple.as_affine().xy, entry);
+                multiple = match i {
+                    1 => multiple.double(),
+                    _ => multiple.add(&base),
+                };
             }
+            base.double_inplace_n(20);
         }
-        println!("];");
-
-        println!();
-        println!("table size is {} bytes", size_of_val(&precomp));
     }
 }

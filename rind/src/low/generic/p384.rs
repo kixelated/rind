@@ -7,7 +7,8 @@
 //! straight-line code with no secret-dependent branch or index.  The rest
 //! composes those: the point formulas repeat s2n-bignum's operation
 //! sequences, so results match it word for word; inversion is Fermat's
-//! little theorem over a public exponent; and range reduction is one
+//! little theorem, raising to a public exponent by a fixed sequence of
+//! squarings and multiplications; and range reduction is one
 //! conditional subtraction, as every input is below 2^384, which is less
 //! than twice either modulus.
 
@@ -53,18 +54,26 @@ pub(crate) fn bignum_demont_p384(z: &mut [u64; 6], x: &[u64; 6]) {
 /// z := x^-1 mod p_384, or zero if x is zero mod p_384
 pub(crate) fn bignum_inv_p384(z: &mut [u64; 6], x: &[u64; 6]) {
     let x = fe_to_mont(&reduce(split(x), &split(&P)));
-    let mut one = Fe([0; 12]);
-    fp::fiat_p384_set_one(&mut one);
-    let r = pow(x, one, &P_MINUS_2, fe_mul);
-    bignum_demont_p384(z, &join(&r.0));
+    bignum_demont_p384(z, &join(&fe_invert(&x).0));
+}
+
+/// Viewing table as rows of 12 words width, copy the 12 words at
+/// table[index - 1] into z.  If `index` is zero or past the last row,
+/// `z` is set to zero (ie, the affine point at infinity).
+pub(crate) fn bignum_aff_point_select_p384(z: &mut [u64; 12], table: &[u64], index: u8) {
+    row_select(z, table, index);
 }
 
 /// Viewing table as rows of 18 words width, copy the 18 words at
 /// table[index - 1] into z.  If `index` is zero or past the last row,
 /// `z` is set to zero (ie, a jacobian point at infinity).
 pub(crate) fn bignum_jac_point_select_p384(z: &mut [u64; 18], table: &[u64], index: u8) {
-    *z = [0; 18];
-    let (rows, _) = table.as_chunks::<18>();
+    row_select(z, table, index);
+}
+
+fn row_select<const N: usize>(z: &mut [u64; N], table: &[u64], index: u8) {
+    *z = [0; N];
+    let (rows, _) = table.as_chunks::<N>();
     for (i, row) in (1u64..).zip(rows) {
         let mask = !mask_nonzero(i ^ u64::from(index));
         for (z, w) in z.iter_mut().zip(row) {
@@ -112,6 +121,43 @@ pub(crate) fn p384_montjadd(p3: &mut [u64; 18], p1: &[u64; 18], p2: &[u64; 18]) 
         &pick(&x1, &x2, &x3),
         &pick(&y1, &y2, &y3),
         &pick(&z1, &z2, &z3),
+    );
+}
+
+/// p3 := p1 + p2, for a Jacobian p1 and an affine p2 (whose z is
+/// implicitly one), over p_384 with Montgomery coordinates.
+///
+/// A p1 with a zero z is the point at infinity; p2 cannot be.  The result
+/// is unspecified when p1 and p2 are the same point.
+pub(crate) fn p384_montjmixadd(p3: &mut [u64; 18], p1: &[u64; 18], p2: &[u64; 12]) {
+    let [x1, y1, z1] = coords(p1);
+    let (xy2, _) = p2.as_chunks::<6>();
+    let (x2, y2) = (fe(&xy2[0]), fe(&xy2[1]));
+
+    let z1sq = fe_sqr(&z1);
+    let y2a = fe_mul(&z1sq, &fe_mul(&z1, &y2));
+    let x2a = fe_mul(&z1sq, &x2);
+
+    let xd = fe_sub(&x2a, &x1);
+    let yd = fe_sub(&y2a, &y1);
+    let zz = fe_sqr(&xd);
+    let ww = fe_sqr(&yd);
+    let zzx1 = fe_mul(&zz, &x1);
+    let zzx2 = fe_mul(&zz, &x2a);
+
+    let x3 = fe_sub(&fe_sub(&ww, &zzx1), &zzx2);
+    let t1 = fe_mul(&fe_sub(&zzx2, &zzx1), &y1);
+    let y3 = fe_sub(&fe_mul(&yd, &fe_sub(&zzx1, &x3)), &t1);
+    let z3 = fe_mul(&xd, &z1);
+
+    // p1 at infinity makes the result p2, with a z of one.
+    let mut one = Fe([0; 12]);
+    fp::fiat_p384_set_one(&mut one);
+    let z1_nonzero = nonzero(&z1);
+    *p3 = point(
+        &select(z1_nonzero, &x2, &x3),
+        &select(z1_nonzero, &y2, &y3),
+        &select(z1_nonzero, &one, &z3),
     );
 }
 
@@ -185,9 +231,7 @@ pub(crate) fn bignum_modinv(z: &mut [u64], a: &[u64], b: &[u64], _t: &mut [u64])
         &mut a_mont,
         &fs::fiat_p384_scalar_non_montgomery_domain_field_element(a),
     );
-    let mut one = Fs([0; 12]);
-    fs::fiat_p384_scalar_set_one(&mut one);
-    let r = pow(a_mont, one, &N_MINUS_2, fs_mul);
+    let r = fs_pow(&a_mont, &N_MINUS_2);
     bignum_demont(z, &join(&r.0), b);
 }
 
@@ -214,22 +258,50 @@ pub(crate) fn bignum_mux(p: u64, z: &mut [u64], x_if_p: &[u64], y_if_not_p: &[u6
     }
 }
 
-/// `x^e` for a public exponent `e`, by a fixed 4-bit window.
+/// `x^(p - 2)`, which is `x^-1` for a nonzero `x`, by an addition chain
+/// of 385 squarings and 14 multiplications.
+fn fe_invert(x: &Fe) -> Fe {
+    let sqr_n = |x: &Fe, n: usize| (0..n).fold(*x, |acc, _| fe_sqr(&acc));
+
+    // x_k is x^(2^k - 1), whose exponent is k one bits.
+    let x2 = fe_mul(&fe_sqr(x), x);
+    let x3 = fe_mul(&fe_sqr(&x2), x);
+    let x6 = fe_mul(&sqr_n(&x3, 3), &x3);
+    let x12 = fe_mul(&sqr_n(&x6, 6), &x6);
+    let x15 = fe_mul(&sqr_n(&x12, 3), &x3);
+    let x30 = fe_mul(&sqr_n(&x15, 15), &x15);
+    let x32 = fe_mul(&sqr_n(&x30, 2), &x2);
+    let x60 = fe_mul(&sqr_n(&x30, 30), &x30);
+    let x120 = fe_mul(&sqr_n(&x60, 60), &x60);
+    let x240 = fe_mul(&sqr_n(&x120, 120), &x120);
+    let x255 = fe_mul(&sqr_n(&x240, 15), &x15);
+
+    // p - 2 is, from the top: 255 ones, a zero, 32 ones, 64 zeros, 30
+    // ones, a zero, and a one.
+    let r = fe_mul(&sqr_n(&x255, 33), &x32);
+    let r = fe_mul(&sqr_n(&r, 94), &x30);
+    fe_mul(&sqr_n(&r, 2), x)
+}
+
+/// `x^e` mod n_384 for a public exponent `e`, by a fixed 4-bit window.
 ///
 /// The exponent picks the table entries, so it must not be secret.
-fn pow<T: Copy>(x: T, one: T, e: &[u64; 6], mul: impl Fn(&T, &T) -> T) -> T {
+fn fs_pow(x: &Fs, e: &[u64; 6]) -> Fs {
+    let mut one = Fs([0; 12]);
+    fs::fiat_p384_scalar_set_one(&mut one);
     let mut table = [one; 16];
     for i in 1..table.len() {
-        table[i] = mul(&table[i - 1], &x);
+        table[i] = fs_mul(&table[i - 1], x);
     }
 
     let mut acc = one;
     for word in e.iter().rev() {
         for shift in (0..64).step_by(4).rev() {
+            // `fiat_p384_scalar_square` measured slower here on armv7.
             for _ in 0..4 {
-                acc = mul(&acc, &acc);
+                acc = fs_mul(&acc, &acc);
             }
-            acc = mul(&acc, &table[((word >> shift) & 0xf) as usize]);
+            acc = fs_mul(&acc, &table[((word >> shift) & 0xf) as usize]);
         }
     }
     acc
@@ -366,15 +438,6 @@ const P: [u64; 6] = [
     0xffff_ffff_ffff_ffff,
 ];
 
-const P_MINUS_2: [u64; 6] = [
-    0x0000_0000_ffff_fffd,
-    0xffff_ffff_0000_0000,
-    0xffff_ffff_ffff_fffe,
-    0xffff_ffff_ffff_ffff,
-    0xffff_ffff_ffff_ffff,
-    0xffff_ffff_ffff_ffff,
-];
-
 /// n_384, the group order, as little-endian words.
 const N: [u64; 6] = [
     0xecec_196a_ccc5_2973,
@@ -490,6 +553,27 @@ mod tests {
         r
     }
 
+    /// (x / z^2, y / z^3), or `None` at infinity.
+    fn affine(p: &[u64; 18]) -> Option<[u64; 12]> {
+        let (coords, _) = p.as_chunks::<6>();
+        if coords[2] == [0; 6] {
+            return None;
+        }
+        // bignum_inv_p384 works outside the Montgomery domain.
+        let (mut z, mut z_inv) = ([0; 6], [0; 6]);
+        low::bignum_demont_p384(&mut z, &coords[2]);
+        low::bignum_inv_p384(&mut z_inv, &z);
+        low::bignum_tomont_p384(&mut z, &z_inv);
+        let (mut z2, mut z3) = ([0; 6], [0; 6]);
+        low::bignum_montsqr_p384(&mut z2, &z);
+        low::bignum_montmul_p384(&mut z3, &z2, &z);
+        let mut r = [0; 12];
+        let (out, _) = r.as_chunks_mut::<6>();
+        low::bignum_montmul_p384(&mut out[0], &coords[0], &z2);
+        low::bignum_montmul_p384(&mut out[1], &coords[1], &z3);
+        Some(r)
+    }
+
     proptest! {
         #[test]
         fn field_ops(x in field(), y in field()) {
@@ -547,6 +631,26 @@ mod tests {
         }
 
         #[test]
+        fn point_mixadd(p in point(), q in point(), lambda in field()) {
+            // The sum, a doubling, and an inverse, as for `point_add`.  An
+            // affine q cannot be infinity.
+            let Some(q) = affine(&q) else { return Ok(()) };
+            let mut same = [0; 18];
+            same[..12].copy_from_slice(&q);
+            same[12..].copy_from_slice(&GENERATOR[12..]);
+            let same = rescale(&same, &lambda);
+            let mut neg = same;
+            low::bignum_neg_p384(&mut neg.as_chunks_mut::<6>().0[1], &same.as_chunks::<6>().0[1]);
+            for p in [p, same, neg] {
+                let (sp, sq) = (into_secret(p), into_secret(q));
+                let (mut ours, mut theirs) = ([0; 18], [0; 18]);
+                p384_montjmixadd(&mut ours, &sp, &sq);
+                low::p384_montjmixadd(&mut theirs, &p, &q);
+                prop_assert_eq!(into_public(ours), theirs);
+            }
+        }
+
+        #[test]
         fn point_double(p in point()) {
             let sp = into_secret(p);
             let (mut ours, mut theirs) = ([0; 18], [0; 18]);
@@ -561,6 +665,11 @@ mod tests {
             let (mut ours, mut theirs) = ([0; 18], [0; 18]);
             bignum_jac_point_select_p384(&mut ours, &table, into_secret(index));
             low::bignum_jac_point_select_p384(&mut theirs, &table, index);
+            prop_assert_eq!(into_public(ours), theirs);
+
+            let (mut ours, mut theirs) = ([0; 12], [0; 12]);
+            bignum_aff_point_select_p384(&mut ours, &table[..192], into_secret(index));
+            low::bignum_aff_point_select_p384(&mut theirs, &table[..192], index);
             prop_assert_eq!(into_public(ours), theirs);
         }
 
