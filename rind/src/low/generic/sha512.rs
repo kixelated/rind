@@ -1,6 +1,8 @@
 // Written for Graviola by Joe Birr-Pixton, 2024.
 // SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 
+use crate::low::zeroise;
+
 macro_rules! CH {
     ($x:expr, $y:expr, $z:expr) => {
         ($x & $y) ^ (!$x & $z)
@@ -37,7 +39,8 @@ macro_rules! SSIG1 {
     };
 }
 
-fn sha512_compress_block(state: &mut [u64; 8], block: &[u8]) {
+/// `w` is a 16-word window into the whole W array.
+fn sha512_compress_block(state: &mut [u64; 8], block: &[u8], w: &mut [u64; 16]) {
     let mut a = state[0];
     let mut b = state[1];
     let mut c = state[2];
@@ -46,9 +49,6 @@ fn sha512_compress_block(state: &mut [u64; 8], block: &[u8]) {
     let mut f = state[5];
     let mut g = state[6];
     let mut h = state[7];
-
-    // This is a 16-word window into the whole W array.
-    let mut w: [u64; 16] = [0; 16];
 
     for t in 0..80 {
         // For W[0..16] we process the input into W.
@@ -99,10 +99,13 @@ fn sha512_compress_block(state: &mut [u64; 8], block: &[u8]) {
 pub(crate) fn sha512_compress_blocks(state: &mut [u64; 8], blocks: &[u8]) {
     debug_assert!(blocks.len().is_multiple_of(128));
 
+    // W holds the hashed input, which may be a secret such as an HMAC key.
+    let mut w = [0u64; 16];
     let (chunks, _) = blocks.as_chunks::<128>();
     for block in chunks {
-        sha512_compress_block(state, block);
+        sha512_compress_block(state, block, &mut w);
     }
+    zeroise(&mut w);
 }
 
 static K: [u64; 80] = [

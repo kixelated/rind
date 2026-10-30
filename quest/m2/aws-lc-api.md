@@ -9,8 +9,8 @@ release land; the rest are recorded as rejected, with the reason.
 
 ## Plan
 
-Decided by the maintainer on 2026-10-29, while planning
-[the AesGcm key fix](/quest/m1/moq/aes-gcm-key.md): they like aws-lc-rs's
+Decided by the maintainer on 2026-10-29, while planning `AesGcm::new`'s
+key-length error: they like aws-lc-rs's
 API because, while confusing at first, it avoids misuse and promotes reuse.
 m2, after the first release, rather than delaying the release for it.
 

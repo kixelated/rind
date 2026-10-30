@@ -41,7 +41,7 @@ fn missing_feature_is_named() {
 
         println!("check: {}", rind::cpu::check().unwrap_err());
         match operation.to_str().unwrap() {
-            "aes-gcm" => drop(rind::aead::AesGcm::new(&[0; 16])),
+            "aes-gcm" => drop(rind::aead::AesGcm::new(&[0; 16]).unwrap()),
             "sha1" => drop(rind::hashing::LegacySha1::hash(b"")),
             "sha256" => drop(rind::hashing::sha2::Sha256Context::new().finish()),
             "sha384" => drop(rind::hashing::sha2::Sha384Context::new().finish()),
