@@ -1,75 +1,42 @@
-use rind::hashing::sha2;
+use rind::digest;
 use rustls::crypto::hash;
 
-pub struct Sha256;
+pub struct Hash {
+    digest: &'static digest::Algorithm,
+    rustls: hash::HashAlgorithm,
+}
 
-impl hash::Hash for Sha256 {
+pub static SHA256: Hash = Hash {
+    digest: &digest::SHA256,
+    rustls: hash::HashAlgorithm::SHA256,
+};
+
+pub static SHA384: Hash = Hash {
+    digest: &digest::SHA384,
+    rustls: hash::HashAlgorithm::SHA384,
+};
+
+impl hash::Hash for Hash {
     fn start(&self) -> Box<dyn hash::Context> {
-        Box::new(Sha256Context(sha2::Sha256Context::new()))
+        Box::new(Context(digest::Context::new(self.digest)))
     }
 
     fn hash(&self, data: &[u8]) -> hash::Output {
-        let mut ctx = sha2::Sha256Context::new();
-        ctx.update(data);
-
-        hash::Output::new(ctx.finish().as_ref())
+        hash::Output::new(digest::digest(self.digest, data).as_ref())
     }
 
     fn algorithm(&self) -> hash::HashAlgorithm {
-        hash::HashAlgorithm::SHA256
+        self.rustls
     }
 
     fn output_len(&self) -> usize {
-        sha2::Sha256Context::OUTPUT_SZ
+        self.digest.output_len()
     }
 }
 
-struct Sha256Context(sha2::Sha256Context);
+struct Context(digest::Context);
 
-impl hash::Context for Sha256Context {
-    fn fork_finish(&self) -> hash::Output {
-        hash::Output::new(self.0.clone().finish().as_ref())
-    }
-
-    fn fork(&self) -> Box<dyn hash::Context> {
-        Box::new(Self(self.0.clone()))
-    }
-
-    fn finish(self: Box<Self>) -> hash::Output {
-        hash::Output::new(self.0.finish().as_ref())
-    }
-
-    fn update(&mut self, data: &[u8]) {
-        self.0.update(data);
-    }
-}
-
-pub struct Sha384;
-
-impl hash::Hash for Sha384 {
-    fn start(&self) -> Box<dyn hash::Context> {
-        Box::new(Sha384Context(sha2::Sha384Context::new()))
-    }
-
-    fn hash(&self, data: &[u8]) -> hash::Output {
-        let mut ctx = sha2::Sha384Context::new();
-        ctx.update(data);
-
-        hash::Output::new(ctx.finish().as_ref())
-    }
-
-    fn algorithm(&self) -> hash::HashAlgorithm {
-        hash::HashAlgorithm::SHA384
-    }
-
-    fn output_len(&self) -> usize {
-        sha2::Sha384Context::OUTPUT_SZ
-    }
-}
-
-struct Sha384Context(sha2::Sha384Context);
-
-impl hash::Context for Sha384Context {
+impl hash::Context for Context {
     fn fork_finish(&self) -> hash::Output {
         hash::Output::new(self.0.clone().finish().as_ref())
     }
@@ -95,7 +62,7 @@ mod test {
 
     #[test]
     fn test_sha256() {
-        let hash = Sha256;
+        let hash = &SHA256;
         assert_eq!(hash.algorithm(), hash::HashAlgorithm::SHA256);
         assert_eq!(hash.output_len(), 32);
         let input = b"graviola";
@@ -106,7 +73,7 @@ mod test {
 
     #[test]
     fn test_sha384() {
-        let hash = Sha384;
+        let hash = &SHA384;
         assert_eq!(hash.algorithm(), hash::HashAlgorithm::SHA384);
         assert_eq!(hash.output_len(), 48);
         let input = b"graviola";

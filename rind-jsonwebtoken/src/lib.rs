@@ -20,8 +20,9 @@ use jsonwebtoken::signature::{self, Signer, Verifier};
 use jsonwebtoken::{Algorithm, DecodingKey, DecodingKeyKind, EncodingKey};
 use pkcs1::der::asn1::UintRef;
 use pkcs1::der::{Decode, Encode};
+use rind::digest;
 use rind::hashing::hmac::Hmac;
-use rind::hashing::{Hash, Sha256, Sha384, Sha512};
+use rind::hashing::{Sha256, Sha384, Sha512};
 use rind::signing::{ecdsa, eddsa, rsa};
 
 /// A jsonwebtoken [`CryptoProvider`] that signs and verifies every algorithm with rind.
@@ -158,23 +159,28 @@ fn new_verifier(algorithm: &Algorithm, key: &DecodingKey) -> Result<Box<dyn JwtV
     })
 }
 
-fn mac<H: Hash + Clone>(key: &Hmac<H>, message: &[u8]) -> Hmac<H> {
-    let mut mac = key.clone();
-    mac.update(message);
-    mac
+// rind's hash markers name no trait to be generic over.
+macro_rules! hmac {
+    ($($hash:ty),*) => {$(
+        impl Sign for Hmac<$hash> {
+            fn sign_message(&self, message: &[u8]) -> RindResult<Vec<u8>> {
+                let mut mac = self.clone();
+                mac.update(message);
+                Ok(mac.finish().as_ref().to_vec())
+            }
+        }
+
+        impl Verify for Hmac<$hash> {
+            fn verify_message(&self, message: &[u8], signature: &[u8]) -> RindResult<()> {
+                let mut mac = self.clone();
+                mac.update(message);
+                mac.verify(signature)
+            }
+        }
+    )*};
 }
 
-impl<H: Hash + Clone> Sign for Hmac<H> {
-    fn sign_message(&self, message: &[u8]) -> RindResult<Vec<u8>> {
-        Ok(mac(self, message).finish().as_ref().to_vec())
-    }
-}
-
-impl<H: Hash + Clone> Verify for Hmac<H> {
-    fn verify_message(&self, message: &[u8], signature: &[u8]) -> RindResult<()> {
-        mac(self, message).verify(signature)
-    }
-}
+hmac!(Sha256, Sha384, Sha512);
 
 impl Sign for ecdsa::SigningKey<ecdsa::P256> {
     fn sign_message(&self, message: &[u8]) -> RindResult<Vec<u8>> {
@@ -328,11 +334,11 @@ fn ed_pub_components_from_private_key(der: &[u8], curve: &EllipticCurve) -> Resu
 }
 
 fn compute_digest(data: &[u8], hash: ThumbprintHash) -> Result<Vec<u8>> {
-    let digest = match hash {
-        ThumbprintHash::SHA256 => Sha256::hash(data),
-        ThumbprintHash::SHA384 => Sha384::hash(data),
-        ThumbprintHash::SHA512 => Sha512::hash(data),
+    let algorithm = match hash {
+        ThumbprintHash::SHA256 => &digest::SHA256,
+        ThumbprintHash::SHA384 => &digest::SHA384,
+        ThumbprintHash::SHA512 => &digest::SHA512,
         _ => return Err(ErrorKind::InvalidAlgorithm.into()),
     };
-    Ok(digest.as_ref().to_vec())
+    Ok(digest::digest(algorithm, data).as_ref().to_vec())
 }

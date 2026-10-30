@@ -14,78 +14,82 @@ use crate::low::{
 };
 
 /// A context for incremental computation of SHA3-256.
-pub struct Sha3_256Context {
+pub(crate) struct Sha3_256Context {
     sponge: Sponge<SHA3_256_R_BYTES, SHA_PAD_BYTE>,
 }
 
 impl Sha3_256Context {
     /// Start a new SHA3-256 hash computation.
-    pub const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             sponge: Sponge::new(),
         }
     }
 
     /// Add `bytes` to the ongoing hash computation.
-    pub fn update(&mut self, bytes: &[u8]) {
+    pub(crate) fn update(&mut self, bytes: &[u8]) {
         self.sponge.absorb(bytes);
     }
 
     /// Complete the SHA3-256 computation, returning the hash output.
-    pub fn finish(mut self) -> [u8; Self::OUTPUT_SZ] {
+    pub(crate) fn finish(mut self) -> [u8; Self::OUTPUT_SZ] {
         let mut digest = [0u8; Self::OUTPUT_SZ];
         self.sponge.finish_single_squeeze(&mut digest);
         digest
     }
 
     /// The output size of SHA3-256.
-    pub const OUTPUT_SZ: usize = 32;
+    pub(crate) const OUTPUT_SZ: usize = 32;
 }
 
 /// A context for incremental computation of SHA3-512.
-pub struct Sha3_512Context {
+pub(crate) struct Sha3_512Context {
     sponge: Sponge<SHA3_512_R_BYTES, SHA_PAD_BYTE>,
 }
 
 impl Sha3_512Context {
     /// Start a new SHA3-512 hash computation.
-    pub const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             sponge: Sponge::new(),
         }
     }
 
     /// Add `bytes` to the ongoing hash computation.
-    pub fn update(&mut self, bytes: &[u8]) {
+    pub(crate) fn update(&mut self, bytes: &[u8]) {
         self.sponge.absorb(bytes);
     }
 
     /// Complete the SHA3-512 computation, returning the hash output.
-    pub fn finish(mut self) -> [u8; Self::OUTPUT_SZ] {
+    pub(crate) fn finish(mut self) -> [u8; Self::OUTPUT_SZ] {
         let mut digest = [0u8; Self::OUTPUT_SZ];
         self.sponge.finish_single_squeeze(&mut digest);
         digest
     }
 
     /// The output size of SHA3-512.
-    pub const OUTPUT_SZ: usize = 64;
+    pub(crate) const OUTPUT_SZ: usize = 64;
 }
 
 /// This is SHAKE128.
 ///
 /// This has one-shot input behaviour (all input must be provided to the
 /// constructor [`Shake128::new`]) and incremental output behaviour.
-pub struct Shake128 {
+///
+/// ML-KEM samples through the sponges directly, so only the tests use this.
+#[cfg(test)]
+pub(crate) struct Shake128 {
     sponge: SqueezingSponge<SHAKE_128_R_BYTES>,
     buffer: [u8; SHAKE_128_R_BYTES],
     buffer_offset: usize,
 }
 
+#[cfg(test)]
 impl Shake128 {
     /// Create a new SHAKE128 instance using `message` as input.
     ///
     /// The items of `message` are processed in order, as if concatenated.
-    pub fn new(message: &[&[u8]]) -> Self {
+    pub(crate) fn new(message: &[&[u8]]) -> Self {
         Self {
             sponge: Sponge::<SHAKE_128_R_BYTES, SHAKE_PAD_BYTE>::new_for_message(message),
             buffer: [0u8; SHAKE_128_R_BYTES],
@@ -96,19 +100,21 @@ impl Shake128 {
     /// Read data from this instance into `output`.
     ///
     /// This does not fail.  It always fills `output`.
-    pub fn read(&mut self, output: &mut [u8]) {
+    pub(crate) fn read(&mut self, output: &mut [u8]) {
         self.sponge
             .shake_read(output, &mut self.buffer, &mut self.buffer_offset);
     }
 }
 
 // The state and buffered output are a function of the input, which may be secret.
+#[cfg(test)]
 impl Drop for Shake128 {
     fn drop(&mut self) {
         zeroise_value(self);
     }
 }
 
+#[cfg(test)]
 impl Zeroable for Shake128 {}
 
 pub(crate) type Shake128Sponge = Sponge<SHAKE_128_R_BYTES, SHAKE_PAD_BYTE>;
@@ -118,7 +124,7 @@ pub(crate) type Shake128SqueezingSponge = SqueezingSponge<SHAKE_128_R_BYTES>;
 ///
 /// This has one-shot input behaviour (all input must be provided to the
 /// constructor [`Shake256::new`]) and incremental output behaviour.
-pub struct Shake256 {
+pub(crate) struct Shake256 {
     sponge: SqueezingSponge<SHAKE_256_R_BYTES>,
     buffer: [u8; SHAKE_256_R_BYTES],
     buffer_offset: usize,
@@ -128,7 +134,7 @@ impl Shake256 {
     /// Create a new SHAKE256 instance using `message` as input.
     ///
     /// The items of `message` are processed in order, as if concatenated.
-    pub fn new(message: &[&[u8]]) -> Self {
+    pub(crate) fn new(message: &[&[u8]]) -> Self {
         Self {
             sponge: Sponge::<SHAKE_256_R_BYTES, SHAKE_PAD_BYTE>::new_for_message(message),
             buffer: [0u8; SHAKE_256_R_BYTES],
@@ -139,7 +145,7 @@ impl Shake256 {
     /// Read data from this instance into `output`.
     ///
     /// This does not fail.  It always fills `output`.
-    pub fn read(&mut self, output: &mut [u8]) {
+    pub(crate) fn read(&mut self, output: &mut [u8]) {
         self.sponge
             .shake_read(output, &mut self.buffer, &mut self.buffer_offset);
     }
@@ -537,6 +543,8 @@ pub(crate) const SHAKE_PAD_BYTE: u8 = 0b0001_1111;
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
+    use proptest::prelude::*;
+
     use super::*;
     use crate::test::*;
 
@@ -551,6 +559,31 @@ mod tests {
         ctx.update(b"hello");
         assert_eq!(&ctx.finish(),
             b"\x75\xd5\x27\xc3\x68\xf2\xef\xe8\x48\xec\xf6\xb0\x73\xa3\x67\x67\x80\x08\x05\xe9\xee\xf2\xb1\x85\x7d\x5f\x98\x4f\x03\x6e\xb6\xdf\x89\x1d\x75\xf7\x2d\x9b\x15\x45\x18\xc1\xcd\x58\x83\x52\x86\xd1\xda\x9a\x38\xde\xba\x3d\xe9\x8b\x5a\x53\xe5\xed\x78\xa8\x49\x76");
+    }
+
+    proptest! {
+        #[test]
+        fn matches_aws_lc_rs(
+            message in prop::collection::vec(any::<u8>(), 0..1024),
+            split in any::<prop::sample::Index>(),
+        ) {
+            use aws_lc_rs::digest;
+
+            // Two updates split anywhere exercise the partial-block buffering.
+            let split = split.index(message.len() + 1);
+
+            let mut ctx = Sha3_256Context::new();
+            ctx.update(&message[..split]);
+            ctx.update(&message[split..]);
+            let wanted = digest::digest(&digest::SHA3_256, &message);
+            prop_assert_eq!(&ctx.finish()[..], wanted.as_ref());
+
+            let mut ctx = Sha3_512Context::new();
+            ctx.update(&message[..split]);
+            ctx.update(&message[split..]);
+            let wanted = digest::digest(&digest::SHA3_512, &message);
+            prop_assert_eq!(&ctx.finish()[..], wanted.as_ref());
+        }
     }
 
     #[test]
