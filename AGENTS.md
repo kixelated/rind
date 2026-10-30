@@ -17,6 +17,7 @@ This is one Rust workspace: the `rind` library, its `rind-<consumer>` adapter cr
 - Secret-dependent code runs in constant time: no branch, memory index, or variable-time instruction depends on a secret. New secret-handling paths get a ctgrind test (`admin/ctgrind`).
 - Prefer formally verified sources (s2n-bignum, libcrux/HACL*) over new arithmetic. New arithmetic states where its correctness argument comes from.
 - Test every primitive against Wycheproof where vectors exist, and differentially against aws-lc-rs (a dev-dependency only).
+- When in doubt about an API shape or behavior, follow aws-lc-rs: it is the library rind would use if it didn't require C. Say why wherever rind deviates.
 - Reproduce bugs before fixing them. Tests must be worth their weight long-term: cover edge cases, not old bugs or trivial values.
 - Keep the PR to one problem: no unrelated refactors, formatting churn, or drive-by changes. Fix every instance of that problem and the gaps it exposes in the same PR.
 - Keep graviola's layering and style so upstream changes still merge: add new primitives as new modules rather than reshaping existing ones.
