@@ -256,7 +256,7 @@ pub mod cipher;
 /// }
 /// ```
 pub mod cpu {
-    pub use crate::low::cpu::{MissingFeature, check};
+    pub use crate::low::cpu::{MissingFeature, check, has_aes_hardware};
 }
 
 /// Cryptographic-quality random source

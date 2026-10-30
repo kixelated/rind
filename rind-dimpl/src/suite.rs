@@ -187,40 +187,64 @@ impl SupportedDtls13CipherSuite for Dtls13 {
     }
 }
 
-/// DTLS 1.2 suites, in order of preference.
+const DTLS12_AES_128_GCM: &dyn SupportedDtls12CipherSuite = &Dtls12 {
+    suite: Dtls12CipherSuite::ECDHE_ECDSA_AES128_GCM_SHA256,
+    hash: HashAlgorithm::SHA256,
+    algorithm: Algorithm::Aes128Gcm,
+};
+const DTLS12_AES_256_GCM: &dyn SupportedDtls12CipherSuite = &Dtls12 {
+    suite: Dtls12CipherSuite::ECDHE_ECDSA_AES256_GCM_SHA384,
+    hash: HashAlgorithm::SHA384,
+    algorithm: Algorithm::Aes256Gcm,
+};
+const DTLS12_CHACHA20_POLY1305: &dyn SupportedDtls12CipherSuite = &Dtls12 {
+    suite: Dtls12CipherSuite::ECDHE_ECDSA_CHACHA20_POLY1305_SHA256,
+    hash: HashAlgorithm::SHA256,
+    algorithm: Algorithm::ChaCha20Poly1305,
+};
+
+const DTLS13_AES_128_GCM: &dyn SupportedDtls13CipherSuite = &Dtls13 {
+    suite: Dtls13CipherSuite::AES_128_GCM_SHA256,
+    hash: HashAlgorithm::SHA256,
+    algorithm: Algorithm::Aes128Gcm,
+};
+const DTLS13_AES_256_GCM: &dyn SupportedDtls13CipherSuite = &Dtls13 {
+    suite: Dtls13CipherSuite::AES_256_GCM_SHA384,
+    hash: HashAlgorithm::SHA384,
+    algorithm: Algorithm::Aes256Gcm,
+};
+const DTLS13_CHACHA20_POLY1305: &dyn SupportedDtls13CipherSuite = &Dtls13 {
+    suite: Dtls13CipherSuite::CHACHA20_POLY1305_SHA256,
+    hash: HashAlgorithm::SHA256,
+    algorithm: Algorithm::ChaCha20Poly1305,
+};
+
+/// DTLS 1.2 suites, in order of preference where rind runs AES on CPU instructions.
 pub(crate) static DTLS12: &[&dyn SupportedDtls12CipherSuite] = &[
-    &Dtls12 {
-        suite: Dtls12CipherSuite::ECDHE_ECDSA_AES128_GCM_SHA256,
-        hash: HashAlgorithm::SHA256,
-        algorithm: Algorithm::Aes128Gcm,
-    },
-    &Dtls12 {
-        suite: Dtls12CipherSuite::ECDHE_ECDSA_AES256_GCM_SHA384,
-        hash: HashAlgorithm::SHA384,
-        algorithm: Algorithm::Aes256Gcm,
-    },
-    &Dtls12 {
-        suite: Dtls12CipherSuite::ECDHE_ECDSA_CHACHA20_POLY1305_SHA256,
-        hash: HashAlgorithm::SHA256,
-        algorithm: Algorithm::ChaCha20Poly1305,
-    },
+    DTLS12_AES_128_GCM,
+    DTLS12_AES_256_GCM,
+    DTLS12_CHACHA20_POLY1305,
 ];
 
-/// DTLS 1.3 suites, in order of preference.
+/// [`DTLS12`] with ChaCha20-Poly1305 first, which outruns AES without AES
+/// instructions.
+pub(crate) static DTLS12_CHACHA20_FIRST: &[&dyn SupportedDtls12CipherSuite] = &[
+    DTLS12_CHACHA20_POLY1305,
+    DTLS12_AES_128_GCM,
+    DTLS12_AES_256_GCM,
+];
+
+/// DTLS 1.3 suites, in order of preference where rind runs AES on CPU instructions.
 pub(crate) static DTLS13: &[&dyn SupportedDtls13CipherSuite] = &[
-    &Dtls13 {
-        suite: Dtls13CipherSuite::AES_128_GCM_SHA256,
-        hash: HashAlgorithm::SHA256,
-        algorithm: Algorithm::Aes128Gcm,
-    },
-    &Dtls13 {
-        suite: Dtls13CipherSuite::AES_256_GCM_SHA384,
-        hash: HashAlgorithm::SHA384,
-        algorithm: Algorithm::Aes256Gcm,
-    },
-    &Dtls13 {
-        suite: Dtls13CipherSuite::CHACHA20_POLY1305_SHA256,
-        hash: HashAlgorithm::SHA256,
-        algorithm: Algorithm::ChaCha20Poly1305,
-    },
+    DTLS13_AES_128_GCM,
+    DTLS13_AES_256_GCM,
+    DTLS13_CHACHA20_POLY1305,
+];
+
+/// [`DTLS13`] with ChaCha20-Poly1305 first, which outruns AES without AES
+/// instructions.
+pub(crate) static DTLS13_CHACHA20_FIRST: &[&dyn SupportedDtls13CipherSuite] = &[
+    DTLS13_CHACHA20_POLY1305,
+    DTLS13_AES_128_GCM,
+    DTLS13_AES_256_GCM,
 ];

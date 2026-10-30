@@ -21,6 +21,51 @@ fn certificate(algorithm: &'static rcgen::SignatureAlgorithm) -> (Vec<u8>, Vec<u
 }
 
 #[test]
+fn prefers_chacha20_without_aes_hardware() {
+    // CI runs armv7 on a CPU model with the crypto extension and one without,
+    // and names which, so both orders are checked.
+    match std::env::var_os("RIND_TEST_ARM_CRYPTO_EXT") {
+        Some(expected) => assert_eq!(rind::cpu::has_aes_hardware(), expected == "1"),
+        None if cfg!(not(target_arch = "arm")) => assert!(rind::cpu::has_aes_hardware()),
+        None => {}
+    }
+
+    use dimpl::crypto::{Dtls12CipherSuite as Dtls12, Dtls13CipherSuite as Dtls13};
+    let mut dtls12 = vec![
+        Dtls12::ECDHE_ECDSA_AES128_GCM_SHA256,
+        Dtls12::ECDHE_ECDSA_AES256_GCM_SHA384,
+        Dtls12::ECDHE_ECDSA_CHACHA20_POLY1305_SHA256,
+    ];
+    let mut dtls13 = vec![
+        Dtls13::AES_128_GCM_SHA256,
+        Dtls13::AES_256_GCM_SHA384,
+        Dtls13::CHACHA20_POLY1305_SHA256,
+    ];
+    if !rind::cpu::has_aes_hardware() {
+        dtls12.rotate_right(1);
+        dtls13.rotate_right(1);
+    }
+
+    let provider = rind();
+    assert_eq!(
+        provider
+            .cipher_suites
+            .iter()
+            .map(|s| s.suite())
+            .collect::<Vec<_>>(),
+        dtls12
+    );
+    assert_eq!(
+        provider
+            .dtls13_cipher_suites
+            .iter()
+            .map(|s| s.suite())
+            .collect::<Vec<_>>(),
+        dtls13
+    );
+}
+
+#[test]
 fn record_number_masks_match_aws_lc() {
     let aws_lc = aws_lc_rs::default_provider();
     for suite in rind().dtls13_cipher_suites {
