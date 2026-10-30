@@ -205,9 +205,13 @@ fn sha1_avx2(state: &mut [u32; 5], blocks: &[u8]) {
     };
     let (mut wk, mut wk_next) = (&mut [[0u32; 8]; 20], &mut [[0u32; 8]; 20]);
     let mut expander = Expander::new(wk, first, second);
-    for g in 0..20 {
-        expander.step(g);
+    // Unrolled, so each step's group is a constant and `w` stays in registers.
+    macro_rules! steps {
+        ($($g:literal)*) => {
+            $(expander.step($g);)*
+        };
     }
+    steps!(0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19);
 
     // Each pair's rounds compute the next pair's schedule, a group every
     // eight rounds, so the vector work overlaps the serial scalar rounds.
