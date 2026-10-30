@@ -17,6 +17,8 @@ fn test_rc_sha3_256(data: &[u8]) {
     black_box(ctx.finalize());
 }
 
+// armv7 has no SHA-3.
+#[cfg(not(target_arch = "arm"))]
 fn test_rind_sha3_256(data: &[u8]) {
     let mut ctx = rind::hashing::sha3::Sha3_256Context::new();
     ctx.update(data);
@@ -32,6 +34,7 @@ fn test_rc_shake128() {
     black_box(buf);
 }
 
+#[cfg(not(target_arch = "arm"))]
 fn test_rind_shake128() {
     let mut ctx = rind::hashing::sha3::Shake128::new(&[SHAKE128_INPUT]);
     let mut buf = [0u8; SHAKE128_OUTPUT];
@@ -55,6 +58,7 @@ fn sha3_256(c: &mut Criterion) {
             &input,
             |b, input| b.iter(|| test_rc_sha3_256(input)),
         );
+        #[cfg(not(target_arch = "arm"))]
         group.bench_with_input(BenchmarkId::new("rind", size_name), &input, |b, input| {
             b.iter(|| test_rind_sha3_256(input))
         });
@@ -64,6 +68,7 @@ fn sha3_256(c: &mut Criterion) {
 fn shake128(c: &mut Criterion) {
     // nb: no SHAKE support in aws-lc-rs or ring
     c.bench_function("shake128/rustcrypto", |b| b.iter(test_rc_shake128));
+    #[cfg(not(target_arch = "arm"))]
     c.bench_function("shake128/rind", |b| b.iter(test_rind_shake128));
 }
 
