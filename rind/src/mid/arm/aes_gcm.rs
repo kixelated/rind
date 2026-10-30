@@ -6,7 +6,7 @@ use libcrux_traits::aead::arrayref::Aead;
 
 use super::aes::check_gcm_lengths;
 use crate::Error;
-use crate::low::{Entry, zeroise, zeroise_value};
+use crate::low::{self, Entry, zeroise, zeroise_value};
 
 /// An AES-GCM key.
 ///
@@ -21,18 +21,13 @@ pub struct AesGcm {
 }
 
 impl AesGcm {
-    /// Create a new `AesGcm` object.
+    /// Expands a 16- or 32-byte key into an AES-128-GCM or AES-256-GCM key.
     ///
-    /// `key` must be 16 or 32 bytes, corresponding
-    /// to AES-128 or AES-256.  This function panics otherwise.
-    ///
-    /// (Note: this crate does not support AES-192).
-    pub fn new(key: &[u8]) -> Self {
+    /// Any other length, including AES-192's 24 bytes, is an error.
+    pub fn new(key: &[u8]) -> Result<Self, Error> {
         let _entry = Entry::new_secret();
-        match key.len() {
-            16 | 32 => {}
-            24 => panic!("aes-192 not supported"),
-            _ => panic!("invalid aes key size"),
+        if !matches!(key.len(), 16 | 32) {
+            return Err(Error::WrongLength);
         }
 
         let mut r = Self {
@@ -40,7 +35,8 @@ impl AesGcm {
             key_len: key.len(),
         };
         r.key[..key.len()].copy_from_slice(key);
-        r
+        low::ct::secret_slice(&r.key[..key.len()]);
+        Ok(r)
     }
 
     /// Encrypts the given message.
@@ -154,7 +150,7 @@ mod tests {
 
     #[test]
     fn smoketest() {
-        let t = AesGcm::new(&[0; 16]);
+        let t = AesGcm::new(&[0; 16]).unwrap();
         let mut tag = [0u8; 16];
         t.encrypt(&[0u8; 12], &[], &mut [], &mut tag).unwrap();
         assert_eq!(
@@ -165,7 +161,7 @@ mod tests {
 
     #[test]
     fn long_round_trip() {
-        let t = AesGcm::new(&[b'k'; 16]);
+        let t = AesGcm::new(&[b'k'; 16]).unwrap();
         let expected = include_bytes!("../../testdata/aes-gcm-ciphertext.bin");
         let (expected_cipher, expected_tag) = expected.split_at(expected.len() - 16);
 
@@ -183,7 +179,7 @@ mod tests {
 
     #[test]
     fn rejects_short_tag() {
-        let t = AesGcm::new(&[b'k'; 32]);
+        let t = AesGcm::new(&[b'k'; 32]).unwrap();
         let mut tag = [0u8; 16];
         let mut cipher = *b"hello";
         t.encrypt(b"noncenonceno", b"", &mut cipher, &mut tag)

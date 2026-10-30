@@ -1,7 +1,7 @@
 // Written for Graviola by Joe Birr-Pixton, 2024.
 // SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 
-use super::aes::check_gcm_lengths;
+use super::aes::{check_gcm_lengths, expand_key};
 use crate::Error;
 use crate::low::ghash::{Ghash, GhashTable};
 use crate::low::{self, AesKey, Entry, aes_gcm, ct_equal};
@@ -22,22 +22,19 @@ pub struct AesGcm {
 }
 
 impl AesGcm {
-    /// Create a new `AesGcm` object.
+    /// Expands a 16- or 32-byte key into an AES-128-GCM or AES-256-GCM key.
     ///
-    /// `key` must be 16 or 32 bytes, corresponding
-    /// to AES-128 or AES-256.  This function panics otherwise.
-    ///
-    /// (Note: this crate does not support AES-192).
-    pub fn new(key: &[u8]) -> Self {
+    /// Any other length, including AES-192's 24 bytes, is an error.
+    pub fn new(key: &[u8]) -> Result<Self, Error> {
         let _entry = Entry::new_secret();
-        let key = AesKey::new(key);
+        let key = expand_key(key)?;
         let mut h = [0u8; 16];
         key.encrypt_block(&mut h);
 
         let h = u128::from_be_bytes(h);
         let gh = GhashTable::new(h);
 
-        Self { key, gh }
+        Ok(Self { key, gh })
     }
 
     /// Encrypts the given message.
@@ -156,7 +153,7 @@ mod tests {
 
     #[test]
     fn smoketest() {
-        let t = AesGcm::new(&[0; 16]);
+        let t = AesGcm::new(&[0; 16]).unwrap();
         let mut tag = [0u8; 16];
         t.encrypt(&[0u8; 12], &[], &mut [], &mut tag).unwrap();
         assert_eq!(
@@ -167,7 +164,7 @@ mod tests {
 
     #[test]
     fn long_encrypt_test() {
-        let t = AesGcm::new(&[b'k'; 16]);
+        let t = AesGcm::new(&[b'k'; 16]).unwrap();
         let mut tag = [0u8; 16];
         // not divisible by 128, 64, 16 to cover by-8, by-4, and trailing cases
         let mut cipher = [b'p'; 4164];
@@ -182,7 +179,7 @@ mod tests {
 
     #[test]
     fn long_decrypt_test() {
-        let t = AesGcm::new(&[b'k'; 16]);
+        let t = AesGcm::new(&[b'k'; 16]).unwrap();
         let expected = include_bytes!("../testdata/aes-gcm-ciphertext.bin");
         let (cipher, tag) = expected.split_at(expected.len() - 16);
         let mut plain = cipher.to_vec();
@@ -211,7 +208,7 @@ mod tests {
             fn on_value(&mut self, name: &str, value: Value<'_>) {
                 match name {
                     "Count" => println!("  test {}", value.int()),
-                    "Key" => self.key = Some(AesGcm::new(&value.bytes())),
+                    "Key" => self.key = Some(AesGcm::new(&value.bytes()).unwrap()),
                     "IV" => self.nonce = value.bytes(),
                     "CT" => self.ct = value.bytes(),
                     "AAD" => self.aad = value.bytes(),

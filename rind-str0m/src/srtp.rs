@@ -53,13 +53,13 @@ impl SupportedAes128CmSha1_80 for RindSrtp {
 
 impl SupportedAeadAes128Gcm for RindSrtp {
     fn create_cipher(&self, key: [u8; 16], _encrypt: bool) -> Box<dyn AeadAes128GcmCipher> {
-        Box::new(Gcm(AesGcm::new(&key)))
+        Box::new(Gcm(AesGcm::new(&key).unwrap()))
     }
 }
 
 impl SupportedAeadAes256Gcm for RindSrtp {
     fn create_cipher(&self, key: [u8; 32], _encrypt: bool) -> Box<dyn AeadAes256GcmCipher> {
-        Box::new(Gcm(AesGcm::new(&key)))
+        Box::new(Gcm(AesGcm::new(&key).unwrap()))
     }
 }
 

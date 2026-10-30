@@ -106,7 +106,7 @@ pub(super) fn check_gcm_lengths(aad: usize, msg: usize) -> Result<(), Error> {
     check_counter(2, msg)
 }
 
-fn expand_key(key: &[u8]) -> Result<AesKey, Error> {
+pub(super) fn expand_key(key: &[u8]) -> Result<AesKey, Error> {
     low::ct::secret_slice(key);
     match key.len() {
         16 | 32 => Ok(AesKey::new(key)),
@@ -118,6 +118,7 @@ fn expand_key(key: &[u8]) -> Result<AesKey, Error> {
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
+    use crate::mid::aes_gcm::AesGcm;
     use crate::test::*;
 
     #[test]
@@ -127,6 +128,7 @@ mod tests {
             let supported = len == 16 || len == 32;
             assert_eq!(Aes::new(&key[..len]).is_ok(), supported, "len {len}");
             assert_eq!(AesCtr::new(&key[..len]).is_ok(), supported, "len {len}");
+            assert_eq!(AesGcm::new(&key[..len]).is_ok(), supported, "len {len}");
         }
     }
 
