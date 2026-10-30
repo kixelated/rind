@@ -20,7 +20,6 @@ Guidance:
 - List each public operation against the Wycheproof files that cover it, and
   add a test for any file not yet run.
 - Benchmarks feed [Re-measure accepted costs](/quest/m2/remeasure.md).
-
-## Required
-
-- [rind-str0m on a str0m release](/quest/m1/moq/str0m.md) - adapter under test
+- rind-str0m's round-trip test lands with
+  [rind-str0m on a str0m release](/quest/m1/moq/str0m.md), so this quest no
+  longer waits on str0m's release (maintainer, 2026-10-29).
