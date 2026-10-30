@@ -270,7 +270,10 @@ fn load(first: &[u8; 64], second: &[u8; 64], i: usize) -> __m256i {
         0x0c0d0e0f_08090a0b,
         0x04050607_00010203,
     );
-    let (first, second) = (&first.as_chunks::<16>().0[i], &second.as_chunks::<16>().0[i]);
+    let (first, second) = (
+        &first.as_chunks::<16>().0[i],
+        &second.as_chunks::<16>().0[i],
+    );
     // SAFETY: `first` and `second` are 16 bytes and readable
     let (lo, hi) = unsafe {
         (
@@ -339,7 +342,10 @@ fn ssig0(x: __m256i) -> __m256i {
 #[target_feature(enable = "avx,avx2")]
 fn ssig1_pair(pairs: __m256i, place: __m256i) -> __m256i {
     let x = _mm256_xor_si256(
-        _mm256_xor_si256(_mm256_srli_epi64::<17>(pairs), _mm256_srli_epi64::<19>(pairs)),
+        _mm256_xor_si256(
+            _mm256_srli_epi64::<17>(pairs),
+            _mm256_srli_epi64::<19>(pairs),
+        ),
         _mm256_srli_epi32::<10>(pairs),
     );
     _mm256_shuffle_epi8(x, place)
