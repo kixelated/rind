@@ -72,6 +72,8 @@ RustCrypto dependency.
 - [instant-acme 0.9 is released](/quest/m1/moq/instant-acme-release.md) - waiting on the release with a pluggable `CryptoProvider`
 - [rind-instant-acme](/quest/m1/moq/instant-acme.md) - instant-acme 0.9's `CryptoProvider`
 - [ctgrind on armv7](/quest/m1/moq/armv7-ctgrind.md) - the constant-time check runs on the armv7 build
+- [Wipe hash scratch](/quest/m1/moq/hash-scratch-wipe.md) - SHA compress functions leave no copy of a hashed secret on the stack
+- [ctgrind on aarch64](/quest/m1/moq/aarch64-ctgrind.md) - the constant-time check runs on graviola's aarch64 backend
 - [ctgrind covers every secret](/quest/m1/moq/ctgrind-gaps.md) - ML-KEM, ECDSA nonces, and AES key setup run under ctgrind
 - [AesGcm refuses a bad key length](/quest/m1/moq/aes-gcm-key.md) - `AesGcm::new` returns an error instead of panicking
 - [Wipe HMAC and DRBG state](/quest/m1/moq/state-wipe.md) - `Hmac` and `HmacDrbg` zero their keyed state on drop
