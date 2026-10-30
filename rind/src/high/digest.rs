@@ -11,12 +11,12 @@ use crate::mid::{sha1, sha2};
 /// A hash function, chosen by one of this module's constants.
 #[derive(Debug)]
 pub struct Algorithm {
-    id: Id,
+    pub(super) id: Id,
     output_len: usize,
 }
 
 #[derive(Clone, Copy, Debug)]
-enum Id {
+pub(super) enum Id {
     Sha1,
     Sha256,
     Sha384,

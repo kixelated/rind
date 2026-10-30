@@ -2,7 +2,6 @@ use aws_lc_rs::rsa::KeyPair;
 use aws_lc_rs::{digest, hmac, signature::Ed25519KeyPair};
 use proptest::collection::vec;
 use proptest::prelude::*;
-use rind::hashing::{LegacySha1, Sha256, Sha384, Sha512, hmac::Hmac};
 use rind::signing::eddsa::Ed25519SigningKey;
 use rind::signing::rsa::{KeySize, SigningKey};
 
@@ -70,17 +69,6 @@ fn ed25519_key_generation() {
     }
 }
 
-// rind's hash markers name no trait a helper could be generic over.
-macro_rules! check_hmac {
-    ($H:ty, $algorithm:expr, $key:expr, $message:expr) => {{
-        let mut ctx = Hmac::<$H>::new($key);
-        ctx.update($message);
-        let got = ctx.finish();
-        let wanted = hmac::sign(&hmac::Key::new($algorithm, $key), $message);
-        prop_assert_eq!(got.as_ref(), wanted.as_ref());
-    }};
-}
-
 proptest! {
     #[test]
     fn hashes_match_aws_lc_rs(
@@ -104,22 +92,28 @@ proptest! {
     }
 
     #[test]
-    fn hmac_sha1_matches_aws_lc_rs(
-        key in vec(any::<u8>(), 0..200),
-        message in vec(any::<u8>(), 0..1024),
-    ) {
-        check_hmac!(LegacySha1, hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY, &key, &message);
-    }
-
-    #[test]
-    fn hmac_sha2_matches_aws_lc_rs(
+    fn hmac_matches_aws_lc_rs(
         // Up to 300 bytes spans keys below, at, and above both block sizes (64 and 128).
         key in vec(any::<u8>(), 0..300),
         message in vec(any::<u8>(), 0..1024),
+        split in any::<prop::sample::Index>(),
     ) {
-        check_hmac!(Sha256, hmac::HMAC_SHA256, &key, &message);
-        check_hmac!(Sha384, hmac::HMAC_SHA384, &key, &message);
-        check_hmac!(Sha512, hmac::HMAC_SHA512, &key, &message);
+        let split = split.index(message.len() + 1);
+        for (ours, theirs) in [
+            (rind::hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY, hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY),
+            (rind::hmac::HMAC_SHA256, hmac::HMAC_SHA256),
+            (rind::hmac::HMAC_SHA384, hmac::HMAC_SHA384),
+            (rind::hmac::HMAC_SHA512, hmac::HMAC_SHA512),
+        ] {
+            let ours = rind::hmac::Key::new(ours, &key);
+            let mut ctx = rind::hmac::Context::with_key(&ours);
+            ctx.update(&message[..split]);
+            ctx.update(&message[split..]);
+            let wanted = hmac::sign(&hmac::Key::new(theirs, &key), &message);
+            let got = ctx.sign();
+            prop_assert_eq!(got.as_ref(), wanted.as_ref());
+            prop_assert_eq!(rind::hmac::verify(&ours, &message, wanted.as_ref()), Ok(()));
+        }
     }
 }
 

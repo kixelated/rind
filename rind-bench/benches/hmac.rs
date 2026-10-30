@@ -73,21 +73,24 @@ fn test_rc_sha384(key: &[u8], data: &[u8]) {
 }
 
 fn test_rind_sha1(key: &[u8], data: &[u8]) {
-    let mut ctx = rind::hashing::hmac::Hmac::<rind::hashing::LegacySha1>::new(key);
-    ctx.update(data);
-    black_box(ctx.finish());
+    black_box(rind::hmac::sign(
+        &rind::hmac::Key::new(rind::hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY, key),
+        data,
+    ));
 }
 
 fn test_rind_sha256(key: &[u8], data: &[u8]) {
-    let mut ctx = rind::hashing::hmac::Hmac::<rind::hashing::Sha256>::new(key);
-    ctx.update(data);
-    black_box(ctx.finish());
+    black_box(rind::hmac::sign(
+        &rind::hmac::Key::new(rind::hmac::HMAC_SHA256, key),
+        data,
+    ));
 }
 
 fn test_rind_sha384(key: &[u8], data: &[u8]) {
-    let mut ctx = rind::hashing::hmac::Hmac::<rind::hashing::Sha384>::new(key);
-    ctx.update(data);
-    black_box(ctx.finish());
+    black_box(rind::hmac::sign(
+        &rind::hmac::Key::new(rind::hmac::HMAC_SHA384, key),
+        data,
+    ));
 }
 
 fn sha1(c: &mut Criterion) {
@@ -116,6 +119,22 @@ fn sha1(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("rind", size_name), &input, |b, input| {
             b.iter(|| test_rind_sha1(&key, input))
         });
+
+        // A long-lived key, such as a STUN or SRTP session's, signs each
+        // message without rekeying.
+        let aws_key =
+            aws_lc_rs::hmac::Key::new(aws_lc_rs::hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY, &key);
+        group.bench_with_input(
+            BenchmarkId::new("aws-lc-rs/reused-key", size_name),
+            &input,
+            |b, input| b.iter(|| black_box(aws_lc_rs::hmac::sign(&aws_key, input))),
+        );
+        let rind_key = rind::hmac::Key::new(rind::hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY, &key);
+        group.bench_with_input(
+            BenchmarkId::new("rind/reused-key", size_name),
+            &input,
+            |b, input| b.iter(|| black_box(rind::hmac::sign(&rind_key, input))),
+        );
     }
 }
 
@@ -143,6 +162,18 @@ fn sha256(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("rind", size_name), &input, |b, input| {
             b.iter(|| test_rind_sha256(&key, input))
         });
+        let aws_key = aws_lc_rs::hmac::Key::new(aws_lc_rs::hmac::HMAC_SHA256, &key);
+        group.bench_with_input(
+            BenchmarkId::new("aws-lc-rs/reused-key", size_name),
+            &input,
+            |b, input| b.iter(|| black_box(aws_lc_rs::hmac::sign(&aws_key, input))),
+        );
+        let rind_key = rind::hmac::Key::new(rind::hmac::HMAC_SHA256, &key);
+        group.bench_with_input(
+            BenchmarkId::new("rind/reused-key", size_name),
+            &input,
+            |b, input| b.iter(|| black_box(rind::hmac::sign(&rind_key, input))),
+        );
     }
 }
 
@@ -170,6 +201,18 @@ fn sha384(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("rind", size_name), &input, |b, input| {
             b.iter(|| test_rind_sha384(&key, input))
         });
+        let aws_key = aws_lc_rs::hmac::Key::new(aws_lc_rs::hmac::HMAC_SHA384, &key);
+        group.bench_with_input(
+            BenchmarkId::new("aws-lc-rs/reused-key", size_name),
+            &input,
+            |b, input| b.iter(|| black_box(aws_lc_rs::hmac::sign(&aws_key, input))),
+        );
+        let rind_key = rind::hmac::Key::new(rind::hmac::HMAC_SHA384, &key);
+        group.bench_with_input(
+            BenchmarkId::new("rind/reused-key", size_name),
+            &input,
+            |b, input| b.iter(|| black_box(rind::hmac::sign(&rind_key, input))),
+        );
     }
 }
 

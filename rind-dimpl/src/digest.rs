@@ -2,9 +2,7 @@ use std::fmt;
 
 use dimpl::crypto::{Buf, HashAlgorithm, HashProvider, HmacProvider, SecureRandom};
 use dimpl::{CryptoError, CryptoOperation};
-use rind::digest;
-use rind::hashing::hmac::Hmac;
-use rind::hashing::{Sha256, Sha384};
+use rind::{digest, hmac};
 
 #[derive(Debug)]
 pub(crate) struct Hasher;
@@ -56,19 +54,12 @@ impl HmacProvider for Mac {
         data: &[u8],
         out: &mut [u8],
     ) -> Result<usize, CryptoError> {
-        let tag = match hash {
-            HashAlgorithm::SHA256 => {
-                let mut mac = Hmac::<Sha256>::new(key);
-                mac.update(data);
-                mac.finish()
-            }
-            HashAlgorithm::SHA384 => {
-                let mut mac = Hmac::<Sha384>::new(key);
-                mac.update(data);
-                mac.finish()
-            }
+        let algorithm = match hash {
+            HashAlgorithm::SHA256 => hmac::HMAC_SHA256,
+            HashAlgorithm::SHA384 => hmac::HMAC_SHA384,
             _ => return Err(CryptoError::UnsupportedHmacHash(hash)),
         };
+        let tag = hmac::sign(&hmac::Key::new(algorithm, key), data);
         let tag = tag.as_ref();
         out.get_mut(..tag.len())
             .ok_or(CryptoError::OperationFailed(CryptoOperation::ComputeHmac))?
