@@ -10,9 +10,13 @@ caller owns nonce uniqueness, and a randomized-nonce key picks its own.
 
 ## Plan
 
-Part of [Learn from aws-lc-rs's API](/quest/m2/aws-lc-api.md); decisions 1, 3,
-and 4 of [moq-dev/rind#72](https://github.com/moq-dev/rind/pull/72) shape it.
-A sketch following aws-lc-rs, to adjust as the implementation finds better:
+Part of [Learn from aws-lc-rs's API](/quest/m1/moq/api/README.md). Decided by
+the maintainer on 2026-10-30 in
+[moq-dev/rind#72](https://github.com/moq-dev/rind/pull/72): algorithm
+constants; `UnboundKey`, `LessSafeKey`, and `RandomizedNonceKey`, without
+aws-lc-rs's nonce-sequence keys; and `RandomizedNonceKey` on
+XChaCha20-Poly1305 with a random 192-bit nonce. A sketch following aws-lc-rs,
+to adjust as the implementation finds better:
 
 ```rust
 pub mod aead {
@@ -63,7 +67,7 @@ pub mod cipher {
 
 - `UnboundKey` stays even though only `LessSafeKey` binds it today: adding it
   later would break `LessSafeKey::new` again, and HKDF derives one directly
-  ([Typed HKDF output](/quest/m2/aws-lc-hkdf.md)).
+  ([Typed HKDF output](/quest/m1/moq/api/hkdf.md)).
 - Methods are only those a consumer calls: separate-tag sealing (rustls,
   QUIC, dimpl, SRTP, MoQ's Retry tag), append-tag sealing (MoQ e2ee and QUIC
   tokens, the ticketer), and both opens. aws-lc-rs's `open_within`,

@@ -9,8 +9,10 @@ message runs through a `Context` started from it, or the one-shot `sign` and
 
 ## Plan
 
-Part of [Learn from aws-lc-rs's API](/quest/m2/aws-lc-api.md); decisions 1 and
-2 of [moq-dev/rind#72](https://github.com/moq-dev/rind/pull/72) shape it.
+Part of [Learn from aws-lc-rs's API](/quest/m1/moq/api/README.md). Decided by
+the maintainer on 2026-10-30 in
+[moq-dev/rind#72](https://github.com/moq-dev/rind/pull/72): algorithm
+constants and aws-lc-rs's module names.
 A sketch following aws-lc-rs:
 
 ```rust
@@ -48,4 +50,4 @@ change.
 
 ## Required
 
-- [Digest constants](/quest/m2/aws-lc-digest.md) - `hmac::Algorithm` wraps a `digest::Algorithm`
+- [Digest constants](/quest/m1/moq/api/digest.md) - `hmac::Algorithm` wraps a `digest::Algorithm`

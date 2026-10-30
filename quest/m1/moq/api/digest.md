@@ -9,8 +9,10 @@ traits, its `HashOutput` enum, and the second set of raw contexts under
 
 ## Plan
 
-Part of [Learn from aws-lc-rs's API](/quest/m2/aws-lc-api.md); decisions 1 and
-2 of [moq-dev/rind#72](https://github.com/moq-dev/rind/pull/72) shape it.
+Part of [Learn from aws-lc-rs's API](/quest/m1/moq/api/README.md). Decided by
+the maintainer on 2026-10-30 in
+[moq-dev/rind#72](https://github.com/moq-dev/rind/pull/72): algorithm
+constants and aws-lc-rs's module names.
 A sketch following aws-lc-rs:
 
 ```rust
@@ -31,15 +33,15 @@ pub mod digest {
 ```
 
 - `SignatureHash` goes: signature algorithms become constants that name their
-  hash ([Signature key pairs](/quest/m2/aws-lc-signature.md)), and none names
+  hash ([Signature key pairs](/quest/m1/moq/api/signature.md)), and none names
   SHA-1, so SHA-1 still cannot reach a signature. Until that quest lands, the
   generic ECDSA API keeps naming hashes through the crate-private trait.
 - `HashOutput::ct_equal` and `verify_truncated` have no consumer; tag checks
   go through `hmac::verify`.
 - SHA-3 and SHAKE stay crate-private for ML-KEM: no consumer hashes with them.
 - The `high::hash` generics stay crate-private underneath, and
-  [Reusable HMAC keys](/quest/m2/aws-lc-hmac.md),
-  [Typed HKDF output](/quest/m2/aws-lc-hkdf.md), and the signature quest map
+  [Reusable HMAC keys](/quest/m1/moq/api/hmac.md),
+  [Typed HKDF output](/quest/m1/moq/api/hkdf.md), and the signature quest map
   their constants onto them. This also retires two unnameable public types,
   `HashBlock` and `high::hash`'s `Sha256Context`, which shares its name with
   `hashing::sha2::Sha256Context`.

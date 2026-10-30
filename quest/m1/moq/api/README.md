@@ -1,11 +1,12 @@
-# [XS] Learn from aws-lc-rs's API
+# Learn from aws-lc-rs's API
 
 ## Goal
 
 rind's public API takes what works from aws-lc-rs's: shapes that steer a
 caller away from misuse and toward reusing expensive setup. Each module is
-compared against its aws-lc-rs counterpart, and the changes worth a breaking
-release land; the rest are recorded as rejected, with the reason.
+compared against its aws-lc-rs counterpart, and the changes worth making land
+before rind's first release; the rest are recorded as rejected, with the
+reason.
 
 This quest's own work, once every module quest below has merged: rename
 `rind::random` to `rind::rand`, make sure each deviation listed below carries
@@ -16,13 +17,19 @@ description of the public API.
 
 Decided by the maintainer on 2026-10-29, while planning `AesGcm::new`'s
 key-length error: they like aws-lc-rs's API because, while confusing at first,
-it avoids misuse and promotes reuse. m2, after the first release, rather than
-delaying the release for it. Prefer one coordinated breaking release over a
-series of them.
+it avoids misuse and promotes reuse.
 
-The design and its open decisions are in
-[moq-dev/rind#72](https://github.com/moq-dev/rind/pull/72). Until the
-maintainer settles them there, the module quests assume its recommendations.
+Decided by the maintainer on 2026-10-30 in
+[moq-dev/rind#72](https://github.com/moq-dev/rind/pull/72), which holds the
+module-by-module comparison:
+
+- m1, before rind's first release, so MoQ ports to rind once.
+- Algorithm constants in every module, one key type per role.
+- aws-lc-rs's module names.
+- AEAD keys as `UnboundKey`, `LessSafeKey`, and `RandomizedNonceKey`, with
+  the randomized-nonce key on XChaCha20-Poly1305.
+- HKDF's typed `Okm`, which also accepts a plain length.
+- `rind::Error` stays, with an exported `KeyRejected` payload.
 
 ### Shared shape
 
@@ -45,10 +52,8 @@ maintainer settles them there, the module quests assume its recommendations.
   in the same PR**, deletes the API it replaces with no shim, and keeps the
   Wycheproof, differential, ctgrind, and zeroing tests passing on the new
   surface.
-- **One release.** Once the first module quest merges, no release PR merges
-  until every one has; the release notes carry each quest's migration note.
-  Releases cut before then, such as the first one MoQ switches to, are
-  unaffected.
+- **The first release carries it all.** [Release](/quest/m1/moq/release.md)
+  waits on this epic, so no published version has the old API.
 
 ### Where rind keeps its own shape
 
@@ -62,7 +67,7 @@ Each is a deviation to document on the item:
   returns a `SharedSecret` that wipes itself on drop instead.
 - `rind::Error` stays a matchable enum instead of aws-lc-rs's opaque
   `Unspecified` and `KeyRejected`; see
-  [Nameable key errors](/quest/m2/aws-lc-error.md).
+  [Nameable key errors](/quest/m1/moq/api/error.md).
 - Key encodings write into a caller's buffer, as today, instead of aws-lc-rs's
   allocated `Document`s: rind's API does not allocate.
 - ML-KEM decapsulation consumes its key, like ephemeral ECDH, where
@@ -100,15 +105,15 @@ RustCrypto callers are the planned ones: moq-e2ee (AES-128-GCM, HKDF, HMAC),
 moq-quic (Retry integrity and token AEADs, HKDF, HMAC), moq-auth (key
 generation and import for HMAC, RSA, ECDSA, Ed25519; `rand`), moq-relay and
 moq-hls (SHA-256), moq-rtmp and moq-tokio (HMAC-SHA256), and moq-rtc
-(HMAC-SHA1). MoQ ports to rind's first release before this lands, then ports
-its direct callers again.
+(HMAC-SHA1). Since this lands before rind's first release, MoQ ports once,
+onto this shape.
 
 ## Required
 
-- [AEAD keys bound to an algorithm](/quest/m2/aws-lc-aead.md) - `aead` and `cipher` keys take an algorithm constant, with `LessSafeKey` and a randomized-nonce key
-- [Nameable key errors](/quest/m2/aws-lc-error.md) - every `rind::Error` payload is a type a caller can name
-- [Digest constants](/quest/m2/aws-lc-digest.md) - `digest::SHA256` and friends replace the `Hash` trait and its duplicate contexts
-- [Reusable HMAC keys](/quest/m2/aws-lc-hmac.md) - an `hmac::Key` built once, with contexts, `sign`, and `verify`
-- [Typed HKDF output](/quest/m2/aws-lc-hkdf.md) - `hkdf::Salt`, `Prk`, and an `Okm` whose length matches the key it becomes
-- [Key agreement and KEM constants](/quest/m2/aws-lc-agreement.md) - ephemeral ECDH and ML-KEM-768 behind `agreement` and `kem`
-- [Signature key pairs](/quest/m2/aws-lc-signature.md) - ECDSA, RSA, and Ed25519 key pairs and verification algorithms bound to constants
+- [AEAD keys bound to an algorithm](/quest/m1/moq/api/aead.md) - `aead` and `cipher` keys take an algorithm constant, with `LessSafeKey` and a randomized-nonce key
+- [Nameable key errors](/quest/m1/moq/api/error.md) - every `rind::Error` payload is a type a caller can name
+- [Digest constants](/quest/m1/moq/api/digest.md) - `digest::SHA256` and friends replace the `Hash` trait and its duplicate contexts
+- [Reusable HMAC keys](/quest/m1/moq/api/hmac.md) - an `hmac::Key` built once, with contexts, `sign`, and `verify`
+- [Typed HKDF output](/quest/m1/moq/api/hkdf.md) - `hkdf::Salt`, `Prk`, and an `Okm` whose length matches the key it becomes
+- [Key agreement and KEM constants](/quest/m1/moq/api/agreement.md) - ephemeral ECDH and ML-KEM-768 behind `agreement` and `kem`
+- [Signature key pairs](/quest/m1/moq/api/signature.md) - ECDSA, RSA, and Ed25519 key pairs and verification algorithms bound to constants

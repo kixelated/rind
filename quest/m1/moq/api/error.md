@@ -9,9 +9,10 @@ not match them.
 
 ## Plan
 
-Part of [Learn from aws-lc-rs's API](/quest/m2/aws-lc-api.md); decision 6 of
-[moq-dev/rind#72](https://github.com/moq-dev/rind/pull/72) shapes it.
-Recommended: keep `rind::Error` as a matchable enum, and fold both variants
+Part of [Learn from aws-lc-rs's API](/quest/m1/moq/api/README.md). Decided by
+the maintainer on 2026-10-30 in
+[moq-dev/rind#72](https://github.com/moq-dev/rind/pull/72): keep `rind::Error`
+as a matchable enum, and fold both variants
 into one `Error::KeyRejected(KeyRejected)`, after aws-lc-rs's `KeyRejected`:
 an exported opaque type whose `Display` keeps today's detail, so the ASN.1
 parser's error enum never becomes public API.

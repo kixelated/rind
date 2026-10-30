@@ -9,9 +9,11 @@ key that consumes them cannot disagree in length.
 
 ## Plan
 
-Part of [Learn from aws-lc-rs's API](/quest/m2/aws-lc-api.md); decision 5 of
-[moq-dev/rind#72](https://github.com/moq-dev/rind/pull/72) shapes it.
-A sketch following aws-lc-rs:
+Part of [Learn from aws-lc-rs's API](/quest/m1/moq/api/README.md). Decided by
+the maintainer on 2026-10-30 in
+[moq-dev/rind#72](https://github.com/moq-dev/rind/pull/72): algorithm
+constants, aws-lc-rs's module names, and aws-lc-rs's typed `Okm` that also
+accepts a plain length. A sketch following aws-lc-rs:
 
 ```rust
 pub mod hkdf {
@@ -50,5 +52,5 @@ moq-e2ee's credential derivation, all from aws-lc-rs's identical shape.
 
 ## Required
 
-- [Reusable HMAC keys](/quest/m2/aws-lc-hmac.md) - `hkdf::Algorithm` wraps an `hmac::Algorithm`, and `Okm` builds an `hmac::Key`
-- [AEAD keys bound to an algorithm](/quest/m2/aws-lc-aead.md) - `Okm` builds an `aead::UnboundKey`
+- [Reusable HMAC keys](/quest/m1/moq/api/hmac.md) - `hkdf::Algorithm` wraps an `hmac::Algorithm`, and `Okm` builds an `hmac::Key`
+- [AEAD keys bound to an algorithm](/quest/m1/moq/api/aead.md) - `Okm` builds an `aead::UnboundKey`
