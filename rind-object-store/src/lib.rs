@@ -21,10 +21,8 @@ use object_store::client::{
     CryptoProvider, DigestAlgorithm, DigestContext, HmacContext, Signer, SigningAlgorithm,
 };
 use object_store::{Error, Result};
-use rind::digest::{self, Digest};
-use rind::hashing::Sha256;
-use rind::hashing::hmac::Hmac;
 use rind::signing::rsa;
+use rind::{digest, hmac};
 use rustls_pki_types::PrivateKeyDer;
 use rustls_pki_types::pem::PemObject;
 
@@ -50,7 +48,9 @@ impl CryptoProvider for Provider {
 
     fn hmac(&self, algorithm: DigestAlgorithm, secret: &[u8]) -> Result<Box<dyn HmacContext>> {
         match algorithm {
-            DigestAlgorithm::Sha256 => Ok(Box::new(Context::new(Hmac::<Sha256>::new(secret)))),
+            DigestAlgorithm::Sha256 => Ok(Box::new(Context::new(hmac::Context::with_key(
+                &hmac::Key::new(hmac::HMAC_SHA256, secret),
+            )))),
             other => Err(unsupported(other)),
         }
     }
@@ -64,12 +64,12 @@ impl CryptoProvider for Provider {
 }
 
 /// A running digest or HMAC, plus storage for the output `finish` lends out.
-struct Context<T> {
+struct Context<T, O> {
     state: T,
-    output: Option<Digest>,
+    output: Option<O>,
 }
 
-impl<T> Context<T> {
+impl<T, O> Context<T, O> {
     fn new(state: T) -> Self {
         Self {
             state,
@@ -80,24 +80,24 @@ impl<T> Context<T> {
 
 // object_store leaves use after `finish` to the provider. Finishing a clone
 // keeps every call defined (a running hash) without a panic path.
-impl DigestContext for Context<digest::Context> {
+impl DigestContext for Context<digest::Context, digest::Digest> {
     fn update(&mut self, data: &[u8]) {
         self.state.update(data);
     }
 
     fn finish(&mut self) -> Result<&[u8]> {
-        let output: &Digest = self.output.insert(self.state.clone().finish());
+        let output: &digest::Digest = self.output.insert(self.state.clone().finish());
         Ok(output.as_ref())
     }
 }
 
-impl HmacContext for Context<Hmac<Sha256>> {
+impl HmacContext for Context<hmac::Context, hmac::Tag> {
     fn update(&mut self, data: &[u8]) {
         self.state.update(data);
     }
 
     fn finish(&mut self) -> Result<&[u8]> {
-        let output: &Digest = self.output.insert(self.state.clone().finish());
+        let output: &hmac::Tag = self.output.insert(self.state.clone().sign());
         Ok(output.as_ref())
     }
 }

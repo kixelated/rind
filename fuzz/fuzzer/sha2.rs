@@ -2,7 +2,6 @@
 
 use aws_lc_rs::{digest, hmac};
 use libfuzzer_sys::{arbitrary, arbitrary::Arbitrary, fuzz_target};
-use rind::hashing;
 
 fuzz_target!(|op: Operation| {
     match op {
@@ -71,7 +70,8 @@ fuzz_target!(|op: Operation| {
         }
         Operation::HmacSha256 { key, steps } => {
             let mut left = hmac::Context::with_key(&hmac::Key::new(hmac::HMAC_SHA256, &key));
-            let mut right = hashing::hmac::Hmac::<hashing::Sha256>::new(key);
+            let mut right =
+                rind::hmac::Context::with_key(&rind::hmac::Key::new(rind::hmac::HMAC_SHA256, &key));
 
             for s in steps {
                 match s {
@@ -87,12 +87,13 @@ fuzz_target!(|op: Operation| {
             }
 
             let left = left.sign();
-            let right = right.finish();
+            let right = right.sign();
             assert_eq!(left.as_ref(), right.as_ref());
         }
         Operation::HmacSha384 { key, steps } => {
             let mut left = hmac::Context::with_key(&hmac::Key::new(hmac::HMAC_SHA384, &key));
-            let mut right = hashing::hmac::Hmac::<hashing::Sha384>::new(key);
+            let mut right =
+                rind::hmac::Context::with_key(&rind::hmac::Key::new(rind::hmac::HMAC_SHA384, &key));
 
             for s in steps {
                 match s {
@@ -108,12 +109,13 @@ fuzz_target!(|op: Operation| {
             }
 
             let left = left.sign();
-            let right = right.finish();
+            let right = right.sign();
             assert_eq!(left.as_ref(), right.as_ref());
         }
         Operation::HmacSha512 { key, steps } => {
             let mut left = hmac::Context::with_key(&hmac::Key::new(hmac::HMAC_SHA512, &key));
-            let mut right = hashing::hmac::Hmac::<hashing::Sha512>::new(key);
+            let mut right =
+                rind::hmac::Context::with_key(&rind::hmac::Key::new(rind::hmac::HMAC_SHA512, &key));
 
             for s in steps {
                 match s {
@@ -129,7 +131,7 @@ fuzz_target!(|op: Operation| {
             }
 
             let left = left.sign();
-            let right = right.finish();
+            let right = right.sign();
             assert_eq!(left.as_ref(), right.as_ref());
         }
     }
