@@ -47,7 +47,3 @@ Consumers: `rind-rustls` (`hmac.rs` keeps a `Key` and starts a `Context` per
 `rind-str0m` (HMAC-SHA1 for STUN and SRTP). MoQ: moq-e2ee, moq-quic's reset
 key, moq-rtmp, moq-tokio's mDNS, and moq-rtc's HMAC-SHA1 port with a path
 change.
-
-## Required
-
-- [Digest constants](/quest/m1/moq/api/digest.md) - `hmac::Algorithm` wraps a `digest::Algorithm`

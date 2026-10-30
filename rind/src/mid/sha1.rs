@@ -11,7 +11,7 @@ use crate::low::{Blockwise, Zeroable, zeroise_value};
 
 /// A context for incremental computation of SHA1.
 #[derive(Clone)]
-pub(crate) struct Sha1Context {
+pub struct Sha1Context {
     h: [u32; 5],
     blockwise: Blockwise<{ Self::BLOCK_SZ }>,
     // u64 so 32-bit targets can hash past 4 GiB.

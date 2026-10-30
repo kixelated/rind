@@ -2,13 +2,13 @@
 
 use aws_lc_rs::{digest, hmac};
 use libfuzzer_sys::{arbitrary, arbitrary::Arbitrary, fuzz_target};
-use rind::hashing::{self, Hash, HashContext};
+use rind::hashing;
 
 fuzz_target!(|op: Operation| {
     match op {
         Operation::Sha1(steps) => {
             let mut left = digest::Context::new(&digest::SHA1_FOR_LEGACY_USE_ONLY);
-            let mut right = hashing::LegacySha1::new();
+            let mut right = rind::digest::Context::new(&rind::digest::SHA1_FOR_LEGACY_USE_ONLY);
 
             for s in steps {
                 match s {
