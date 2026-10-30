@@ -58,8 +58,7 @@ Targets, refused rather than falling back:
 
 Each quest lands the tests for what it adds: Wycheproof vectors where they
 exist, differential tests against aws-lc-rs as a dev-dependency, and a
-benchmark against aws-lc-rs. [Verification](/quest/m1/moq/verify.md) closes
-the gaps across the inherited surface and every backend.
+benchmark against aws-lc-rs.
 
 These quests cover every gap MoQ's 2026-10-26 inventory found. If a MoQ area
 quest turns up another, add a quest here rather than letting MoQ keep a C or
@@ -72,5 +71,4 @@ RustCrypto dependency.
 - [instant-acme 0.9 is released](/quest/m1/moq/instant-acme-release.md) - waiting on the release with a pluggable `CryptoProvider`
 - [rind-instant-acme](/quest/m1/moq/instant-acme.md) - instant-acme 0.9's `CryptoProvider`
 - [ctgrind on armv7](/quest/m1/moq/armv7-ctgrind.md) - the constant-time check runs on the armv7 build
-- [Verification](/quest/m1/moq/verify.md) - Wycheproof, aws-lc-rs differential tests, adapter handshakes, and benchmarks on every backend
 - [Release](/quest/m1/moq/release.md) - publish the rind release MoQ switches to
