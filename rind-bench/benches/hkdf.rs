@@ -17,8 +17,8 @@ impl ring::hkdf::KeyType for Len {
     }
 }
 
-// A 32-byte key for one label: what a QUIC token or an e2ee track key derives
-// from a long-lived PRK.
+// A 32-byte key for one label, from a PRK extracted once: what a QUIC token
+// or an e2ee track key derives from a long-lived secret.
 fn sha256(c: &mut Criterion) {
     let mut group = c.benchmark_group("hkdf-sha256");
     let secret = [0x5a; 32];
@@ -38,9 +38,7 @@ fn sha256(c: &mut Criterion) {
     });
     group.bench_function("extract/rind", |b| {
         b.iter(|| {
-            black_box(rind::hashing::hkdf::Prk::<rind::hashing::Sha256>::extract(
-                b"salt", &secret,
-            ))
+            black_box(rind::hkdf::Salt::new(rind::hkdf::HKDF_SHA256, b"salt").extract(&secret))
         })
     });
 
@@ -61,13 +59,30 @@ fn sha256(c: &mut Criterion) {
             black_box(out)
         })
     });
+    group.bench_function("expand-aes-256-gcm-key/aws-lc-rs", |b| {
+        b.iter(|| {
+            black_box(aws_lc_rs::aead::UnboundKey::from(
+                prk.expand(&info, &aws_lc_rs::aead::AES_256_GCM).unwrap(),
+            ))
+        })
+    });
 
-    let prk = rind::hashing::hkdf::Prk::<rind::hashing::Sha256>::extract(b"salt", &secret);
+    let prk = rind::hkdf::Salt::new(rind::hkdf::HKDF_SHA256, b"salt").extract(&secret);
     group.bench_function("expand/rind", |b| {
         b.iter(|| {
             let mut out = [0u8; 32];
-            prk.expand(&info, &mut out).unwrap();
+            prk.expand(&info, out.len())
+                .unwrap()
+                .fill(&mut out)
+                .unwrap();
             black_box(out)
+        })
+    });
+    group.bench_function("expand-aes-256-gcm-key/rind", |b| {
+        b.iter(|| {
+            black_box(rind::aead::UnboundKey::from(
+                prk.expand(&info, &rind::aead::AES_256_GCM).unwrap(),
+            ))
         })
     });
 }
