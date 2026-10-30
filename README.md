@@ -82,6 +82,9 @@ cargo bench
 
 With [Nix](https://nixos.org), `nix develop` (or direnv) provides CI's
 toolchain, and `just check` runs CI's gate over what the branch changed.
+On Linux, `just armv7` runs the nightly armv7 job: it builds and lints for
+32-bit ARM, then runs the tests under qemu, with and without the ARMv8 crypto
+extension.
 
 ## Algorithms
 
