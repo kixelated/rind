@@ -82,6 +82,9 @@ impl<B: AsRef<[u8]>> UnparsedPublicKey<B> {
 
 /// A peer's public key, parsed for `algorithm` once, so a malformed key is
 /// refused before any signature arrives.
+///
+/// On 32-bit ARM, whose Ed25519 backend decodes a point only when verifying,
+/// an Ed25519 key off the curve is refused by [`Self::verify`] instead.
 pub struct ParsedPublicKey {
     algorithm: &'static dyn VerificationAlgorithm,
     key: Parsed,
@@ -935,6 +938,16 @@ mod tests {
                 "{algorithm:?}"
             );
         }
+
+        // An Ed25519 encoding of the right length but off the curve.
+        let off_curve = ParsedPublicKey::new(&ED25519, [0xff; 32]);
+        #[cfg(not(target_arch = "arm"))]
+        assert_eq!(off_curve.err(), Some(Error::NotOnCurve));
+        #[cfg(target_arch = "arm")]
+        assert_eq!(
+            off_curve.unwrap().verify(b"", &[0; 64]),
+            Err(Error::BadSignature)
+        );
     }
 
     #[test]
