@@ -31,6 +31,9 @@ jobs:
     name: Plz
     runs-on: ubuntu-latest
     if: ${{ github.repository_owner == 'moq-dev' && github.ref == 'refs/heads/main' }}
+    # The environment, which only `main` can deploy to, holds the App key and
+    # the crates.io token, so a workflow on another branch cannot read them.
+    environment: publish
 
     steps:
       # A GitHub App token, so the release PR it opens triggers CI; PRs opened
@@ -51,7 +54,10 @@ jobs:
       - uses: ./.github/actions/nix
 
       - name: Release
-        run: nix develop --command just release
+        run: nix develop --command just release "$BEFORE"
         env:
+          # `main` before this push, so a release PR that landed mid-batch still
+          # publishes; empty when dispatched.
+          BEFORE: ${{ github.event.before }}
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

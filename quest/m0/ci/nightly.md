@@ -2,7 +2,7 @@
 
 ## Goal
 
-Only `Check` runs on a pull request. Every other workflow (asan, bench,
+Only the landing gate runs on a pull request. The platform workflows (asan, bench,
 build, coverage, cranelift, ctgrind, fuzz, lints, x86-cpu) runs on the
 nightly schedule and on `workflow_dispatch`, not on `pull_request` or on
 push to `main`. A nightly failure alerts the maintainer. Every workflow
@@ -13,8 +13,8 @@ cancels a superseded run of the same ref.
 Decided by the maintainer on 2026-10-29: the platform matrix runs nightly,
 not on `main`.
 
-- Land this before [the gate](/quest/m0/ci/land.md); `Check` stays on PRs
-  until the gate replaces it.
+- The landing gate (`.github/workflows/land.yml`) replaces `Check` on PRs,
+  so only the platform workflows remain there.
 - `concurrency` with `cancel-in-progress` keyed on the workflow and ref.
 - The alert opens or updates one issue, or uses whatever moq-dev/moq's
   `alert.yml` does, so a red nightly is not silent. Reuse moq's approach
