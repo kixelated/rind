@@ -41,7 +41,9 @@ fn missing_feature_is_named() {
 
         println!("check: {}", rind::cpu::check().unwrap_err());
         match operation.to_str().unwrap() {
-            "aes-gcm" => drop(rind::aead::AesGcm::new(&[0; 16]).unwrap()),
+            "aes-gcm" => {
+                drop(rind::aead::UnboundKey::new(&rind::aead::AES_128_GCM, &[0; 16]).unwrap())
+            }
             "sha1" => drop(digest(&SHA1_FOR_LEGACY_USE_ONLY, b"")),
             "sha256" => drop(digest(&SHA256, b"")),
             "sha384" => drop(digest(&SHA384, b"")),

@@ -16,7 +16,7 @@ use crate::low::{self, AesKey, Entry, aes_gcm, ct_equal};
 ///
 /// - AES-192 is not supported, as it is rarely used.
 /// - Only nonces that are 12-bytes/96-bits are supported.
-pub struct AesGcm {
+pub(crate) struct AesGcm {
     key: AesKey,
     gh: GhashTable,
 }
@@ -25,7 +25,7 @@ impl AesGcm {
     /// Expands a 16- or 32-byte key into an AES-128-GCM or AES-256-GCM key.
     ///
     /// Any other length, including AES-192's 24 bytes, is an error.
-    pub fn new(key: &[u8]) -> Result<Self, Error> {
+    pub(crate) fn new(key: &[u8]) -> Result<Self, Error> {
         let _entry = Entry::new_secret();
         let key = expand_key(key)?;
         let mut h = [0u8; 16];
@@ -49,7 +49,7 @@ impl AesGcm {
     /// Fails with [`Error::WrongLength`], leaving `cipher_inout` unchanged,
     /// if the message is longer than GCM's 2^36 - 32 bytes, or `aad` is
     /// 2^61 bytes or longer.
-    pub fn encrypt(
+    pub(crate) fn encrypt(
         &self,
         nonce: &[u8; 12],
         aad: &[u8],
@@ -99,7 +99,7 @@ impl AesGcm {
     /// `Err(Error::WrongLength)`, leaving `cipher_inout` unchanged.
     /// Otherwise, `Err(Error::DecryptFailed)` is returned and `cipher_inout`
     /// is cleared.
-    pub fn decrypt(
+    pub(crate) fn decrypt(
         &self,
         nonce: &[u8; 12],
         aad: &[u8],
