@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Discord alerting for nightly and release failures, after moq-dev/moq's.
+# Discord alerting for nightly, landing, and release failures, after moq-dev/moq's.
 # Usage:
 #   sh/alert.sh discord   Post the current workflow_run failure to Discord.
 #   sh/alert.sh check     Verify alert.yml watches every alertable workflow.
@@ -57,9 +57,8 @@ discord() {
 
 # A workflow's name when a failure there would otherwise go unseen: it runs
 # outside a pull request (whose failure shows on the PR) and outside a caller
-# (whose run reports it). Check and Quest validate pushes, so their failure is
-# the pusher's to see. A workflow without a name can't be listed in alert.yml,
-# so it is an error rather than a skip.
+# (whose run reports it). A workflow without a name can't be listed in
+# alert.yml, so it is an error rather than a skip.
 # shellcheck disable=SC2016 # A jq program, not a shell expansion.
 alertable='
     (.on | if type == "string" then [.]
@@ -68,7 +67,6 @@ alertable='
         else error("cannot read on:") end) as $triggers
     | if $triggers - ["pull_request", "pull_request_target", "merge_group", "workflow_call"] == [] then empty
     elif (.name | type) != "string" or .name == "" then error("no top-level name:")
-    elif (.name | IN("Check", "Quest")) and ($triggers | index("schedule") | not) then empty
     else .name end'
 
 check() {
