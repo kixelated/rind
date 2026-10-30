@@ -4,6 +4,7 @@
 pub use rsa_priv::KeySize;
 
 use crate::Error;
+use crate::error::KeyFormatError;
 use crate::high::asn1::{self, Type, pkix};
 use crate::high::hash::{self, Hash};
 use crate::high::{pkcs1, pkcs8};
@@ -28,7 +29,7 @@ impl VerifyingKey {
     /// (and earlier standards, including the original PKCS#1 standard).
     pub fn from_pkcs1_der(bytes: &[u8]) -> Result<Self, Error> {
         let _entry = Entry::new_public();
-        let decoded = pkix::RSAPublicKey::from_bytes(bytes).map_err(Error::Asn1Error)?;
+        let decoded = pkix::RSAPublicKey::from_bytes(bytes).map_err(KeyFormatError::Asn1)?;
 
         if decoded.modulus.is_negative() {
             return Err(Error::OutOfRange);
@@ -38,7 +39,7 @@ impl VerifyingKey {
         let e = decoded
             .publicExponent
             .as_usize()
-            .map_err(Error::Asn1Error)?;
+            .map_err(KeyFormatError::Asn1)?;
         let e = e.try_into().map_err(|_| Error::OutOfRange)?;
 
         let pub_key = rsa_pub::RsaPublicKey::new(n, e)?;
@@ -70,7 +71,7 @@ impl VerifyingKey {
 
         let len = spki
             .encode(&mut asn1::Encoder::new(output))
-            .map_err(Error::Asn1Error)?;
+            .map_err(|_| Error::WrongLength)?;
         Ok(&output[..len])
     }
 
@@ -93,7 +94,7 @@ impl VerifyingKey {
         };
         let used = pub_key
             .encode(&mut asn1::Encoder::new(output))
-            .map_err(Error::Asn1Error)?;
+            .map_err(|_| Error::WrongLength)?;
         Ok(&output[..used])
     }
 
@@ -280,7 +281,7 @@ impl SigningKey {
     /// (and earlier standards, including the original PKCS#1 standard).
     pub fn from_pkcs1_der(bytes: &[u8]) -> Result<Self, Error> {
         let _entry = Entry::new_secret();
-        let decoded = pkix::RSAPrivateKey::from_bytes(bytes).map_err(Error::Asn1Error)?;
+        let decoded = pkix::RSAPrivateKey::from_bytes(bytes).map_err(KeyFormatError::Asn1)?;
 
         if !matches!(decoded.version, pkix::Version::two_prime) {
             return Err(Error::OutOfRange);
@@ -294,7 +295,7 @@ impl SigningKey {
         let e = decoded
             .publicExponent
             .as_usize()
-            .map_err(Error::Asn1Error)?;
+            .map_err(KeyFormatError::Asn1)?;
         let e = e.try_into().map_err(|_| Error::OutOfRange)?;
 
         let p = PosInt::from_bytes(decoded.prime1.as_ref())?;
@@ -332,7 +333,7 @@ impl SigningKey {
             coefficient: asn1::Integer::new(components.iqmp),
         }
         .encode(&mut asn1::Encoder::new(output))
-        .map_err(Error::Asn1Error)?;
+        .map_err(|_| Error::WrongLength)?;
 
         output.get(..used).ok_or(Error::WrongLength)
     }
@@ -740,6 +741,19 @@ mod tests {
         let mut buffer = [0u8; SigningKey::MAX_PKCS1_BUFFER_LEN];
         let encoded = decoded.to_pkcs1_der(&mut buffer).unwrap();
         assert_eq!(encoded, pkcs1_der);
+        assert_eq!(
+            decoded.to_pkcs1_der(&mut buffer[..pkcs1_der.len() - 1]),
+            Err(Error::WrongLength)
+        );
+        let public_key = decoded.public_key();
+        assert_eq!(
+            public_key.to_pkcs1_der(&mut [0u8; 8]),
+            Err(Error::WrongLength)
+        );
+        assert_eq!(
+            public_key.to_spki_der(&mut [0u8; 8]),
+            Err(Error::WrongLength)
+        );
     }
 
     fn check_pkcs8(pkcs8_der: &[u8]) {
@@ -747,6 +761,10 @@ mod tests {
         let mut buffer = [0u8; SigningKey::MAX_PKCS1_BUFFER_LEN];
         let encoded = decoded.to_pkcs8_der(&mut buffer).unwrap();
         assert_eq!(encoded, pkcs8_der);
+        assert_eq!(
+            decoded.to_pkcs8_der(&mut buffer[..pkcs8_der.len() - 1]),
+            Err(Error::WrongLength)
+        );
     }
 
     /// Every backend makes the same decisions from the same random input,
