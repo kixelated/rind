@@ -7,6 +7,13 @@ use crate::low::AesKey;
 /// The counter blocks are `nonce` followed by the big-endian `counter`,
 /// `counter + 1`, ... `counter + 7`, wrapping within 32 bits.
 pub(crate) fn apply_8(key: &AesKey, nonce: &[u8; 12], counter: u32, inout: &mut [u8; 128]) {
+    if let AesKey::Hw(key) = key {
+        let mut ivec = [0u8; 16];
+        ivec[..12].copy_from_slice(nonce);
+        ivec[12..].copy_from_slice(&counter.to_be_bytes());
+        return key.ctr32(&ivec, inout.as_chunks_mut::<16>().0);
+    }
+
     let mut keystream = [0u8; 16];
     for (i, block) in (0u32..).zip(inout.as_chunks_mut::<16>().0) {
         keystream[..12].copy_from_slice(nonce);
