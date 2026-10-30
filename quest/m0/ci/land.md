@@ -24,7 +24,3 @@ instead of moving twice.
   only read them and ask.
 - Remove `Check`'s `pull_request` trigger and update `CONTRIBUTING.md`'s
   landing steps (`quest merge --land`).
-
-## Required
-
-- [Follow the move to moq-dev](/quest/m0/ci/transfer.md) - secrets and apps the gate needs live on the organization

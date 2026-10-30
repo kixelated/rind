@@ -183,10 +183,7 @@ fn hmac_sha1_tests() {
             ctx.update(test.msg);
             let result = match test.tag.len() {
                 20 => ctx.verify(&test.tag),
-                10 => match ctx.finish().truncated_ct_equal::<10>(&test.tag) {
-                    true => Ok(()),
-                    false => Err(Error::BadSignature),
-                },
+                10 => ctx.finish().verify_truncated::<10>(&test.tag),
                 _ => todo!("unhandled truncated hmac"),
             };
 
@@ -217,10 +214,7 @@ fn hmac_sha256_tests() {
             ctx.update(test.msg);
             let result = match test.tag.len() {
                 32 => ctx.verify(&test.tag),
-                16 => match ctx.finish().truncated_ct_equal::<16>(&test.tag) {
-                    true => Ok(()),
-                    false => Err(Error::BadSignature),
-                },
+                16 => ctx.finish().verify_truncated::<16>(&test.tag),
                 _ => todo!("unhandled truncated hmac"),
             };
 
@@ -251,10 +245,7 @@ fn hmac_sha384_tests() {
             ctx.update(test.msg);
             let result = match test.tag.len() {
                 48 => ctx.verify(&test.tag),
-                24 => match ctx.finish().truncated_ct_equal::<24>(&test.tag) {
-                    true => Ok(()),
-                    false => Err(Error::BadSignature),
-                },
+                24 => ctx.finish().verify_truncated::<24>(&test.tag),
                 _ => todo!("unhandled truncated hmac"),
             };
 
@@ -286,10 +277,7 @@ fn hmac_sha512_tests() {
             ctx.update(test.msg);
             let result = match test.tag.len() {
                 64 => ctx.verify(&test.tag),
-                32 => match ctx.finish().truncated_ct_equal::<32>(&test.tag) {
-                    true => Ok(()),
-                    false => Err(Error::BadSignature),
-                },
+                32 => ctx.finish().verify_truncated::<32>(&test.tag),
                 _ => todo!("unhandled truncated hmac"),
             };
 
