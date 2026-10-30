@@ -61,8 +61,8 @@ impl AesGcm {
         let _entry = Entry::new_secret();
         check_gcm_lengths(aad.len(), cipher_inout.len())?;
         // libcrux reads and writes separate buffers.
-        let mut plain = cipher_inout.to_vec();
-        let result = match self.key_len {
+        let plain = cipher_inout.to_vec();
+        match self.key_len {
             16 => PortableAesGcm128::encrypt(
                 cipher_inout,
                 tag_out,
@@ -72,9 +72,8 @@ impl AesGcm {
                 &plain,
             ),
             _ => PortableAesGcm256::encrypt(cipher_inout, tag_out, &self.key, nonce, aad, &plain),
-        };
-        zeroise(&mut plain);
-        result.map_err(|_| Error::WrongLength)
+        }
+        .map_err(|_| Error::WrongLength)
     }
 
     /// Decrypts and verifies the given message.
