@@ -52,7 +52,9 @@ but there is also a public API for general-purpose use.
   `armv7-linux-androideabi`) runs portable Rust instead, mostly from
   [libcrux] (see [Algorithms](#algorithms)), and needs no CPU features. Where
   the CPU has the ARMv8 crypto extension, as most 32-bit Android devices do,
-  AES, GHASH, SHA1, and SHA256 run [aws-lc]'s assembly for it instead. An
+  AES, GHASH, SHA1, and SHA256 run [aws-lc]'s assembly for it instead.
+  Without it, `rind::cpu::has_aes_hardware()` is false, and rind-rustls and
+  rind-dimpl prefer ChaCha20-Poly1305, which is faster there. An
   Ed25519 public key that is not a curve point is refused when verifying
   rather than when decoding.
 

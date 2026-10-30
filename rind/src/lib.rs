@@ -257,7 +257,7 @@ pub mod cipher;
 /// }
 /// ```
 pub mod cpu {
-    pub use crate::low::cpu::{MissingFeature, check};
+    pub use crate::low::cpu::{MissingFeature, check, has_aes_hardware};
 }
 
 /// Random bytes from the system's secure random source.
