@@ -3,6 +3,7 @@
 
 use core::ops::{Deref, DerefMut};
 
+use crate::Error;
 use crate::low::{ct, ct_equal};
 use crate::mid::{sha1, sha2};
 
@@ -33,12 +34,26 @@ impl HashOutput {
     /// before comparison with `other`.
     ///
     /// `L` being compile-time prevents the misuse that the
-    /// truncation length is attacker-controlled.  `L` must be non-zero,
-    /// and less than or equal to the size of the stored hash.
-    pub fn truncated_ct_equal<const L: usize>(&self, other: &[u8]) -> bool {
-        assert_ne!(L, 0);
-        assert!(L <= self.as_ref().len());
-        ct::into_public(ct_equal(&self.as_ref()[..L], other))
+    /// truncation length is attacker-controlled.  An `L` of zero would
+    /// accept an empty `other`, so it fails to compile:
+    ///
+    /// ```compile_fail,E0080
+    /// use rind::hashing::{Hash, Sha256};
+    ///
+    /// let _ = Sha256::hash(b"message").truncated_ct_equal::<0>(b"");
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`Error::WrongLength`] if `L` is longer than this hash, and
+    /// [`Error::BadSignature`] if the truncation differs from `other`.
+    pub fn truncated_ct_equal<const L: usize>(&self, other: &[u8]) -> Result<(), Error> {
+        const { assert!(L != 0, "truncation length must be non-zero") };
+        let truncated = self.as_ref().get(..L).ok_or(Error::WrongLength)?;
+        match ct::into_public(ct_equal(truncated, other)) {
+            true => Ok(()),
+            false => Err(Error::BadSignature),
+        }
     }
 }
 
@@ -342,6 +357,36 @@ impl HashContext for Sha512Context {
 mod tests {
     use super::*;
     use crate::test::*;
+
+    #[test]
+    fn truncated_ct_equal() {
+        // Under `admin/ctgrind`, nothing may branch on or index by the hash.
+        let output = Sha256::hash(b"message");
+        let full = output.as_ref().to_vec();
+        crate::low::ct::secret_slice(output.as_ref());
+
+        assert_eq!(output.truncated_ct_equal::<1>(&full[..1]), Ok(()));
+        assert_eq!(output.truncated_ct_equal::<32>(&full), Ok(()));
+        assert_eq!(
+            output.truncated_ct_equal::<33>(&full),
+            Err(Error::WrongLength)
+        );
+        assert_eq!(
+            output.truncated_ct_equal::<16>(&full),
+            Err(Error::BadSignature)
+        );
+        assert_eq!(
+            output.truncated_ct_equal::<16>(&full[..15]),
+            Err(Error::BadSignature)
+        );
+
+        let mut flipped = full[..16].to_vec();
+        flipped[15] ^= 1;
+        assert_eq!(
+            output.truncated_ct_equal::<16>(&flipped),
+            Err(Error::BadSignature)
+        );
+    }
 
     #[test]
     fn cavp() {
