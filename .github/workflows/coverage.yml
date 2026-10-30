@@ -53,11 +53,6 @@ jobs:
         run: |
           echo "PATH=$(pwd)/thirdparty/intel-sde:$PATH" >> "$GITHUB_ENV"
 
+      # The summary table in the log is the report.
       - name: Measure coverage
-        run: ./admin/coverage --lcov --output-path final.info
-
-      - name: Report to codecov.io
-        uses: codecov/codecov-action@v5
-        with:
-          files: final.info
-          token: ${{ secrets.CODECOV_TOKEN }}
+        run: ./admin/coverage
