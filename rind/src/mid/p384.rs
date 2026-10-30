@@ -458,13 +458,22 @@ impl JacobianMontPoint {
         Self::multiply_comb::<false>(scalar)
     }
 
-    /// `scalar * G`, as aws-lc's `ec_nistp_scalar_mul_base` does it.
+    /// `scalar * G`, for a `scalar` below n, by the comb layout of aws-lc's
+    /// `ec_nistp_scalar_mul_base`.
     ///
     /// Window `w` of the 77 Booth-recoded 5-bit windows is `4j + t` for
     /// one tooth `t` in 0..4, and table `j` holds its multiples of
     /// `2^(20j) G`.  So each tooth's windows are added straight from the
     /// tables, and the 5 doublings between teeth supply the `2^(5t)`: 15
     /// doublings in all, rather than 380.
+    ///
+    /// No addition doubles, which `p384_montjmixadd` cannot.  Scaled by
+    /// `2^(-5t)`, the accumulator and the table point are sums of digits of
+    /// distinct windows, so they are unequal integers unless both are zero
+    /// (infinity, which the addition handles).  Until window 76, which is
+    /// added last, each is below `2^380`, so they are unequal mod n too.  At
+    /// window 76, equal points would need the accumulator to be
+    /// `16 * 2^380 - n`, making `scalar` `2^385 - n`, which is above n.
     fn multiply_comb<const SECRET: bool>(scalar: &Scalar) -> Self {
         let mut windows = [(0u8, 0u8); 77];
         for ((digit, sign, _), window) in scalar

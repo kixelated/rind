@@ -297,8 +297,9 @@ fn fs_pow(x: &Fs, e: &[u64; 6]) -> Fs {
     let mut acc = one;
     for word in e.iter().rev() {
         for shift in (0..64).step_by(4).rev() {
+            // `fiat_p384_scalar_square` measured slower here on armv7.
             for _ in 0..4 {
-                acc = fs_sqr(&acc);
+                acc = fs_mul(&acc, &acc);
             }
             acc = fs_mul(&acc, &table[((word >> shift) & 0xf) as usize]);
         }
@@ -369,12 +370,6 @@ fn fe_to_mont(x: &[u32; 12]) -> Fe {
 fn fs_mul(x: &Fs, y: &Fs) -> Fs {
     let mut r = Fs([0; 12]);
     fs::fiat_p384_scalar_mul(&mut r, x, y);
-    r
-}
-
-fn fs_sqr(x: &Fs) -> Fs {
-    let mut r = Fs([0; 12]);
-    fs::fiat_p384_scalar_square(&mut r, x);
     r
 }
 
