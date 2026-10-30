@@ -6,10 +6,9 @@
 > at use with [rustls](https://github.com/rustls/rustls) and
 > [MoQ](https://github.com/moq-dev/moq).
 
-rind is a fork of [Graviola](https://github.com/ctz/graviola) by Joe
-Birr-Pixton. It keeps Graviola's history so changes can be rebased or offered
-upstream, and adds what MoQ needs to drop C cryptography entirely; the plan
-lives in [`quest/`](quest/README.md).
+rind began as a fork of [Graviola](https://github.com/ctz/graviola) by Joe
+Birr-Pixton, and no longer tracks it. It adds what MoQ needs to drop C
+cryptography entirely; the plan lives in [`quest/`](quest/README.md).
 
 *High quality*: rind incorporates assembler routines
 from the [s2n-bignum] project.  These have been formally proven
