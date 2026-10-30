@@ -30,7 +30,7 @@ fn bench_aes_ctr(c: &mut Criterion) {
             },
         );
         group.bench_with_input(BenchmarkId::new("rind", size_name), &input, |b, input| {
-            let key = rind::cipher::AesCtr::new(&key).unwrap();
+            let key = rind::cipher::AesCtr::new(&rind::cipher::AES_128, &key).unwrap();
             b.iter(|| {
                 let mut buf = input.clone();
                 key.apply_keystream(&nonce, 0, &mut buf).unwrap();
@@ -51,7 +51,7 @@ fn bench_header_protection(c: &mut Criterion) {
         b.iter(|| key.new_mask(&sample).unwrap());
     });
     group.bench_function("aes128/rind", |b| {
-        let key = rind::cipher::Aes::new(&[0u8; 16]).unwrap();
+        let key = rind::cipher::Aes::new(&rind::cipher::AES_128, &[0u8; 16]).unwrap();
         b.iter(|| {
             let mut block = sample;
             key.encrypt_block(&mut block);
