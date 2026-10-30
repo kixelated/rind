@@ -8,4 +8,3 @@ all its cryptography from rind, on every target MoQ releases, and publishes it.
 ## Required
 
 - [rind covers MoQ](/quest/m1/moq/README.md) - the primitives, CPU check, armv7 backend, and `rind-*` adapters MoQ needs, verified and released
-- [Merge quest link lists locally](/quest/m1/merge-driver.md) - `.gitattributes` uses quest's merge driver
