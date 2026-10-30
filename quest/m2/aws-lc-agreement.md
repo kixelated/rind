@@ -40,7 +40,7 @@ pub mod kem {
     pub struct Algorithm { .. }
     pub static ML_KEM_768: Algorithm;
     pub struct DecapsulationKey { .. } // generate(alg), encapsulation_key(), decapsulate(self, &Ciphertext)
-    pub struct EncapsulationKey { .. } // new(alg, bytes), key_bytes(), encapsulate(&self) -> (Ciphertext, SharedSecret)
+    pub struct EncapsulationKey { .. } // new(alg, bytes), key_bytes(), encapsulate(&self) -> Result<(Ciphertext, SharedSecret), Error>
     pub struct Ciphertext { .. }
     pub struct SharedSecret { .. }
 }

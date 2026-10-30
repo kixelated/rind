@@ -50,6 +50,7 @@ pub mod aead {
         pub fn seal_in_place_append_tag<A, InOut>(&self, aad: Aad<A>, in_out: &mut InOut) -> Result<RandomNonce, Error>;
         pub fn open_in_place<'a, A>(&self, nonce: &RandomNonce, aad: Aad<A>, in_out: &'a mut [u8]) -> Result<&'a mut [u8], Error>;
     }
+    pub struct RandomNonce { .. } // [u8; 24]: AsRef<[u8]> to store it, From<[u8; 24]> to open with a received one
 }
 
 pub mod cipher {

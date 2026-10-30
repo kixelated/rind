@@ -45,8 +45,10 @@ maintainer settles them there, the module quests assume its recommendations.
   in the same PR**, deletes the API it replaces with no shim, and keeps the
   Wycheproof, differential, ctgrind, and zeroing tests passing on the new
   surface.
-- **One release.** No release PR merges while any module quest is open; the
-  release notes carry each quest's migration note.
+- **One release.** Once the first module quest merges, no release PR merges
+  until every one has; the release notes carry each quest's migration note.
+  Releases cut before then, such as the first one MoQ switches to, are
+  unaffected.
 
 ### Where rind keeps its own shape
 
