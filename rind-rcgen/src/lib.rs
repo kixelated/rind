@@ -1,7 +1,7 @@
 //! <h1 align="center">rind-rcgen</h1>
-//! <img width="40%" align="right" src="https://raw.githubusercontent.com/kixelated/rind/main/admin/picture.png">
+//! <img width="40%" align="right" src="https://raw.githubusercontent.com/moq-dev/rind/main/admin/picture.png">
 //!
-//! This crate provides an ECDSA P-256 signing key for [rcgen](https://github.com/rustls/rcgen), backed by [rind](https://github.com/kixelated/rind/), a fork of [Graviola](https://github.com/ctz/graviola/).
+//! This crate provides an ECDSA P-256 signing key for [rcgen](https://github.com/rustls/rcgen), backed by [rind](https://github.com/moq-dev/rind/), a fork of [Graviola](https://github.com/ctz/graviola/).
 //!
 //! Build rcgen with `default-features = false` so it compiles no other crypto backend.
 //! rcgen then needs each certificate's serial number set explicitly.
