@@ -236,6 +236,9 @@ cfg_if::cfg_if! {
         pub(in crate::low) use arm::cpu::{enter_cpu_state, zero_bytes, ct_compare_bytes, leave_cpu_state, missing_cpu_feature};
         pub(crate) use arm::aes::AesKey;
         pub(crate) use arm::aes_ctr;
+        pub(crate) use arm::aesv8_armx::AesHwKey;
+        pub(crate) use arm::cpu::HaveCryptoExt;
+        pub(crate) use arm::ghashv8_armx::GhashTable;
         pub(crate) use arm::chacha20;
         pub(crate) use arm::poly1305;
         pub(crate) use arm::bignum_eq::bignum_eq;
@@ -250,10 +253,9 @@ cfg_if::cfg_if! {
             bignum_montmul, bignum_montmul_p384, bignum_montsqr_p384, bignum_mux,
             bignum_neg_p384, bignum_tomont_p384, p384_montjadd, p384_montjdouble,
         };
-        // rind's portable SHA, since libcrux has no SHA-1 and rind's SHA-256 is
-        // faster than libcrux's.
-        pub(crate) use generic::sha1::sha1_compress_blocks;
-        pub(crate) use generic::sha256::sha256_compress_blocks;
+        // The crypto extension where present, else rind's portable SHA, since
+        // libcrux has no SHA-1 and rind's SHA-256 is faster than libcrux's.
+        pub(crate) use arm::sha_armv4::{sha1_compress_blocks, sha256_compress_blocks};
         pub(crate) use generic::sha512::sha512_compress_blocks;
     } else {
         compile_error!("This crate only supports x86_64, aarch64, or arm");

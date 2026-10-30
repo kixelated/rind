@@ -44,11 +44,12 @@ Targets, refused rather than falling back:
   instead of panicking on its first handshake. Hosts missing a feature are refused, as are
   aarch64 boards without crypto extensions (Raspberry Pi 4, CM4, Zero 2 W),
   which run the armv7 build instead.
-- armv7 (Android and Linux gnueabihf) runs libcrux's verified portable Rust,
-  with P-384 over fiat-crypto's arithmetic. armv7 is a phone client or a small
-  board publishing a few Mbps, so portable AEAD speed is enough; importing
-  aws-lc's armv7 assembly and porting its C was rejected as far more
-  unverified code for throughput the role does not need.
+- armv7 (Android and Linux gnueabihf) runs libcrux's portable Rust, with
+  P-384 over fiat-crypto's arithmetic. Porting aws-lc's C was rejected as far
+  more unverified code for throughput the role does not need. Only its AES,
+  GHASH, and SHA assembly for the ARMv8 crypto extension is imported, for CPUs
+  that have it (maintainer, 2026-10-30, in
+  [moq-dev/rind#84](https://github.com/moq-dev/rind/pull/84)).
 - armv7 runs every operation the `rind-*` adapters and MoQ use, behind the
   same API, so no adapter or MoQ feature carries a per-target exclusion.
   Operations with no consumer, SHA-3 and SHAKE, are not built there

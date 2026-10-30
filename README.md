@@ -50,10 +50,12 @@ but there is also a public API for general-purpose use.
 - `x86_64` requires `aes`, `ssse3`, `popcnt`, `avx`, `avx2`, `adx`, `bmi2`, and `pclmulqdq` CPU features.
   (This is most x86_64 CPUs made since around ~2014.)
 - 32-bit `arm` (tested on `armv7-unknown-linux-gnueabihf`, and built for
-  `armv7-linux-androideabi`) runs [libcrux]'s verified portable Rust instead,
-  with P-384 over [fiat-crypto]'s, and needs no CPU features. An Ed25519
-  public key that is not a curve point is refused when verifying rather than
-  when decoding.
+  `armv7-linux-androideabi`) runs [libcrux]'s portable Rust instead, with
+  P-384 over [fiat-crypto]'s, and needs no CPU features. Where the CPU has the
+  ARMv8 crypto extension, as most 32-bit Android devices do, AES, GHASH, SHA1,
+  and SHA256 run [aws-lc]'s assembly for it instead. An Ed25519 public key
+  that is not a curve point is refused when verifying rather than when
+  decoding.
 
 Every operation panics on a CPU missing one of these. Call `rind::cpu::check()`
 at startup to get an error naming the missing feature instead.
@@ -92,14 +94,19 @@ We are grateful to:
     - SHA-3 Keccak-f
     - Big integer arithmetic
 - [wycheproof]: collated test vectors for all algorithms.
-- [libcrux]: formally verified portable Rust (from HACL\*) for the 32-bit
-  `arm` backend.
+- [libcrux]: portable Rust for the 32-bit `arm` backend, formally verified
+  (from HACL\*, or with hax) except its AES, which libcrux marks
+  pre-verification.
 - [fiat-crypto]: formally verified P-384 field arithmetic for the 32-bit `arm`
   backend.
+- [aws-lc]: AES, GHASH, SHA1, and SHA256 assembly for the 32-bit `arm`
+  backend's ARMv8 crypto extension path. It is not formally verified; it is
+  the code OpenSSL, BoringSSL, and aws-lc run on 32-bit ARM.
 
 [s2n-bignum]: https://github.com/awslabs/s2n-bignum
 [wycheproof]: https://github.com/C2SP/wycheproof
 [libcrux]: https://github.com/cryspen/libcrux
+[aws-lc]: https://github.com/aws/aws-lc
 [fiat-crypto]: https://github.com/mit-plv/fiat-crypto
 [SLOTHY]: https://github.com/slothy-optimizer/slothy
 [performance]: https://jbp.io/rind/
@@ -210,20 +217,26 @@ have some different options depending on CPU features:
 SHA1 and SHA256 have straightforward implementations using hashing intrinsics
 (aka "SHA-NI" on x86_64, "sha" extension on aarch64). Without SHA-NI, x86_64
 selects at runtime an AVX2 message schedule with scalar rounds for SHA1 and
-SHA256, as aws-lc does. 32-bit `arm` always runs the pure
-Rust SHA1, SHA256, and SHA512: libcrux has no SHA1, and the pure Rust SHA256
-is faster than libcrux's.
+SHA256, as aws-lc does. 32-bit `arm` runs aws-lc's SHA1 and SHA256 assembly
+where the CPU has the crypto extension, and the pure Rust SHA1 and SHA256
+otherwise: libcrux has no SHA1, and the pure Rust SHA256 is faster than
+libcrux's. Its SHA512 is always the pure Rust one.
 
 SHA384/SHA512 on x86_64 has an AVX2 by-4 implementation, plus an AVX2 interleaved
 single block implementation.
 
-AES and GHASH always use intrinsics (there are no fallbacks).
+On x86_64 and aarch64, AES and GHASH always use intrinsics (there are no fallbacks).
 
 On x86_64, we have a stitched by-8 AES-CTR and a by-8 GHASH (they are not currently
 interleaved; this is future work.)  There is also an optional AVX-512 by-16 AES-CTR
 and GHASH.  It uses dynamic CPU feature detection, so AVX-512 is not required at runtime.
 
 On aarch64 we have a stitched by-8 AES-CTR and by-8 GHASH (not currently interleaved).
+
+32-bit `arm` decides once per process from `AT_HWCAP2`: with the crypto
+extension, AES and AES-GCM keys use aws-lc's `aesv8-armx` and `ghashv8-armx`
+assembly, composed as aws-lc does on that architecture; without it, libcrux's
+bitsliced AES and AES-GCM.
 
 ## Architecture
 

@@ -18,7 +18,7 @@ cfg-if = "1"
 getrandom = "0.4"
 crabgrind = { version = "0.4", optional = true }
 
-# armv7's backend: libcrux's verified portable Rust, with no C or
+# armv7's backend: libcrux's portable Rust, with no C or
 # intrinsics features enabled, and fiat-crypto's for P-384, which libcrux
 # exports only as ECDH.
 [target.'cfg(target_arch = "arm")'.dependencies]
@@ -31,6 +31,10 @@ libcrux-ml-kem = { version = "0.0.11", default-features = false, features = ["ml
 libcrux-p256 = { version = "0.0.9", features = ["expose-hacl"] }
 libcrux-poly1305 = { version = "0.0.7", features = ["expose-hacl"] }
 libcrux-traits = "0.0.9"
+
+# Reads the AArch32 crypto extension's HWCAP2 bits.
+[target.'cfg(all(target_arch = "arm", any(target_os = "linux", target_os = "android")))'.dependencies]
+libc = { version = "0.2", default-features = false }
 
 [dev-dependencies]
 aws-lc-rs = { version = "1.16", default-features = false, features = ["alloc", "prebuilt-nasm", "non-fips"] }
