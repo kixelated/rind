@@ -2,7 +2,10 @@ use std::fs::File;
 use std::io::BufReader;
 
 use rind::Error;
-use rind::aead::{AesGcm, ChaCha20Poly1305, XChaCha20Poly1305};
+use rind::aead::{
+    AES_128_GCM, AES_256_GCM, Aad, CHACHA20_POLY1305, LessSafeKey, Nonce, RandomNonce,
+    RandomizedNonceKey, UnboundKey,
+};
 use rind::cipher::ChaCha20;
 use rind::hashing::hkdf::Prk;
 use rind::hashing::hmac::Hmac;
@@ -562,25 +565,30 @@ fn test_aes_gcm() {
         for test in group.tests {
             summary.start(&test);
 
-            let ctx = match AesGcm::new(&test.key) {
-                Ok(ctx) => ctx,
-                Err(Error::WrongLength) if test.key.len() == 24 => {
+            let algorithm = match test.key.len() {
+                16 => &AES_128_GCM,
+                32 => &AES_256_GCM,
+                24 => {
                     summary.skipped("aes-192 not supported");
                     continue;
                 }
-                Err(e) => panic!("key refused: {e:?}"),
+                len => panic!("unexpected key length {len}"),
             };
-            let nonce = match test.iv.len() {
-                12 => test.iv.try_into().unwrap(),
-                _ => {
+            let ctx = LessSafeKey::new(UnboundKey::new(algorithm, &test.key).unwrap());
+            let iv: [u8; 12] = match test.iv.try_into() {
+                Ok(iv) => iv,
+                Err(_) => {
                     summary.skipped("gcm nonces must be 96 bits");
                     continue;
                 }
             };
+            let nonce = || Nonce::assume_unique_for_key(iv);
 
             // try decrypt
             let mut msg = test.ct.clone();
-            let result = ctx.decrypt(&nonce, &test.aad, &mut msg, &test.tag);
+            let result = ctx
+                .open_in_place_separate_tag(nonce(), Aad::from(&test.aad), &test.tag, &mut msg)
+                .map(|_| ());
 
             match (test.result, &result) {
                 (ExpectedResult::Valid, Ok(())) => {
@@ -592,13 +600,13 @@ fn test_aes_gcm() {
 
             // and encrypt
             let mut ct = test.msg.clone();
-            let mut tag = [0u8; 16];
-
-            ctx.encrypt(&nonce, &test.aad, &mut ct, &mut tag).unwrap();
+            let tag = ctx
+                .seal_in_place_separate_tag(nonce(), Aad::from(&test.aad), &mut ct)
+                .unwrap();
 
             if test.result == ExpectedResult::Valid {
                 assert_eq!(ct, test.ct);
-                assert_eq!(&tag, &test.tag[..]);
+                assert_eq!(tag.as_ref(), &test.tag[..]);
             }
         }
     }
@@ -619,24 +627,29 @@ fn test_aes_gmac() {
         for test in group.tests {
             summary.start(&test);
 
-            let ctx = match AesGcm::new(&test.key) {
-                Ok(ctx) => ctx,
-                Err(Error::WrongLength) if test.key.len() == 24 => {
+            let algorithm = match test.key.len() {
+                16 => &AES_128_GCM,
+                32 => &AES_256_GCM,
+                24 => {
                     summary.skipped("aes-192 not supported");
                     continue;
                 }
-                Err(e) => panic!("key refused: {e:?}"),
+                len => panic!("unexpected key length {len}"),
             };
-            let nonce = match test.iv.len() {
-                12 => test.iv.try_into().unwrap(),
-                _ => {
+            let ctx = LessSafeKey::new(UnboundKey::new(algorithm, &test.key).unwrap());
+            let iv: [u8; 12] = match test.iv.try_into() {
+                Ok(iv) => iv,
+                Err(_) => {
                     summary.skipped("gcm nonces must be 96 bits");
                     continue;
                 }
             };
+            let nonce = || Nonce::assume_unique_for_key(iv);
 
             // try decrypt
-            let result = ctx.decrypt(&nonce, &test.msg, &mut [], &test.tag);
+            let result = ctx
+                .open_in_place_separate_tag(nonce(), Aad::from(&test.msg), &test.tag, &mut [])
+                .map(|_| ());
 
             match (test.result, &result) {
                 (ExpectedResult::Valid, Ok(())) => {}
@@ -645,12 +658,12 @@ fn test_aes_gmac() {
             }
 
             // and encrypt
-            let mut tag = [0u8; 16];
-
-            ctx.encrypt(&nonce, &test.msg, &mut [], &mut tag).unwrap();
+            let tag = ctx
+                .seal_in_place_separate_tag(nonce(), Aad::from(&test.msg), &mut [])
+                .unwrap();
 
             if test.result == ExpectedResult::Valid {
-                assert_eq!(&tag, &test.tag[..]);
+                assert_eq!(tag.as_ref(), &test.tag[..]);
             }
         }
     }
@@ -870,12 +883,15 @@ fn test_chacha20poly1305() {
                 continue;
             }
 
-            let ctx = ChaCha20Poly1305::new(test.key.try_into().unwrap());
-            let nonce = test.iv.try_into().unwrap();
+            let ctx = LessSafeKey::new(UnboundKey::new(&CHACHA20_POLY1305, &test.key).unwrap());
+            let iv: [u8; 12] = test.iv.try_into().unwrap();
+            let nonce = || Nonce::assume_unique_for_key(iv);
 
             // try decrypt
             let mut msg = test.ct.clone();
-            let result = ctx.decrypt(&nonce, &test.aad, &mut msg, &test.tag);
+            let result = ctx
+                .open_in_place_separate_tag(nonce(), Aad::from(&test.aad), &test.tag, &mut msg)
+                .map(|_| ());
 
             match (test.result, &result) {
                 (ExpectedResult::Valid, Ok(())) => {
@@ -887,13 +903,13 @@ fn test_chacha20poly1305() {
 
             // and encrypt
             let mut ct = test.msg.clone();
-            let mut tag = [0u8; 16];
-
-            ctx.encrypt(&nonce, &test.aad, &mut ct, &mut tag).unwrap();
+            let tag = ctx
+                .seal_in_place_separate_tag(nonce(), Aad::from(&test.aad), &mut ct)
+                .unwrap();
 
             if test.result == ExpectedResult::Valid {
                 assert_eq!(ct, test.ct);
-                assert_eq!(&tag, &test.tag[..]);
+                assert_eq!(tag.as_ref(), &test.tag[..]);
             }
         }
     }
@@ -956,31 +972,34 @@ fn test_xchacha20poly1305() {
                 continue;
             }
 
-            let ctx = XChaCha20Poly1305::new(test.key.try_into().unwrap());
-            let nonce = test.iv.try_into().unwrap();
+            let ctx = RandomizedNonceKey::new(&test.key.try_into().unwrap());
+            let iv: [u8; 24] = test.iv.try_into().unwrap();
 
             // try decrypt
-            let mut msg = test.ct.clone();
-            let result = ctx.decrypt(&nonce, &test.aad, &mut msg, &test.tag);
+            let mut sealed = [&test.ct[..], &test.tag[..]].concat();
+            let result = ctx
+                .open_in_place(RandomNonce::from(iv), Aad::from(&test.aad), &mut sealed)
+                .map(|msg| msg.to_vec());
 
             match (test.result, &result) {
-                (ExpectedResult::Valid, Ok(())) => {
-                    assert_eq!(msg, test.msg);
+                (ExpectedResult::Valid, Ok(msg)) => {
+                    assert_eq!(msg, &test.msg);
                 }
                 (ExpectedResult::Invalid, Err(Error::DecryptFailed)) => {}
                 _ => panic!("expected {:?} got {:?}", test.result, result.err()),
             }
 
-            // and encrypt
-            let mut ct = test.msg.clone();
-            let mut tag = [0u8; 16];
-
-            ctx.encrypt(&nonce, &test.aad, &mut ct, &mut tag).unwrap();
-
-            if test.result == ExpectedResult::Valid {
-                assert_eq!(ct, test.ct);
-                assert_eq!(&tag, &test.tag[..]);
-            }
+            // Sealing picks its own nonce, so check it round trips; the unit
+            // tests check a sealed vector.
+            let mut sealed = test.msg.clone();
+            let nonce = ctx
+                .seal_in_place_append_tag(Aad::from(&test.aad), &mut sealed)
+                .unwrap();
+            assert_eq!(
+                ctx.open_in_place(nonce, Aad::from(&test.aad), &mut sealed)
+                    .unwrap(),
+                &test.msg[..]
+            );
         }
     }
 }

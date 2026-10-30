@@ -110,7 +110,6 @@ onto this shape.
 
 ## Required
 
-- [AEAD keys bound to an algorithm](/quest/m1/moq/api/aead.md) - `aead` and `cipher` keys take an algorithm constant, with `LessSafeKey` and a randomized-nonce key
 - [Nameable key errors](/quest/m1/moq/api/error.md) - every `rind::Error` payload is a type a caller can name
 - [Digest constants](/quest/m1/moq/api/digest.md) - `digest::SHA256` and friends replace the `Hash` trait and its duplicate contexts
 - [Reusable HMAC keys](/quest/m1/moq/api/hmac.md) - an `hmac::Key` built once, with contexts, `sign`, and `verify`
