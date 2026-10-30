@@ -37,9 +37,7 @@ if __name__ == "__main__":
         ) as output,
     ):
         d = RustDriver(output, Architecture_amd64)
-        d.add_const_symbol("Ledwards25519_scalarmulbase_0g")
-        d.add_const_symbol("Ledwards25519_scalarmulbase_251g")
-        d.add_const_symbol("Ledwards25519_scalarmulbase_gtable")
+        d.add_const_symbol("edwards25519_scalarmulbase_constant")
         d.emit_rust_function(
             "edwards25519_scalarmulbase",
             parameter_map=[
@@ -60,7 +58,7 @@ if __name__ == "__main__":
         ) as output,
     ):
         d = RustDriver(output, Architecture_amd64)
-        d.add_const_symbol("Ledwards25519_scalarmuldouble_table")
+        d.add_const_symbol("edwards25519_scalarmuldouble_constant")
         d.emit_rust_function(
             "edwards25519_scalarmuldouble",
             parameter_map=[

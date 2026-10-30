@@ -707,7 +707,7 @@ pub(crate) fn edwards25519_scalarmuldouble(
         Q!("    xor             " "r14d, r14d"),
         Q!("    xor             " "r15d, r15d"),
 
-        Q!("    lea             " "rbp, [rip + {Ledwards25519_scalarmuldouble_table}]"),
+        Q!("    lea             " "rbp, [rip + {edwards25519_scalarmuldouble_constant}]"),
 
         Q!("    cmp             " bf!() ", 1"),
         Q!("    mov             " "rsi, [rbp]"),
@@ -1343,7 +1343,7 @@ pub(crate) fn edwards25519_scalarmuldouble(
         Q!("    xor             " "r14d, r14d"),
         Q!("    xor             " "r15d, r15d"),
 
-        Q!("    lea             " "rbp, [rip + {Ledwards25519_scalarmuldouble_table}]"),
+        Q!("    lea             " "rbp, [rip + {edwards25519_scalarmuldouble_constant}]"),
 
         Q!("    cmp             " bf!() ", 1"),
         Q!("    mov             " "rsi, [rbp]"),
@@ -3533,7 +3533,7 @@ pub(crate) fn edwards25519_scalarmuldouble(
         inout("rsi") scalar.as_ptr() => _,
         inout("rdx") point.as_ptr() => _,
         inout("rcx") bscalar.as_ptr() => _,
-        Ledwards25519_scalarmuldouble_table = sym Ledwards25519_scalarmuldouble_table,
+        edwards25519_scalarmuldouble_constant = sym edwards25519_scalarmuldouble_constant,
         // clobbers
         out("r10") _,
         out("r11") _,
@@ -3549,17 +3549,13 @@ pub(crate) fn edwards25519_scalarmuldouble(
 }
 
 // ****************************************************************************
-// The precomputed data (all read-only). This is currently part of the same
-// text section, which gives position-independent code with simple PC-relative
-// addressing. However it could be put in a separate section via something like
-//
-// .section .rodata
+// The precomputed data (all read-only).
 // ****************************************************************************
 
 // Precomputed table of multiples of generator for edwards25519
 // all in precomputed extended-projective (y-x,x+y,2*d*x*y) triples.
 
-static Ledwards25519_scalarmuldouble_table: [u64; 96] = [
+static edwards25519_scalarmuldouble_constant: [u64; 96] = [
     // 1 * G
     0x9d103905d740913e,
     0xfd399f05d140beb3,
