@@ -62,10 +62,8 @@ Record out-of-scope findings as follow-up quests with `/quest-plan`, not GitHub 
 
 # Upstream
 
-rind is a GitHub fork of [ctz/graviola](https://github.com/ctz/graviola) and keeps its history, so upstream changes merge in and rind's can be offered back.
-Merge upstream with a merge commit, never a rebase.
-The gate squashes, so an upstream merge lands through the admin bypass once `just ci` passes on it.
-Open no PRs against graviola until rind carries MoQ; then revisit.
+rind began as a fork of [ctz/graviola](https://github.com/ctz/graviola) and no longer tracks it: graviola's changes are not merged in, and rind is reshaped freely.
+Report bugs that also affect graviola, or any other source rind imports, upstream; never block on the fix.
 Each `Written for Graviola by ...` header is attribution; keep it on files that carry one.
 
 # Releases

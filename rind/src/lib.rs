@@ -218,19 +218,33 @@ pub mod hashing {
 }
 
 /// Authenticated encryption.
-pub mod aead {
-    pub use super::mid::aes_gcm::AesGcm;
-    pub use super::mid::chacha20poly1305::ChaCha20Poly1305;
-    pub use super::mid::xchacha20poly1305::XChaCha20Poly1305;
-}
+///
+/// A key is built from an algorithm constant and key bytes, then bound to a
+/// nonce policy: [`aead::LessSafeKey`] seals with the caller's nonces, which
+/// must never repeat under one key, and [`aead::RandomizedNonceKey`] picks its
+/// own.
+///
+/// ```
+/// use rind::aead::*;
+///
+/// let key = LessSafeKey::new(UnboundKey::new(&AES_128_GCM, &[0x42; 16]).unwrap());
+///
+/// let mut in_out = b"hello".to_vec();
+/// let nonce = || Nonce::assume_unique_for_key([0; 12]);
+/// key.seal_in_place_append_tag(nonce(), Aad::from(b"header"), &mut in_out)
+///     .unwrap();
+///
+/// let plaintext = key
+///     .open_in_place(nonce(), Aad::from(b"header"), &mut in_out)
+///     .unwrap();
+/// assert_eq!(plaintext, b"hello");
+/// ```
+pub mod aead;
 
 /// Unauthenticated ciphers, for protocols that specify one alongside their own integrity protection.
 ///
 /// Prefer [`aead`] unless a protocol requires one of these.
-pub mod cipher {
-    pub use super::mid::aes::{Aes, AesCtr};
-    pub use super::mid::chacha20::ChaCha20;
-}
+pub mod cipher;
 
 /// CPU support.
 ///

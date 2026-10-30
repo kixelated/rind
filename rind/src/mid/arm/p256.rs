@@ -98,7 +98,7 @@ impl PrivateKey {
         let mut secret = SharedSecret([0u8; 32]);
         secret.0.copy_from_slice(&point[..32]);
         low::zeroise(&mut point);
-        match ok {
+        match low::ct::into_public(ok) {
             true => Ok(secret),
             false => Err(Error::NotOnCurve),
         }

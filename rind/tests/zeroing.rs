@@ -148,40 +148,27 @@ fn hmac() {
 }
 
 #[test]
-fn aes_gcm() {
-    use rind::aead::AesGcm;
+fn aead() {
+    use rind::aead::{
+        AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305, LessSafeKey, RandomizedNonceKey, UnboundKey,
+    };
 
-    let aes128 = AesGcm::new(&[0xffu8; 16]).unwrap();
-    check_zeroed_on_drop(Box::pin(aes128));
-
-    let aes256 = AesGcm::new(&[0xffu8; 32]).unwrap();
-    check_zeroed_on_drop(Box::pin(aes256));
+    for algorithm in [&AES_128_GCM, &AES_256_GCM, &CHACHA20_POLY1305] {
+        let key = UnboundKey::new(algorithm, &[0xffu8; 32][..algorithm.key_len()]).unwrap();
+        check_zeroed_on_drop(Box::pin(LessSafeKey::new(key)));
+    }
+    check_zeroed_on_drop(Box::pin(RandomizedNonceKey::new(&[0xffu8; 32])));
 }
 
 #[test]
 fn cipher() {
-    use rind::cipher::{Aes, AesCtr, ChaCha20};
-    for len in [16, 32] {
-        check_zeroed_on_drop(Box::pin(Aes::new(&[0xffu8; 32][..len]).unwrap()));
-        check_zeroed_on_drop(Box::pin(AesCtr::new(&[0xffu8; 32][..len]).unwrap()));
+    use rind::cipher::{AES_128, AES_256, Aes, AesCtr, ChaCha20};
+    for (algorithm, len) in [(&AES_128, 16), (&AES_256, 32)] {
+        let key = &[0xffu8; 32][..len];
+        check_zeroed_on_drop(Box::pin(Aes::new(algorithm, key).unwrap()));
+        check_zeroed_on_drop(Box::pin(AesCtr::new(algorithm, key).unwrap()));
     }
     check_zeroed_on_drop(Box::pin(ChaCha20::new([0xffu8; 32])));
-}
-
-#[test]
-fn chacha20_poly1305() {
-    use rind::aead::ChaCha20Poly1305;
-
-    let chacha = ChaCha20Poly1305::new([0xffu8; 32]);
-    check_zeroed_on_drop(Box::pin(chacha));
-}
-
-#[test]
-fn xchacha20_poly1305() {
-    use rind::aead::XChaCha20Poly1305;
-
-    let xchacha = XChaCha20Poly1305::new([0xffu8; 32]);
-    check_zeroed_on_drop(Box::pin(xchacha));
 }
 
 fn check_zeroed_on_drop<T: Unpin>(value: Pin<Box<T>>) {

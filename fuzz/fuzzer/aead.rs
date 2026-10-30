@@ -3,77 +3,74 @@
 use libfuzzer_sys::{arbitrary, arbitrary::Arbitrary, fuzz_target};
 
 fuzz_target!(|op: Operation| {
-    match op {
+    let (ours, theirs, key, nonce, aad, plain) = match &op {
         Operation::ChaCha20Poly1305 {
             key,
             nonce,
             aad,
             plain,
-        } => {
-            let right = baseline_encrypt(
-                &aws_lc_rs::aead::CHACHA20_POLY1305,
-                &key,
-                &nonce,
-                &aad,
-                &plain,
-            );
-            let left = {
-                let k = rind::aead::ChaCha20Poly1305::new(key);
-                let mut cipher = plain.clone();
-                let mut tag = [0u8; 16];
-                k.encrypt(&nonce, &aad, &mut cipher, &mut tag).unwrap();
-
-                let mut roundtrip = cipher.clone();
-                k.decrypt(&nonce, &aad, &mut roundtrip, &tag).unwrap();
-                assert_eq!(roundtrip, plain);
-                (cipher, tag)
-            };
-
-            assert_eq!(left, right);
-        }
+        } => (
+            &rind::aead::CHACHA20_POLY1305,
+            &aws_lc_rs::aead::CHACHA20_POLY1305,
+            &key[..],
+            nonce,
+            aad,
+            plain,
+        ),
         Operation::Aes128Gcm {
             key,
             nonce,
             aad,
             plain,
-        } => {
-            let right = baseline_encrypt(&aws_lc_rs::aead::AES_128_GCM, &key, &nonce, &aad, &plain);
-            let left = {
-                let k = rind::aead::AesGcm::new(&key).unwrap();
-                let mut cipher = plain.clone();
-                let mut tag = [0u8; 16];
-                k.encrypt(&nonce, &aad, &mut cipher, &mut tag).unwrap();
-
-                let mut roundtrip = cipher.clone();
-                k.decrypt(&nonce, &aad, &mut roundtrip, &tag).unwrap();
-                assert_eq!(roundtrip, plain);
-                (cipher, tag)
-            };
-
-            assert_eq!(left, right);
-        }
+        } => (
+            &rind::aead::AES_128_GCM,
+            &aws_lc_rs::aead::AES_128_GCM,
+            &key[..],
+            nonce,
+            aad,
+            plain,
+        ),
         Operation::Aes256Gcm {
             key,
             nonce,
             aad,
             plain,
-        } => {
-            let right = baseline_encrypt(&aws_lc_rs::aead::AES_256_GCM, &key, &nonce, &aad, &plain);
-            let left = {
-                let k = rind::aead::AesGcm::new(&key).unwrap();
-                let mut cipher = plain.clone();
-                let mut tag = [0u8; 16];
-                k.encrypt(&nonce, &aad, &mut cipher, &mut tag).unwrap();
+        } => (
+            &rind::aead::AES_256_GCM,
+            &aws_lc_rs::aead::AES_256_GCM,
+            &key[..],
+            nonce,
+            aad,
+            plain,
+        ),
+    };
 
-                let mut roundtrip = cipher.clone();
-                k.decrypt(&nonce, &aad, &mut roundtrip, &tag).unwrap();
-                assert_eq!(roundtrip, plain);
-                (cipher, tag)
-            };
+    let right = baseline_encrypt(theirs, key, nonce, aad, plain);
+    let left = {
+        use rind::aead::{Aad, LessSafeKey, Nonce, UnboundKey};
+        let k = LessSafeKey::new(UnboundKey::new(ours, key).unwrap());
+        let mut cipher = plain.clone();
+        let tag = k
+            .seal_in_place_separate_tag(
+                Nonce::assume_unique_for_key(*nonce),
+                Aad::from(aad),
+                &mut cipher,
+            )
+            .unwrap();
 
-            assert_eq!(left, right);
-        }
-    }
+        let mut roundtrip = cipher.clone();
+        k.open_in_place_separate_tag(
+            Nonce::assume_unique_for_key(*nonce),
+            Aad::from(aad),
+            tag.as_ref(),
+            &mut roundtrip,
+        )
+        .unwrap();
+        assert_eq!(&roundtrip, plain);
+        (cipher, tag.as_ref().try_into().unwrap())
+    };
+
+    assert_eq!(left, right);
 });
 
 fn baseline_encrypt(

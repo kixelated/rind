@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 
 use crate::Error;
+use crate::cipher::Algorithm;
 use crate::low::{self, AesKey, Entry, zeroise};
 
 /// An AES key that encrypts single blocks.
@@ -11,11 +12,13 @@ use crate::low::{self, AesKey, Entry, zeroise};
 pub struct Aes(AesKey);
 
 impl Aes {
-    /// Expands a 16- or 32-byte key into an AES-128 or AES-256 key.
-    ///
-    /// Any other length, including AES-192's 24 bytes, is an error.
-    pub fn new(key: &[u8]) -> Result<Self, Error> {
+    /// Expands `key` for `algorithm`, failing with [`Error::WrongLength`] if
+    /// it is not that algorithm's key length.
+    pub fn new(algorithm: &'static Algorithm, key: &[u8]) -> Result<Self, Error> {
         let _entry = Entry::new_secret();
+        if key.len() != algorithm.key_len {
+            return Err(Error::WrongLength);
+        }
         expand_key(key).map(Self)
     }
 
@@ -36,11 +39,13 @@ impl Aes {
 pub struct AesCtr(AesKey);
 
 impl AesCtr {
-    /// Expands a 16- or 32-byte key into an AES-128 or AES-256 key.
-    ///
-    /// Any other length, including AES-192's 24 bytes, is an error.
-    pub fn new(key: &[u8]) -> Result<Self, Error> {
+    /// Expands `key` for `algorithm`, failing with [`Error::WrongLength`] if
+    /// it is not that algorithm's key length.
+    pub fn new(algorithm: &'static Algorithm, key: &[u8]) -> Result<Self, Error> {
         let _entry = Entry::new_secret();
+        if key.len() != algorithm.key_len {
+            return Err(Error::WrongLength);
+        }
         expand_key(key).map(Self)
     }
 
@@ -123,17 +128,30 @@ pub(super) fn expand_key(key: &[u8]) -> Result<AesKey, Error> {
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
-    use crate::mid::aes_gcm::AesGcm;
+    use crate::cipher::{AES_128, AES_256};
     use crate::test::*;
 
+    fn algorithm(key: &[u8]) -> &'static Algorithm {
+        if key.len() == 16 { &AES_128 } else { &AES_256 }
+    }
+
     #[test]
-    fn rejects_unsupported_key_lengths() {
+    fn key_length_must_match_algorithm() {
         let key = [0u8; 33];
-        for len in 0..=key.len() {
-            let supported = len == 16 || len == 32;
-            assert_eq!(Aes::new(&key[..len]).is_ok(), supported, "len {len}");
-            assert_eq!(AesCtr::new(&key[..len]).is_ok(), supported, "len {len}");
-            assert_eq!(AesGcm::new(&key[..len]).is_ok(), supported, "len {len}");
+        for algorithm in [&AES_128, &AES_256] {
+            for len in 0..=key.len() {
+                let supported = len == algorithm.key_len;
+                assert_eq!(
+                    Aes::new(algorithm, &key[..len]).is_ok(),
+                    supported,
+                    "len {len}"
+                );
+                assert_eq!(
+                    AesCtr::new(algorithm, &key[..len]).is_ok(),
+                    supported,
+                    "len {len}"
+                );
+            }
         }
     }
 
@@ -154,7 +172,7 @@ mod tests {
                 if self.mct && self.decrypt {
                     return;
                 }
-                let aes = Aes::new(&self.key).unwrap();
+                let aes = Aes::new(algorithm(&self.key), &self.key).unwrap();
                 let mut block: [u8; 16] = self.pt[..].try_into().unwrap();
                 for _ in 0..if self.mct { 1000 } else { 1 } {
                     aes.encrypt_block(&mut block);
@@ -219,7 +237,7 @@ mod tests {
                 "2ec0d8356a",
             ),
         ] {
-            let aes = Aes::new(&hex::decode(key).unwrap()).unwrap();
+            let aes = Aes::new(&AES_128, &hex::decode(key).unwrap()).unwrap();
             let mut block: [u8; 16] = hex::decode(sample).unwrap().try_into().unwrap();
             aes.encrypt_block(&mut block);
             assert_eq!(hex::encode(&block[..5]), mask);
@@ -241,7 +259,8 @@ mod tests {
                 "eb6c52821d0bbbf7ce7594462aca4faab407df866569fd07f48cc0b583d6071f1ec0e6b8",
             ),
         ] {
-            let ctr = AesCtr::new(&hex::decode(key).unwrap()).unwrap();
+            let key = hex::decode(key).unwrap();
+            let ctr = AesCtr::new(algorithm(&key), &key).unwrap();
             let nonce: [u8; 12] = hex::decode(nonce).unwrap().try_into().unwrap();
             let mut buf: Vec<u8> = (0u8..36).collect();
             ctr.apply_keystream(&nonce, 1, &mut buf).unwrap();
@@ -265,7 +284,8 @@ mod tests {
                 "cea518c90fd91ced9cbb18c078a547113dbc4814f4da5f00a08772b63c6a046d6eb246913062a16891433e97dd01a57f",
             ),
         ] {
-            let ctr = AesCtr::new(&hex::decode(key).unwrap()).unwrap();
+            let key = hex::decode(key).unwrap();
+            let ctr = AesCtr::new(algorithm(&key), &key).unwrap();
             let iv = hex::decode("f0f1f2f3f4f5f6f7f8f9fafbfcfd0000").unwrap();
             let (nonce, counter) = iv.split_at(12);
             let mut keystream = vec![0u8; 65282 * 16];
@@ -283,13 +303,15 @@ mod tests {
     #[test]
     fn aes_ctr_refuses_counter_wrap() {
         let key = [0x42u8; 16];
-        let ctr = AesCtr::new(&key).unwrap();
+        let ctr = AesCtr::new(&AES_128, &key).unwrap();
         let nonce = [0x24u8; 12];
 
         let mut last_block = [0u8; 16];
         last_block[..12].copy_from_slice(&nonce);
         last_block[12..].copy_from_slice(&[0xff; 4]);
-        Aes::new(&key).unwrap().encrypt_block(&mut last_block);
+        Aes::new(&AES_128, &key)
+            .unwrap()
+            .encrypt_block(&mut last_block);
 
         // the final counter value is usable, without carrying into the nonce
         for (counter, len) in [(u32::MAX, 16), (u32::MAX - 7, 128), (u32::MAX - 8, 129)] {

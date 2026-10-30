@@ -38,3 +38,38 @@ jobs:
 
       - name: ctgrind tests
         run: admin/ctgrind ${{ matrix.build }}
+
+  # The arm64 runner executes 32-bit ARM natively, so an armhf valgrind checks
+  # the armv7 build (libcrux and fiat-crypto) without emulation.
+  armv7:
+    name: armv7 (${{ matrix.build || 'debug' }})
+    strategy:
+      matrix:
+        build: ["", --release]
+
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/vectors
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          targets: armv7-unknown-linux-gnueabihf
+
+      - name: Install armhf toolchain and valgrind
+        run: |
+          sudo dpkg --add-architecture armhf
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6:armhf valgrind:armhf
+
+      - name: ctgrind tests
+        run: admin/ctgrind --target armv7-unknown-linux-gnueabihf ${{ matrix.build }}
+        env:
+          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
+          CC_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-gcc
+          CXX_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-g++

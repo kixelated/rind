@@ -2,7 +2,8 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use std::fmt;
 use std::sync::Arc;
 
-use rind::{aead, random};
+use rind::aead::{Aad, RandomNonce, RandomizedNonceKey};
+use rind::random;
 use rustls::crypto::GetRandomFailed;
 use rustls::server::ProducesTickets;
 use rustls::{Error, TicketRotator};
@@ -29,7 +30,7 @@ fn make_ticket_generator() -> Result<Box<dyn ProducesTickets>, GetRandomFailed> 
 }
 
 struct XChaCha20Ticketer {
-    key: aead::XChaCha20Poly1305,
+    key: RandomizedNonceKey,
     key_name: [u8; 16],
     lifetime: u32,
     maximum_ciphertext_len: AtomicUsize,
@@ -43,7 +44,7 @@ impl XChaCha20Ticketer {
         random::fill(&mut key).map_err(|_| GetRandomFailed)?;
         random::fill(&mut key_name).map_err(|_| GetRandomFailed)?;
 
-        let key = aead::XChaCha20Poly1305::new(key);
+        let key = RandomizedNonceKey::new(&key);
 
         Ok(Self {
             key,
@@ -64,9 +65,6 @@ impl ProducesTickets for XChaCha20Ticketer {
     }
 
     fn encrypt(&self, message: &[u8]) -> Option<Vec<u8>> {
-        let mut nonce = [0u8; 24];
-        random::fill(&mut nonce).ok()?;
-
         // wire format is:
         // - key_name [u8; 16]
         // - nonce [u8; 24]
@@ -75,22 +73,16 @@ impl ProducesTickets for XChaCha20Ticketer {
         //
         // aad is key_name
 
-        let mut tag = [0u8; 16];
-        let mut res =
-            Vec::with_capacity(self.key_name.len() + nonce.len() + message.len() + tag.len());
-        res.extend(&self.key_name);
-        res.extend(&nonce);
-        res.extend(message);
-
-        self.key
-            .encrypt(
-                &nonce,
-                &self.key_name,
-                &mut res[self.key_name.len() + nonce.len()..],
-                &mut tag,
-            )
+        let mut sealed = message.to_vec();
+        let nonce = self
+            .key
+            .seal_in_place_append_tag(Aad::from(self.key_name), &mut sealed)
             .ok()?;
-        res.extend(tag);
+
+        let mut res = Vec::with_capacity(self.key_name.len() + NONCE_LEN + sealed.len());
+        res.extend(&self.key_name);
+        res.extend(nonce.as_ref());
+        res.extend(sealed);
 
         self.maximum_ciphertext_len
             .fetch_max(res.len(), Ordering::SeqCst);
@@ -105,7 +97,7 @@ impl ProducesTickets for XChaCha20Ticketer {
 
         let plain_len = ciphertext
             .len()
-            .saturating_sub(self.key_name.len() + 24 + 16);
+            .saturating_sub(self.key_name.len() + NONCE_LEN + TAG_LEN);
 
         if plain_len == 0 {
             return None;
@@ -118,14 +110,14 @@ impl ProducesTickets for XChaCha20Ticketer {
             return None;
         }
 
-        let (nonce, rest) = rest.split_at(24);
-        let nonce = nonce.try_into().unwrap();
-        let (plain, alleged_tag) = rest.split_at(plain_len);
-        let mut plain = plain.to_vec();
+        let (nonce, sealed) = rest.split_at(NONCE_LEN);
+        let nonce = RandomNonce::from(<[u8; NONCE_LEN]>::try_from(nonce).unwrap());
+        let mut plain = sealed.to_vec();
 
         self.key
-            .decrypt(&nonce, alleged_key_name, &mut plain, alleged_tag)
+            .open_in_place(nonce, Aad::from(alleged_key_name), &mut plain)
             .ok()?;
+        plain.truncate(plain_len);
         Some(plain)
     }
 }
@@ -139,6 +131,8 @@ impl fmt::Debug for XChaCha20Ticketer {
 }
 
 const ONE_TICKET_LIFETIME_SECS: u32 = 6 * 60 * 60;
+const NONCE_LEN: usize = 24;
+const TAG_LEN: usize = 16;
 
 #[cfg(test)]
 mod tests {
