@@ -166,31 +166,61 @@ pub mod signing {
 }
 
 /// Cryptographic hash functions.
-pub mod hashing {
-    pub use super::high::hash::{
-        Hash, HashContext, HashOutput, LegacySha1, Sha256, Sha384, Sha512, SignatureHash,
+///
+/// ```
+/// use rind::digest;
+///
+/// let mut ctx = digest::Context::new(&digest::SHA256);
+/// ctx.update(b"hello, ");
+/// ctx.update(b"world");
+/// assert_eq!(
+///     ctx.finish().as_ref(),
+///     digest::digest(&digest::SHA256, b"hello, world").as_ref(),
+/// );
+/// ```
+pub mod digest {
+    pub use super::high::digest::{
+        Algorithm, Context, Digest, SHA1_FOR_LEGACY_USE_ONLY, SHA256, SHA384, SHA512, digest,
     };
+}
+
+/// HMAC and HKDF, and the hash functions that parameterize them and signatures.
+///
+/// To hash a message, use [`digest`].
+pub mod hashing {
+    pub use super::high::hash::{LegacySha1, Sha256, Sha384, Sha512};
     pub use super::high::hkdf;
     pub use super::high::hmac;
-    pub use super::mid::sha2;
-    #[cfg(not(target_arch = "arm"))]
-    pub use super::mid::sha3;
 }
 
 /// Authenticated encryption.
-pub mod aead {
-    pub use super::mid::aes_gcm::AesGcm;
-    pub use super::mid::chacha20poly1305::ChaCha20Poly1305;
-    pub use super::mid::xchacha20poly1305::XChaCha20Poly1305;
-}
+///
+/// A key is built from an algorithm constant and key bytes, then bound to a
+/// nonce policy: [`aead::LessSafeKey`] seals with the caller's nonces, which
+/// must never repeat under one key, and [`aead::RandomizedNonceKey`] picks its
+/// own.
+///
+/// ```
+/// use rind::aead::*;
+///
+/// let key = LessSafeKey::new(UnboundKey::new(&AES_128_GCM, &[0x42; 16]).unwrap());
+///
+/// let mut in_out = b"hello".to_vec();
+/// let nonce = || Nonce::assume_unique_for_key([0; 12]);
+/// key.seal_in_place_append_tag(nonce(), Aad::from(b"header"), &mut in_out)
+///     .unwrap();
+///
+/// let plaintext = key
+///     .open_in_place(nonce(), Aad::from(b"header"), &mut in_out)
+///     .unwrap();
+/// assert_eq!(plaintext, b"hello");
+/// ```
+pub mod aead;
 
 /// Unauthenticated ciphers, for protocols that specify one alongside their own integrity protection.
 ///
 /// Prefer [`aead`] unless a protocol requires one of these.
-pub mod cipher {
-    pub use super::mid::aes::{Aes, AesCtr};
-    pub use super::mid::chacha20::ChaCha20;
-}
+pub mod cipher;
 
 /// CPU support.
 ///

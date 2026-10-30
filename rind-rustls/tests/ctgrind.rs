@@ -10,6 +10,7 @@ use crabgrind::memcheck::{self, MemState};
 use crabgrind::valgrind::{self, RunningMode};
 use rustls::crypto::aws_lc_rs;
 use rustls::crypto::cipher::{AeadKey, InboundOpaqueMessage, Iv, OutboundPlainMessage};
+use rustls::crypto::tls13::OkmBlock;
 use rustls::pki_types::PrivateKeyDer;
 use rustls::pki_types::pem::PemObject;
 use rustls::{ContentType, ProtocolVersion, SupportedCipherSuite};
@@ -118,11 +119,31 @@ fn tls12_prf() {
     }
 }
 
+/// A record key of `len` bytes. rustls builds keys shorter than 32 bytes only
+/// through its key schedule, so expand one with a TLS 1.3 AEAD of that length.
+fn record_key(len: usize) -> AeadKey {
+    let suite = rind_rustls::suites::ALL_CIPHER_SUITES
+        .iter()
+        .find_map(|suite| match suite {
+            SupportedCipherSuite::Tls13(suite) if suite.aead_alg.key_len() == len => Some(suite),
+            _ => None,
+        })
+        .unwrap();
+    let expander = suite
+        .hkdf_provider
+        .expander_for_okm(&OkmBlock::new(&[0x42; 32]));
+    rustls::internal::derive_traffic_key(&*expander, suite.aead_alg)
+}
+
 #[test]
 fn record_protection() {
     for suite in rind_rustls::suites::ALL_CIPHER_SUITES {
+        let key_len = match suite {
+            SupportedCipherSuite::Tls13(suite) => suite.aead_alg.key_len(),
+            SupportedCipherSuite::Tls12(suite) => suite.aead_alg.key_block_shape().enc_key_len,
+        };
         // Each direction consumes its own copy of the key.
-        let (key, decrypt_key) = (AeadKey::from([0x42; 32]), AeadKey::from([0x42; 32]));
+        let (key, decrypt_key) = (record_key(key_len), record_key(key_len));
         secret(key.as_ref());
         secret(decrypt_key.as_ref());
         let iv = [0x24; 12];

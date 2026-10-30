@@ -3,7 +3,8 @@
 
 use core::marker::PhantomData;
 
-use super::hash::{Hash, HashOutput};
+use super::digest::Digest;
+use super::hash::Hash;
 use super::hmac::Hmac;
 use crate::Error;
 use crate::low::zeroise;
@@ -11,8 +12,8 @@ use crate::mid::rng::RandomSource;
 
 /// A limited implementation of SP800-90A -- enough for RFC6979 ECDSA.
 pub(crate) struct HmacDrbg<H: Hash> {
-    k: HashOutput,
-    v: HashOutput,
+    k: Digest,
+    v: Digest,
     reseed_counter: u64,
     _h: PhantomData<H>,
 }

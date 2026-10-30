@@ -32,15 +32,15 @@ fn test_rc_chacha(
         .unwrap();
 }
 
-fn test_rind_chacha(
-    key: &rind::aead::ChaCha20Poly1305,
-    nonce: &[u8; 12],
-    aad: &[u8],
-    plain: &[u8],
-) {
+fn test_rind_chacha(key: &rind::aead::LessSafeKey, nonce: &[u8; 12], aad: &[u8], plain: &[u8]) {
     let mut ct = plain.to_vec();
-    let mut tag = [0u8; 16];
-    key.encrypt(nonce, aad, &mut ct, &mut tag).unwrap();
+    let _tag = key
+        .seal_in_place_separate_tag(
+            rind::aead::Nonce::assume_unique_for_key(*nonce),
+            rind::aead::Aad::from(aad),
+            &mut ct,
+        )
+        .unwrap();
 }
 
 fn bench_chacha20poly1305(c: &mut Criterion) {
@@ -79,7 +79,8 @@ fn bench_chacha20poly1305(c: &mut Criterion) {
             },
         );
         group.bench_with_input(BenchmarkId::new("rind", size_name), &input, |b, input| {
-            let key = rind::aead::ChaCha20Poly1305::new(key);
+            use rind::aead::{CHACHA20_POLY1305, LessSafeKey, UnboundKey};
+            let key = LessSafeKey::new(UnboundKey::new(&CHACHA20_POLY1305, &key).unwrap());
             b.iter(|| test_rind_chacha(&key, &nonce, &aad, input));
         });
     }
