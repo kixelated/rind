@@ -46,31 +46,29 @@ fn rsa2048_pkcs1_sha256_verify(c: &mut Criterion) {
     });
 
     group.bench_function("rind", |b| {
-        let peer_public_key = rind::signing::rsa::VerifyingKey::from_pkcs1_der(public_key).unwrap();
+        use rind::signature;
+        let peer_public_key =
+            signature::UnparsedPublicKey::new(&signature::RSA_PKCS1_2048_8192_SHA256, public_key);
 
         b.iter(|| {
-            black_box(peer_public_key.verify_pkcs1_sha256(signature, message)).unwrap();
+            black_box(peer_public_key.verify(message, signature)).unwrap();
         })
     });
 }
 
 fn rsa2048_pss_sha256_verify(c: &mut Criterion) {
     // Signed here, since PSS signatures are randomized.
-    let private_key = rind::signing::rsa::SigningKey::from_pkcs1_der(include_bytes!(
-        "../../rind/src/high/rsa/rsa2048.der"
-    ))
-    .unwrap();
-    let mut public_key = [0u8; 512];
-    let public_key = private_key
-        .public_key()
-        .to_pkcs1_der(&mut public_key)
-        .unwrap();
+    use rind::signature::{KeyPair, RSA_PSS_SHA256, RsaKeyPair};
+    let private_key =
+        RsaKeyPair::from_der(include_bytes!("../../rind/src/high/rsa/rsa2048.der")).unwrap();
+    let public_key = private_key.public_key().as_ref();
     let message =
         b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
     let mut signature = [0u8; 256];
-    let signature = private_key
-        .sign_pss_sha256(&mut signature, message)
+    private_key
+        .sign(&RSA_PSS_SHA256, message, &mut signature)
         .unwrap();
+    let signature = &signature[..];
 
     let mut group = c.benchmark_group("rsa2048-pss-sha256-verify");
     group.throughput(Throughput::Elements(1));
@@ -96,10 +94,12 @@ fn rsa2048_pss_sha256_verify(c: &mut Criterion) {
     });
 
     group.bench_function("rind", |b| {
-        let peer_public_key = rind::signing::rsa::VerifyingKey::from_pkcs1_der(public_key).unwrap();
+        use rind::signature;
+        let peer_public_key =
+            signature::UnparsedPublicKey::new(&signature::RSA_PSS_2048_8192_SHA256, public_key);
 
         b.iter(|| {
-            black_box(peer_public_key.verify_pss_sha256(signature, message)).unwrap();
+            black_box(peer_public_key.verify(message, signature)).unwrap();
         })
     });
 }

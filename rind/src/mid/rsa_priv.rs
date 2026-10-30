@@ -201,6 +201,8 @@ impl Drop for RsaPrivateKey {
     fn drop(&mut self) {
         low::zeroise_value(&mut self.p0);
         low::zeroise_value(&mut self.q0);
+        // Not secret, but wiping it lets `tests/zeroing.rs` check every byte.
+        low::zeroise_value(&mut self.public);
     }
 }
 

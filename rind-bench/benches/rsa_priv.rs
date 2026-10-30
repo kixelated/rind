@@ -50,10 +50,12 @@ fn rsa2048_pkcs1_sha256_sign(c: &mut Criterion) {
     });
 
     group.bench_function("rind", |b| {
-        let key = rind::signing::rsa::SigningKey::from_pkcs1_der(private_key).unwrap();
+        use rind::signature::{RSA_PKCS1_SHA256, RsaKeyPair};
+        let key = RsaKeyPair::from_der(private_key).unwrap();
 
         b.iter(|| {
-            black_box(key.sign_pkcs1_sha256(&mut [0u8; 256], message).unwrap());
+            let mut signature = [0u8; 256];
+            black_box(key.sign(&RSA_PKCS1_SHA256, message, &mut signature)).unwrap();
         })
     });
 }
@@ -91,10 +93,12 @@ fn rsa2048_pss_sha256_sign(c: &mut Criterion) {
     });
 
     group.bench_function("rind", |b| {
-        let key = rind::signing::rsa::SigningKey::from_pkcs1_der(private_key).unwrap();
+        use rind::signature::{RSA_PSS_SHA256, RsaKeyPair};
+        let key = RsaKeyPair::from_der(private_key).unwrap();
 
         b.iter(|| {
-            black_box(key.sign_pss_sha256(&mut [0u8; 256], message).unwrap());
+            let mut signature = [0u8; 256];
+            black_box(key.sign(&RSA_PSS_SHA256, message, &mut signature)).unwrap();
         })
     });
 }

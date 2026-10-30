@@ -13,8 +13,7 @@ mod precomp;
 
 /// A P-384 public key.
 #[derive(Clone, Debug)]
-pub struct PublicKey {
-    point: AffineMontPoint,
+pub(crate) struct PublicKey {
     precomp_w5: JacobianMontPointTableW5,
 }
 
@@ -26,22 +25,15 @@ impl PublicKey {
     /// This must be exactly 97 bytes in length, using the X9.62
     /// uncompressed encoding.  An error is returned if a coordinate
     /// is not below the field prime, or the point is not on the curve.
-    pub fn from_x962_uncompressed(bytes: &[u8]) -> Result<Self, Error> {
+    pub(crate) fn from_x962_uncompressed(bytes: &[u8]) -> Result<Self, Error> {
         let _entry = low::Entry::new_public();
         let point = AffineMontPoint::from_x962_uncompressed(bytes)?;
         Ok(Self::from_affine(point))
     }
 
-    /// Encodes this public key using the X9.62 uncompressed encoding.
-    pub fn as_bytes_uncompressed(&self) -> [u8; Self::BYTES] {
-        let _entry = low::Entry::new_public();
-        self.point.as_bytes_uncompressed()
-    }
-
     fn from_affine(point: AffineMontPoint) -> Self {
         Self {
             precomp_w5: point.public_precomp_w5(),
-            point,
         }
     }
 
@@ -161,7 +153,7 @@ impl fmt::Debug for PrivateKey {
 ///
 /// This backs ECDSA, so it can be serialized and deserialized. Its
 /// Diffie-Hellman operation is only for tests with known scalars.
-pub struct StaticPrivateKey(PrivateKey);
+pub(crate) struct StaticPrivateKey(PrivateKey);
 
 impl StaticPrivateKey {
     /// Generate a new random private key using the system RNG.
@@ -665,7 +657,7 @@ impl FieldElement {
 }
 
 #[derive(Default)]
-pub struct Scalar([u64; 6]);
+pub(crate) struct Scalar([u64; 6]);
 
 impl Scalar {
     pub(crate) const BYTES: usize = 48;
@@ -677,25 +669,13 @@ impl Scalar {
     ///
     /// This returns an error if the scalar is zero or larger than
     /// the curve order.
-    ///
-    /// Prefer to use `from_array_checked` if you always have 48 bytes.
-    pub fn from_bytes_checked(bytes: &[u8]) -> Result<Self, Error> {
+    pub(crate) fn from_bytes_checked(bytes: &[u8]) -> Result<Self, Error> {
         let full = Self(util::big_endian_slice_any_size_to_u64x6(bytes).ok_or(Error::WrongLength)?);
 
         full.into_range_check()
     }
 
-    /// Create a scalar from the given array.
-    ///
-    /// This returns an error if the scalar is zero or larger than
-    /// the curve order.
-    pub fn from_array_checked(array: &[u8; Self::BYTES]) -> Result<Self, Error> {
-        let full = Self(util::big_endian_to_u64x6(array));
-
-        full.into_range_check()
-    }
-
-    pub fn from_bytes_reduced(bytes: &[u8]) -> Result<Self, Error> {
+    pub(crate) fn from_bytes_reduced(bytes: &[u8]) -> Result<Self, Error> {
         Ok(
             Self(util::big_endian_slice_any_size_to_u64x6(bytes).ok_or(Error::WrongLength)?)
                 .reduce_mod_n(),
@@ -713,7 +693,7 @@ impl Scalar {
         }
     }
 
-    pub fn as_bytes(&self) -> [u8; Self::BYTES] {
+    pub(crate) fn as_bytes(&self) -> [u8; Self::BYTES] {
         util::u64x6_to_big_endian(&self.0)
     }
 
@@ -723,7 +703,7 @@ impl Scalar {
     }
 
     /// Private test for zero
-    pub fn is_zero(&self) -> bool {
+    pub(crate) fn is_zero(&self) -> bool {
         self.private_eq(&Self::default())
     }
 
@@ -1064,8 +1044,7 @@ mod tests {
             0x3a, 0xe4, 0xea, 0xbc, 0x63, 0x48, 0x3a, 0x2c, 0xf1, 0xa8, 0x99, 0xe8, 0xc8,
         ];
         assert_eq!(&public, EXPECTED);
-        let public_key = PublicKey::from_x962_uncompressed(&public).unwrap();
-        assert_eq!(&public_key.as_bytes_uncompressed(), EXPECTED);
+        PublicKey::from_x962_uncompressed(&public).unwrap();
     }
 
     #[test]
@@ -1076,11 +1055,11 @@ mod tests {
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
         ];
-        let scalar = Scalar::from_array_checked(&ONE);
+        let scalar = Scalar::from_bytes_checked(&ONE);
         assert!(scalar.is_ok());
         assert_eq!(scalar.unwrap().as_bytes(), Scalar::small_u64(1).as_bytes());
 
-        let scalar = Scalar::from_array_checked(&[0xff; 48]);
+        let scalar = Scalar::from_bytes_checked(&[0xff; 48]);
         assert!(scalar.is_err());
     }
 
