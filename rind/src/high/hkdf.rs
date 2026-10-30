@@ -117,7 +117,7 @@ mod tests {
                 Prk::<Sha256>::extract(&hex::decode(salt).unwrap(), &hex::decode(ikm).unwrap());
             // HMAC of the empty message under the stored key identifies the PRK.
             let wanted = Hmac::<Sha256>::new(hex::decode(prk).unwrap()).finish();
-            assert_eq!(got.hmac.clone().finish(), wanted);
+            assert_eq!(got.hmac.clone().finish().as_ref(), wanted.as_ref());
 
             let mut out = vec![0u8; okm.len() / 2];
             got.expand(&[&hex::decode(info).unwrap()], &mut out)

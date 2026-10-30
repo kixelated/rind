@@ -3050,8 +3050,6 @@ dependencies = [
  "serde_json",
  "sha1",
  "sha2",
- "sha3",
- "shake",
  "x25519-dalek",
 ]
 

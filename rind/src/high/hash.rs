@@ -3,90 +3,8 @@
 
 use core::ops::{Deref, DerefMut};
 
-use crate::Error;
-use crate::low::{ct, ct_equal};
+use super::digest::{Algorithm, Digest, SHA1_FOR_LEGACY_USE_ONLY, SHA256, SHA384, SHA512};
 use crate::mid::{sha1, sha2};
-
-/// Output from a hash function.
-///
-/// This has one variant per supported hash function.
-#[derive(Clone, Debug)]
-pub enum HashOutput {
-    /// Output from SHA1
-    Sha1([u8; sha1::Sha1Context::OUTPUT_SZ]),
-    /// Output from SHA256
-    Sha256([u8; sha2::Sha256Context::OUTPUT_SZ]),
-    /// Output from SHA384
-    Sha384([u8; sha2::Sha384Context::OUTPUT_SZ]),
-    /// Output from SHA512
-    Sha512([u8; sha2::Sha512Context::OUTPUT_SZ]),
-}
-
-impl HashOutput {
-    /// Constant-time equality, `other` may not be truncated.
-    pub fn ct_equal(&self, other: &[u8]) -> bool {
-        ct::into_public(ct_equal(self.as_ref(), other))
-    }
-
-    /// Verify in constant time that `other` equals `self` truncated to `L` bytes.
-    ///
-    /// `L` being compile-time prevents the misuse that the
-    /// truncation length is attacker-controlled.  An `L` of zero would
-    /// accept an empty `other`, so it fails to compile:
-    ///
-    /// ```compile_fail,E0080
-    /// use rind::hashing::{Hash, Sha256};
-    ///
-    /// let _ = Sha256::hash(b"message").verify_truncated::<0>(b"");
-    /// ```
-    ///
-    /// # Errors
-    ///
-    /// [`Error::WrongLength`] if `L` is longer than this hash, and
-    /// [`Error::BadSignature`] if the truncation differs from `other`.
-    pub fn verify_truncated<const L: usize>(&self, other: &[u8]) -> Result<(), Error> {
-        const { assert!(L != 0, "truncation length must be non-zero") };
-        let truncated = self.as_ref().get(..L).ok_or(Error::WrongLength)?;
-        match ct::into_public(ct_equal(truncated, other)) {
-            true => Ok(()),
-            false => Err(Error::BadSignature),
-        }
-    }
-}
-
-impl PartialEq for HashOutput {
-    fn eq(&self, other: &Self) -> bool {
-        ct::into_public(match (self, other) {
-            (Self::Sha1(s), Self::Sha1(o)) => ct_equal(s, o),
-            (Self::Sha256(s), Self::Sha256(o)) => ct_equal(s, o),
-            (Self::Sha384(s), Self::Sha384(o)) => ct_equal(s, o),
-            (Self::Sha512(s), Self::Sha512(o)) => ct_equal(s, o),
-            _ => false,
-        })
-    }
-}
-
-impl AsRef<[u8]> for HashOutput {
-    fn as_ref(&self) -> &[u8] {
-        match self {
-            Self::Sha1(v) => v,
-            Self::Sha256(v) => v,
-            Self::Sha384(v) => v,
-            Self::Sha512(v) => v,
-        }
-    }
-}
-
-impl AsMut<[u8]> for HashOutput {
-    fn as_mut(&mut self) -> &mut [u8] {
-        match self {
-            Self::Sha1(v) => v,
-            Self::Sha256(v) => v,
-            Self::Sha384(v) => v,
-            Self::Sha512(v) => v,
-        }
-    }
-}
 
 /// One block of hash function input.
 #[derive(Copy, Clone)]
@@ -120,22 +38,33 @@ impl DerefMut for HashBlock {
 
 /// A generic trait over supported hash functions.
 ///
-/// This exists so (eg.) HMAC may be generic.
+/// This exists so (eg.) HMAC may be generic. It is not exported, so callers
+/// hash through [`crate::digest`] and only name an implementor as a type
+/// parameter.
 pub trait Hash {
     /// The associated context type.
     type Context: HashContext;
+
+    /// This hash function's [`crate::digest`] constant.
+    const ALGORITHM: &'static Algorithm;
 
     /// Create a new hash context.
     fn new() -> Self::Context;
 
     /// Hash the given bytes (one-shot style) and return the output.
-    fn hash(bytes: &[u8]) -> HashOutput;
+    fn hash(bytes: &[u8]) -> Digest {
+        let mut ctx = Self::new();
+        ctx.update(bytes);
+        ctx.finish()
+    }
 
     /// Return a zeroed `HashBlock` of the correct size.
     fn zeroed_block() -> HashBlock;
 
-    /// Return a zeroed [`HashOutput`] of the correct size.
-    fn zeroed_output() -> HashOutput;
+    /// Return a zeroed [`Digest`] of the correct size.
+    fn zeroed_output() -> Digest {
+        Digest::zeroed(Self::ALGORITHM)
+    }
 }
 
 /// A [`Hash`] whose collision resistance holds, so signatures may use it.
@@ -173,422 +102,130 @@ pub trait HashContext: Clone {
     fn update(&mut self, bytes: &[u8]);
 
     /// Complete the computation.
-    fn finish(self) -> HashOutput;
+    fn finish(self) -> Digest;
 }
 
-/// This is SHA1, for legacy protocols only.
+/// SHA-1, for legacy protocols only.
 ///
 /// SHA1 is standardized in [FIPS180](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf).
-/// Its collision resistance is broken, so it is not a [`SignatureHash`].
+/// Its collision resistance is broken, so no signature accepts it.
 /// HMAC-SHA1 does not rely on collision resistance, and remains
 /// required by STUN (RFC 8489) and SRTP (RFC 3711).
 #[derive(Clone)]
 pub struct LegacySha1;
 
 impl Hash for LegacySha1 {
-    type Context = Sha1Context;
+    type Context = sha1::Sha1Context;
+    const ALGORITHM: &'static Algorithm = &SHA1_FOR_LEGACY_USE_ONLY;
 
     fn new() -> Self::Context {
-        Sha1Context(sha1::Sha1Context::new())
-    }
-
-    fn hash(bytes: &[u8]) -> HashOutput {
-        let mut ctx = Self::new();
-        ctx.update(bytes);
-        ctx.finish()
+        sha1::Sha1Context::new()
     }
 
     fn zeroed_block() -> HashBlock {
         HashBlock::new(sha1::Sha1Context::BLOCK_SZ)
     }
-
-    fn zeroed_output() -> HashOutput {
-        HashOutput::Sha1([0u8; sha1::Sha1Context::OUTPUT_SZ])
-    }
 }
 
-#[derive(Clone)]
-pub struct Sha1Context(sha1::Sha1Context);
-
-impl HashContext for Sha1Context {
+impl HashContext for sha1::Sha1Context {
     fn update(&mut self, bytes: &[u8]) {
-        self.0.update(bytes)
+        Self::update(self, bytes)
     }
 
-    fn finish(self) -> HashOutput {
-        HashOutput::Sha1(self.0.finish())
+    fn finish(self) -> Digest {
+        Digest::new(LegacySha1::ALGORITHM, &Self::finish(self))
     }
 }
 
-/// This is SHA256.
+/// SHA-256.
 ///
 /// SHA256 is standardized in [FIPS180](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf).
 #[derive(Clone)]
 pub struct Sha256;
 
 impl Hash for Sha256 {
-    type Context = Sha256Context;
+    type Context = sha2::Sha256Context;
+    const ALGORITHM: &'static Algorithm = &SHA256;
 
     fn new() -> Self::Context {
-        Sha256Context(sha2::Sha256Context::new())
-    }
-
-    fn hash(bytes: &[u8]) -> HashOutput {
-        let mut ctx = Self::new();
-        ctx.update(bytes);
-        ctx.finish()
+        sha2::Sha256Context::new()
     }
 
     fn zeroed_block() -> HashBlock {
         HashBlock::new(sha2::Sha256Context::BLOCK_SZ)
     }
-
-    fn zeroed_output() -> HashOutput {
-        HashOutput::Sha256([0u8; sha2::Sha256Context::OUTPUT_SZ])
-    }
 }
 
 impl SignatureHash for Sha256 {}
 
-#[derive(Clone)]
-pub struct Sha256Context(sha2::Sha256Context);
-
-impl HashContext for Sha256Context {
+impl HashContext for sha2::Sha256Context {
     fn update(&mut self, bytes: &[u8]) {
-        self.0.update(bytes)
+        Self::update(self, bytes)
     }
 
-    fn finish(self) -> HashOutput {
-        HashOutput::Sha256(self.0.finish())
+    fn finish(self) -> Digest {
+        Digest::new(Sha256::ALGORITHM, &Self::finish(self))
     }
 }
 
-/// This is SHA384.
+/// SHA-384.
 ///
 /// SHA384 is standardized in [FIPS180](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf).
 #[derive(Clone)]
 pub struct Sha384;
 
 impl Hash for Sha384 {
-    type Context = Sha384Context;
+    type Context = sha2::Sha384Context;
+    const ALGORITHM: &'static Algorithm = &SHA384;
 
     fn new() -> Self::Context {
-        Sha384Context(sha2::Sha384Context::new())
-    }
-
-    fn hash(bytes: &[u8]) -> HashOutput {
-        let mut ctx = Self::new();
-        ctx.update(bytes);
-        ctx.finish()
+        sha2::Sha384Context::new()
     }
 
     fn zeroed_block() -> HashBlock {
         HashBlock::new(sha2::Sha512Context::BLOCK_SZ)
     }
-
-    fn zeroed_output() -> HashOutput {
-        HashOutput::Sha384([0u8; sha2::Sha384Context::OUTPUT_SZ])
-    }
 }
 
 impl SignatureHash for Sha384 {}
 
-#[derive(Clone)]
-pub struct Sha384Context(sha2::Sha384Context);
-
-impl HashContext for Sha384Context {
+impl HashContext for sha2::Sha384Context {
     fn update(&mut self, bytes: &[u8]) {
-        self.0.update(bytes)
+        Self::update(self, bytes)
     }
 
-    fn finish(self) -> HashOutput {
-        HashOutput::Sha384(self.0.finish())
+    fn finish(self) -> Digest {
+        Digest::new(Sha384::ALGORITHM, &Self::finish(self))
     }
 }
 
-/// This is SHA512.
+/// SHA-512.
 ///
 /// SHA512 is standardized in [FIPS180](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf).
 #[derive(Clone)]
 pub struct Sha512;
 
 impl Hash for Sha512 {
-    type Context = Sha512Context;
+    type Context = sha2::Sha512Context;
+    const ALGORITHM: &'static Algorithm = &SHA512;
 
     fn new() -> Self::Context {
-        Sha512Context(sha2::Sha512Context::new())
-    }
-
-    fn hash(bytes: &[u8]) -> HashOutput {
-        let mut ctx = Self::new();
-        ctx.update(bytes);
-        ctx.finish()
+        sha2::Sha512Context::new()
     }
 
     fn zeroed_block() -> HashBlock {
         HashBlock::new(sha2::Sha512Context::BLOCK_SZ)
     }
-
-    fn zeroed_output() -> HashOutput {
-        HashOutput::Sha512([0u8; sha2::Sha512Context::OUTPUT_SZ])
-    }
 }
 
 impl SignatureHash for Sha512 {}
 
-#[derive(Clone)]
-pub struct Sha512Context(sha2::Sha512Context);
-
-impl HashContext for Sha512Context {
+impl HashContext for sha2::Sha512Context {
     fn update(&mut self, bytes: &[u8]) {
-        self.0.update(bytes)
+        Self::update(self, bytes)
     }
 
-    fn finish(self) -> HashOutput {
-        HashOutput::Sha512(self.0.finish())
-    }
-}
-
-#[cfg(test)]
-#[cfg_attr(coverage_nightly, coverage(off))]
-mod tests {
-    use super::*;
-    use crate::test::*;
-
-    #[test]
-    fn verify_truncated() {
-        // Under `admin/ctgrind`, nothing may branch on or index by the hash.
-        let output = Sha256::hash(b"message");
-        let full = output.as_ref().to_vec();
-        ct::secret_slice(output.as_ref());
-
-        assert_eq!(output.verify_truncated::<1>(&full[..1]), Ok(()));
-        assert_eq!(output.verify_truncated::<32>(&full), Ok(()));
-        assert_eq!(
-            output.verify_truncated::<33>(&full),
-            Err(Error::WrongLength)
-        );
-        assert_eq!(
-            output.verify_truncated::<16>(&full),
-            Err(Error::BadSignature)
-        );
-        assert_eq!(
-            output.verify_truncated::<16>(&full[..15]),
-            Err(Error::BadSignature)
-        );
-
-        let mut flipped = full[..16].to_vec();
-        flipped[15] ^= 1;
-        assert_eq!(
-            output.verify_truncated::<16>(&flipped),
-            Err(Error::BadSignature)
-        );
-    }
-
-    #[test]
-    fn cavp() {
-        #[derive(Debug)]
-        enum Kind {
-            None,
-            Sha1,
-            Sha256,
-            Sha384,
-            Sha512,
-        }
-
-        #[derive(Debug)]
-        struct Cavp {
-            kind: Kind,
-            message: Vec<u8>,
-            message_bytes: usize,
-        }
-
-        impl Default for Cavp {
-            fn default() -> Self {
-                Self {
-                    kind: Kind::None,
-                    message: Vec::new(),
-                    message_bytes: 0,
-                }
-            }
-        }
-
-        impl CavpSink for Cavp {
-            fn on_meta(&mut self, meta: &str) {
-                self.kind = match meta {
-                    "L = 20" => Kind::Sha1,
-                    "L = 32" => Kind::Sha256,
-                    "L = 48" => Kind::Sha384,
-                    "L = 64" => Kind::Sha512,
-                    _ => panic!("unhandled {meta:?}"),
-                };
-            }
-
-            fn on_value(&mut self, name: &str, value: Value<'_>) {
-                match name {
-                    "Len" => self.message_bytes = (value.int() / 8) as usize,
-                    "Msg" => {
-                        self.message = value.bytes();
-                        self.message.truncate(self.message_bytes);
-                    }
-                    "MD" => match self.kind {
-                        Kind::None => {}
-                        Kind::Sha1 => {
-                            let result = LegacySha1::hash(&self.message);
-                            let wanted = value.bytes();
-                            assert!(result.ct_equal(&wanted));
-                        }
-                        Kind::Sha256 => {
-                            let result = Sha256::hash(&self.message);
-                            let wanted = value.bytes();
-                            assert!(result.ct_equal(&wanted));
-                        }
-                        Kind::Sha384 => {
-                            let result = Sha384::hash(&self.message);
-                            let wanted = value.bytes();
-                            assert!(result.ct_equal(&wanted));
-                        }
-                        Kind::Sha512 => {
-                            let result = Sha512::hash(&self.message);
-                            let wanted = value.bytes();
-                            assert!(result.ct_equal(&wanted));
-                        }
-                    },
-                    _ => {
-                        todo!("{self:?} value {name} = {value:?}");
-                    }
-                }
-            }
-        }
-
-        process_cavp(
-            "../thirdparty/cavp-sha1/SHA1ShortMsg.rsp",
-            &mut Cavp::default(),
-        );
-        process_cavp(
-            "../thirdparty/cavp/sha2/SHA256ShortMsg.rsp",
-            &mut Cavp::default(),
-        );
-        process_cavp(
-            "../thirdparty/cavp/sha2/SHA256LongMsg.rsp",
-            &mut Cavp::default(),
-        );
-        process_cavp(
-            "../thirdparty/cavp/sha2/SHA384ShortMsg.rsp",
-            &mut Cavp::default(),
-        );
-        process_cavp(
-            "../thirdparty/cavp/sha2/SHA384LongMsg.rsp",
-            &mut Cavp::default(),
-        );
-        process_cavp(
-            "../thirdparty/cavp/sha2/SHA512ShortMsg.rsp",
-            &mut Cavp::default(),
-        );
-        process_cavp(
-            "../thirdparty/cavp/sha2/SHA512LongMsg.rsp",
-            &mut Cavp::default(),
-        );
-    }
-
-    #[test]
-    fn cavp_monte_carlo() {
-        #[derive(Debug)]
-        enum Kind {
-            None,
-            Sha1,
-            Sha256,
-            Sha384,
-            Sha512,
-        }
-
-        #[derive(Debug)]
-        struct Cavp {
-            kind: Kind,
-            seed: Vec<u8>,
-        }
-
-        impl Default for Cavp {
-            fn default() -> Self {
-                Self {
-                    kind: Kind::None,
-                    seed: Vec::new(),
-                }
-            }
-        }
-
-        impl CavpSink for Cavp {
-            fn on_meta(&mut self, meta: &str) {
-                self.kind = match meta {
-                    "L = 20" => Kind::Sha1,
-                    "L = 32" => Kind::Sha256,
-                    "L = 48" => Kind::Sha384,
-                    "L = 64" => Kind::Sha512,
-                    _ => panic!("unhandled {meta:?}"),
-                };
-            }
-
-            fn on_value(&mut self, name: &str, value: Value<'_>) {
-                match name {
-                    "Seed" => self.seed = value.bytes(),
-                    "COUNT" => {}
-                    "MD" => match self.kind {
-                        Kind::None => {}
-                        Kind::Sha1 => {
-                            self.seed = monte_carlo_1000::<LegacySha1>(&self.seed);
-                            assert_eq!(self.seed, value.bytes());
-                        }
-                        Kind::Sha256 => {
-                            self.seed = monte_carlo_1000::<Sha256>(&self.seed);
-                            assert_eq!(self.seed, value.bytes());
-                        }
-                        Kind::Sha384 => {
-                            self.seed = monte_carlo_1000::<Sha384>(&self.seed);
-                            assert_eq!(self.seed, value.bytes());
-                        }
-                        Kind::Sha512 => {
-                            self.seed = monte_carlo_1000::<Sha512>(&self.seed);
-                            assert_eq!(self.seed, value.bytes());
-                        }
-                    },
-                    _ => {
-                        todo!("{self:?} value {name} = {value:?}");
-                    }
-                }
-            }
-        }
-
-        fn monte_carlo_1000<H: Hash>(seed: &[u8]) -> Vec<u8> {
-            let mut window = [seed.to_vec(), seed.to_vec(), seed.to_vec()];
-            for _ in 0..1000 {
-                let mut ctx = H::new();
-                ctx.update(&window[0]);
-                ctx.update(&window[1]);
-                ctx.update(&window[2]);
-                let r = ctx.finish();
-                window.rotate_left(1);
-                window[2].copy_from_slice(r.as_ref());
-            }
-            window[2].clone()
-        }
-
-        if std::env::var_os("SLOW_TESTS").is_some() {
-            process_cavp(
-                "../thirdparty/cavp-sha1/SHA1Monte.rsp",
-                &mut Cavp::default(),
-            );
-            process_cavp(
-                "../thirdparty/cavp/sha2/SHA256Monte.rsp",
-                &mut Cavp::default(),
-            );
-            process_cavp(
-                "../thirdparty/cavp/sha2/SHA384Monte.rsp",
-                &mut Cavp::default(),
-            );
-            process_cavp(
-                "../thirdparty/cavp/sha2/SHA512Monte.rsp",
-                &mut Cavp::default(),
-            );
-        }
+    fn finish(self) -> Digest {
+        Digest::new(Sha512::ALGORITHM, &Self::finish(self))
     }
 }

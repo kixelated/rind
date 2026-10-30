@@ -8,7 +8,7 @@ fuzz_target!(|op: Operation| {
     match op {
         Operation::Sha256(steps) => {
             let mut left = digest::Context::new(&digest::SHA256);
-            let mut right = hashing::sha2::Sha256Context::new();
+            let mut right = rind::digest::Context::new(&rind::digest::SHA256);
 
             for s in steps {
                 match s {
@@ -25,11 +25,11 @@ fuzz_target!(|op: Operation| {
 
             let left = left.finish();
             let right = right.finish();
-            assert_eq!(left.as_ref(), &right);
+            assert_eq!(left.as_ref(), right.as_ref());
         }
         Operation::Sha384(steps) => {
             let mut left = digest::Context::new(&digest::SHA384);
-            let mut right = hashing::sha2::Sha384Context::new();
+            let mut right = rind::digest::Context::new(&rind::digest::SHA384);
 
             for s in steps {
                 match s {
@@ -46,11 +46,11 @@ fuzz_target!(|op: Operation| {
 
             let left = left.finish();
             let right = right.finish();
-            assert_eq!(left.as_ref(), &right);
+            assert_eq!(left.as_ref(), right.as_ref());
         }
         Operation::Sha512(steps) => {
             let mut left = digest::Context::new(&digest::SHA512);
-            let mut right = hashing::sha2::Sha512Context::new();
+            let mut right = rind::digest::Context::new(&rind::digest::SHA512);
 
             for s in steps {
                 match s {
@@ -67,7 +67,7 @@ fuzz_target!(|op: Operation| {
 
             let left = left.finish();
             let right = right.finish();
-            assert_eq!(left.as_ref(), &right);
+            assert_eq!(left.as_ref(), right.as_ref());
         }
         Operation::HmacSha256 { key, steps } => {
             let mut left = hmac::Context::with_key(&hmac::Key::new(hmac::HMAC_SHA256, &key));
