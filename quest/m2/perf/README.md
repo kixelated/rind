@@ -24,7 +24,6 @@ quest here if it still matters.
 
 ## Required
 
-- [HKDF expand speed](/quest/m2/perf/hkdf-expand.md) - expand within ~1.2x of ring while the key stays wipeable
 - [SHA-1 without SHA-NI](/quest/m2/perf/sha1-avx2.md) - an AVX2 message schedule for x86_64 hosts without SHA extensions
 - [armv7 benchmark host](/quest/m2/perf/armv7-host.md) - rind-bench runs on real armv7 hardware
 - [armv7 AEAD copy](/quest/m2/perf/armv7-aead-copy.md) - armv7 AEADs seal and open in place without copying the buffer
