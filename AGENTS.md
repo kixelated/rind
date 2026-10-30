@@ -18,6 +18,7 @@ This is one Rust workspace: the `rind` library, its `rind-<consumer>` adapter cr
 - Prefer formally verified sources (s2n-bignum, libcrux/HACL*) over new arithmetic. New arithmetic states where its correctness argument comes from.
 - Test every primitive against Wycheproof where vectors exist, and differentially against aws-lc-rs (a dev-dependency only).
 - When in doubt about an API shape or behavior, follow aws-lc-rs: it is the library rind would use if it didn't require C. Say why wherever rind deviates.
+- Wipe secrets a value owns (keys, keyed state) on drop, as aws-lc does. Don't wipe stack temporaries, scratch, or copies inside a call: safe Rust cannot read them, so it costs speed for nothing.
 - Reproduce bugs before fixing them. Tests must be worth their weight long-term: cover edge cases, not old bugs or trivial values.
 - Keep the PR to one problem: no unrelated refactors, formatting churn, or drive-by changes. Fix every instance of that problem and the gaps it exposes in the same PR.
 - Keep graviola's layering and style so upstream changes still merge: add new primitives as new modules rather than reshaping existing ones.
