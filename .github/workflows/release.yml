@@ -36,8 +36,8 @@ jobs:
     environment: publish
 
     steps:
-      # A GitHub App token, so the release PR it opens triggers CI; PRs opened
-      # with GITHUB_TOKEN do not.
+      # A GitHub App token, since the repository does not let GITHUB_TOKEN open
+      # pull requests.
       - name: Generate GitHub token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
         id: generate-token
