@@ -1,8 +1,6 @@
 // Written for Graviola by Joe Birr-Pixton, 2024.
 // SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 
-use super::zeroise::zeroise;
-
 #[derive(Clone)]
 pub(crate) struct Blockwise<const N: usize> {
     buffer: [u8; N],
@@ -96,16 +94,6 @@ impl<const N: usize> Blockwise<N> {
 pub(crate) enum FinalBlocks<const N: usize> {
     One([u8; N]),
     Two([[u8; N]; 2]),
-}
-
-// The final blocks carry the input's tail, which may be secret.
-impl<const N: usize> Drop for FinalBlocks<N> {
-    fn drop(&mut self) {
-        match self {
-            Self::One(one) => zeroise(one),
-            Self::Two(two) => zeroise(two.as_flattened_mut()),
-        }
-    }
 }
 
 impl<const N: usize> AsRef<[u8]> for FinalBlocks<N> {

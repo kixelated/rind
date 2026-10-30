@@ -3,7 +3,6 @@
 
 use crate::Error;
 use crate::high::asn1;
-use crate::low::zeroise;
 use crate::mid::p256;
 use crate::mid::p384;
 use crate::mid::rng::RandomSource;
@@ -152,9 +151,7 @@ impl PrivateKey<P256> for p256::StaticPrivateKey {
 
     fn encode<'a>(&self, out: &'a mut [u8]) -> Result<&'a [u8], Error> {
         if let Some(out) = out.get_mut(0..32) {
-            let mut bytes = self.secret_bytes();
-            out.copy_from_slice(&bytes);
-            zeroise(&mut bytes);
+            out.copy_from_slice(&self.secret_bytes());
             Ok(out)
         } else {
             Err(Error::OutOfRange)
@@ -244,9 +241,7 @@ impl PrivateKey<P384> for p384::StaticPrivateKey {
 
     fn encode<'a>(&self, out: &'a mut [u8]) -> Result<&'a [u8], Error> {
         if let Some(out) = out.get_mut(0..48) {
-            let mut bytes = self.secret_bytes();
-            out.copy_from_slice(&bytes);
-            zeroise(&mut bytes);
+            out.copy_from_slice(&self.secret_bytes());
             Ok(out)
         } else {
             Err(Error::OutOfRange)

@@ -428,9 +428,8 @@ impl<const R: usize, const PAD: u8> Sponge<R, PAD> {
         verify_cpu_features();
         let bytes = self.buffer.add_leading(bytes);
 
-        if let Some(mut block) = self.buffer.take() {
+        if let Some(block) = self.buffer.take() {
             self.absorb_block(&block);
-            zeroise(&mut block);
         }
 
         let (blocks, remainder) = bytes.as_chunks();
@@ -464,9 +463,8 @@ impl<const R: usize, const PAD: u8> Sponge<R, PAD> {
                 self.buffer.add_leading(&[0x80]);
             }
         }
-        let mut padded = self.buffer.take().unwrap();
+        let padded = self.buffer.take().unwrap();
         self.absorb_block(&padded);
-        zeroise(&mut padded);
     }
 
     fn absorb_block(&mut self, block: &[u8; R]) {

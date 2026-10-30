@@ -247,8 +247,8 @@ cfg_if::cfg_if! {
             bignum_montmul, bignum_montmul_p384, bignum_montsqr_p384, bignum_mux,
             bignum_neg_p384, bignum_tomont_p384, p384_montjadd, p384_montjdouble,
         };
-        // rind's portable SHA, since libcrux has no SHA-1 and its SHA-2 leaves
-        // the message schedule on the stack.
+        // rind's portable SHA, since libcrux has no SHA-1 and rind's SHA-256 is
+        // faster than libcrux's.
         pub(crate) use generic::sha1::sha1_compress_blocks;
         pub(crate) use generic::sha256::sha256_compress_blocks;
         pub(crate) use generic::sha512::sha512_compress_blocks;
