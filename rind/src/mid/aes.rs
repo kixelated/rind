@@ -59,9 +59,7 @@ impl AesCtr {
         inout: &mut [u8],
     ) -> Result<(), Error> {
         let _entry = Entry::new_secret();
-        if u64::from(counter) + inout.len().div_ceil(16) as u64 > 1 << 32 {
-            return Err(Error::WrongLength);
-        }
+        check_counter(counter, inout.len())?;
         low::ct::secret_slice(inout);
 
         // A short final chunk also takes the pipelined eight-block path: the
@@ -86,6 +84,26 @@ impl AesCtr {
         low::ct::public_slice(inout);
         Ok(())
     }
+}
+
+/// Fails with [`Error::WrongLength`] if `len` bytes need more blocks than
+/// remain from block `counter` before the 32-bit counter wraps.
+fn check_counter(counter: u32, len: usize) -> Result<(), Error> {
+    if u64::from(counter) + len.div_ceil(16) as u64 > 1 << 32 {
+        return Err(Error::WrongLength);
+    }
+    Ok(())
+}
+
+/// Fails with [`Error::WrongLength`] if an AES-GCM message is past its limits.
+///
+/// Its counter blocks start at 2, after the tag's, and the AAD's bit length
+/// must fit in 64 bits.
+pub(super) fn check_gcm_lengths(aad: usize, msg: usize) -> Result<(), Error> {
+    if aad as u64 >= 1 << 61 {
+        return Err(Error::WrongLength);
+    }
+    check_counter(2, msg)
 }
 
 fn expand_key(key: &[u8]) -> Result<AesKey, Error> {
@@ -282,5 +300,18 @@ mod tests {
             );
             assert!(buf.iter().all(|b| *b == 0xaa), "refused call wrote output");
         }
+    }
+
+    #[test]
+    #[cfg(target_pointer_width = "64")]
+    fn gcm_length_limits() {
+        // 2^32 - 2 blocks
+        let max_msg = (1 << 36) - 32;
+        assert_eq!(check_gcm_lengths(0, max_msg), Ok(()));
+        assert_eq!(check_gcm_lengths(0, max_msg + 1), Err(Error::WrongLength));
+
+        let max_aad = (1 << 61) - 1;
+        assert_eq!(check_gcm_lengths(max_aad, 0), Ok(()));
+        assert_eq!(check_gcm_lengths(max_aad + 1, 0), Err(Error::WrongLength));
     }
 }

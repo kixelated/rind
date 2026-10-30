@@ -2,6 +2,7 @@
 
 use libcrux_chacha20poly1305::xchacha20_poly1305;
 
+use super::chacha20::check_counter;
 use crate::Error;
 use crate::low::{Entry, zeroise};
 
@@ -26,14 +27,20 @@ impl XChaCha20Poly1305 {
     ///
     /// On exit, `cipher_inout` contains the ciphertext of the message,
     /// and `tag_out` contains the authentication tag.
+    ///
+    /// Fails with [`Error::WrongLength`], leaving `cipher_inout` unchanged,
+    /// if the message is longer than the 2^38 - 64 bytes its 32-bit block
+    /// counter covers.
     pub fn encrypt(
         &self,
         nonce: &[u8; 24],
         aad: &[u8],
         cipher_inout: &mut [u8],
         tag_out: &mut [u8; 16],
-    ) {
+    ) -> Result<(), Error> {
         let _entry = Entry::new_secret();
+        // block 0 keys Poly1305
+        check_counter(1, cipher_inout.len())?;
         // libcrux writes the ciphertext and tag to one separate buffer.
         let mut plain = cipher_inout.to_vec();
         let mut sealed = vec![0u8; plain.len() + 16];
@@ -44,8 +51,7 @@ impl XChaCha20Poly1305 {
             },
         );
         zeroise(&mut plain);
-        // `usize` is 32 bits here, so every length fits HACL's `u32`.
-        result.expect("XChaCha20Poly1305 lengths are within limits");
+        result.map_err(|_| Error::WrongLength)
     }
 
     /// Decrypts and verifies the given message.
@@ -58,6 +64,8 @@ impl XChaCha20Poly1305 {
     ///
     /// On success, `cipher_inout` contains the plaintext of the message,
     /// and `Ok(())` is returned.
+    /// A message past [`Self::encrypt`]'s limit fails with
+    /// `Err(Error::WrongLength)`, leaving `cipher_inout` unchanged.
     /// Otherwise, `Err(Error::DecryptFailed)` is returned and `cipher_inout`
     /// is cleared.
     pub fn decrypt(
@@ -68,6 +76,7 @@ impl XChaCha20Poly1305 {
         tag: &[u8],
     ) -> Result<(), Error> {
         let _entry = Entry::new_secret();
+        check_counter(1, cipher_inout.len())?;
         let ok = tag.len() == 16 && {
             let mut sealed = Vec::with_capacity(cipher_inout.len() + 16);
             sealed.extend_from_slice(cipher_inout);
@@ -101,7 +110,7 @@ mod tests {
         let k = XChaCha20Poly1305::new([1; 32]);
         let mut buffer = *b"hello world";
         let mut tag = [0u8; 16];
-        k.encrypt(&[2; 24], b"aad", &mut buffer, &mut tag);
+        k.encrypt(&[2; 24], b"aad", &mut buffer, &mut tag).unwrap();
         assert_ne!(&buffer, b"hello world");
         k.decrypt(&[2; 24], b"aad", &mut buffer, &tag).unwrap();
         assert_eq!(&buffer, b"hello world");
@@ -112,7 +121,7 @@ mod tests {
         let k = XChaCha20Poly1305::new([1; 32]);
         let mut buffer = *b"hello";
         let mut tag = [0u8; 16];
-        k.encrypt(&[2; 24], b"", &mut buffer, &mut tag);
+        k.encrypt(&[2; 24], b"", &mut buffer, &mut tag).unwrap();
         assert_eq!(
             k.decrypt(&[2; 24], b"", &mut buffer, &tag[..15]),
             Err(Error::DecryptFailed)

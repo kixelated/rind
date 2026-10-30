@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 
+use super::chacha20::check_counter;
 use crate::Error;
 use crate::low::{Entry, zeroise};
 
@@ -24,14 +25,20 @@ impl ChaCha20Poly1305 {
     ///
     /// On exit, `cipher_inout` contains the ciphertext of the message,
     /// and `tag_out` contains the authentication tag.
+    ///
+    /// Fails with [`Error::WrongLength`], leaving `cipher_inout` unchanged,
+    /// if the message is longer than the 2^38 - 64 bytes its 32-bit block
+    /// counter covers.
     pub fn encrypt(
         &self,
         nonce: &[u8; 12],
         aad: &[u8],
         cipher_inout: &mut [u8],
         tag_out: &mut [u8; 16],
-    ) {
+    ) -> Result<(), Error> {
         let _entry = Entry::new_secret();
+        // block 0 keys Poly1305
+        check_counter(1, cipher_inout.len())?;
         // libcrux reads and writes separate buffers.
         let mut plain = cipher_inout.to_vec();
         let result = libcrux_chacha20poly1305::encrypt_detached(
@@ -44,8 +51,7 @@ impl ChaCha20Poly1305 {
         )
         .map(|_| ());
         zeroise(&mut plain);
-        // `usize` is 32 bits here, so every length fits HACL's `u32`.
-        result.expect("ChaCha20Poly1305 lengths are within limits");
+        result.map_err(|_| Error::WrongLength)
     }
 
     /// Decrypts and verifies the given message.
@@ -58,6 +64,8 @@ impl ChaCha20Poly1305 {
     ///
     /// On success, `cipher_inout` contains the plaintext of the message,
     /// and `Ok(())` is returned.
+    /// A message past [`Self::encrypt`]'s limit fails with
+    /// `Err(Error::WrongLength)`, leaving `cipher_inout` unchanged.
     /// Otherwise, `Err(Error::DecryptFailed)` is returned and `cipher_inout`
     /// is cleared.
     pub fn decrypt(
@@ -68,6 +76,7 @@ impl ChaCha20Poly1305 {
         tag: &[u8],
     ) -> Result<(), Error> {
         let _entry = Entry::new_secret();
+        check_counter(1, cipher_inout.len())?;
         let ok = match <&[u8; 16]>::try_from(tag) {
             Ok(tag) => {
                 let cipher = cipher_inout.to_vec();
@@ -110,7 +119,7 @@ mod tests {
         let k = ChaCha20Poly1305::new([1; 32]);
         let mut buffer = *b"hello world";
         let mut tag = [0u8; 16];
-        k.encrypt(&[2; 12], b"aad", &mut buffer, &mut tag);
+        k.encrypt(&[2; 12], b"aad", &mut buffer, &mut tag).unwrap();
         assert_ne!(&buffer, b"hello world");
         k.decrypt(&[2; 12], b"aad", &mut buffer, &tag).unwrap();
         assert_eq!(&buffer, b"hello world");
@@ -121,7 +130,7 @@ mod tests {
         let k = ChaCha20Poly1305::new([1; 32]);
         let mut buffer = *b"hello";
         let mut tag = [0u8; 16];
-        k.encrypt(&[2; 12], b"", &mut buffer, &mut tag);
+        k.encrypt(&[2; 12], b"", &mut buffer, &mut tag).unwrap();
         assert_eq!(
             k.decrypt(&[2; 12], b"", &mut buffer, &tag[..15]),
             Err(Error::DecryptFailed)
