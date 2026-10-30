@@ -21,5 +21,4 @@ hosted jobs and 140 runs sat queued:
 
 ## Required
 
-- [Follow the move to moq-dev](/quest/m0/ci/transfer.md) - links, apps, and secrets name `moq-dev/rind`
 - [Land through quest land](/quest/m0/ci/land.md) - `just ci` on the organization's queue runner gates `main`

@@ -30,7 +30,7 @@ jobs:
   release:
     name: Plz
     runs-on: ubuntu-latest
-    if: ${{ github.repository_owner == 'kixelated' && github.ref == 'refs/heads/main' }}
+    if: ${{ github.repository_owner == 'moq-dev' && github.ref == 'refs/heads/main' }}
 
     steps:
       # A GitHub App token, so the release PR it opens triggers CI; PRs opened
