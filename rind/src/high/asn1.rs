@@ -324,7 +324,7 @@ impl Type<'_> for Null {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ObjectId {
+pub(crate) struct ObjectId {
     buf: [u8; Self::MAX_LEN],
     used: usize,
 }

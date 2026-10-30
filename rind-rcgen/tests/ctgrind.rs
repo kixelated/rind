@@ -8,8 +8,10 @@
 use crabgrind::memcheck::{self, MemState};
 use crabgrind::valgrind::{self, RunningMode};
 use rcgen::{CertificateParams, PublicKeyData, SerialNumber};
-use rind::hashing::Sha256;
-use rind::signing::ecdsa::{P256, SigningKey, VerifyingKey};
+use rind::signature::{
+    ECDSA_P256_SHA256_ASN1, ECDSA_P256_SHA256_ASN1_SIGNING, EcdsaKeyPair, KeyPair as _,
+    UnparsedPublicKey,
+};
 use rind_rcgen::KeyPair;
 
 /// Marks `value` public, so the test may branch on it.
@@ -35,9 +37,8 @@ fn self_signed() {
 
     let signature = rcgen::SigningKey::sign(&key, b"message").unwrap();
     public(&signature[..]);
-    VerifyingKey::<P256>::from_x962_uncompressed(key.der_bytes())
-        .unwrap()
-        .verify_asn1::<Sha256>(&[b"message"], &signature)
+    UnparsedPublicKey::new(&ECDSA_P256_SHA256_ASN1, key.der_bytes())
+        .verify(b"message", &signature)
         .unwrap();
 }
 
@@ -47,12 +48,9 @@ fn export() {
     // rind treats an exported key as leaving its care, so the encoding is public.
     let der = key.to_pkcs8_der().unwrap();
 
-    let reloaded = SigningKey::<P256>::from_pkcs8_der(der.secret_pkcs8_der()).unwrap();
-    let public_key = reloaded
-        .public_key()
-        .unwrap()
-        .public_key
-        .as_bytes_uncompressed();
-    public(&public_key);
+    let reloaded =
+        EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, der.secret_pkcs8_der()).unwrap();
+    let public_key = reloaded.public_key().as_ref();
+    public(public_key);
     assert_eq!(public_key, key.der_bytes());
 }

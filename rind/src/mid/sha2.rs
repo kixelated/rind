@@ -11,7 +11,7 @@ use crate::low::{Blockwise, Zeroable, zeroise_value};
 
 /// A context for incremental computation of SHA256.
 #[derive(Clone)]
-pub struct Sha256Context {
+pub(crate) struct Sha256Context {
     h: [u32; 8],
     blockwise: Blockwise<{ Self::BLOCK_SZ }>,
     // u64 so 32-bit targets can hash past 4 GiB.
@@ -20,7 +20,7 @@ pub struct Sha256Context {
 
 impl Sha256Context {
     /// Start a new SHA256 hash computation.
-    pub const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             h: [
                 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
@@ -32,7 +32,7 @@ impl Sha256Context {
     }
 
     /// Add `bytes` to the ongoing hash computation.
-    pub fn update(&mut self, bytes: &[u8]) {
+    pub(crate) fn update(&mut self, bytes: &[u8]) {
         if self.blockwise.used() == 0 && bytes.len().is_multiple_of(Self::BLOCK_SZ) {
             self.update_blocks(bytes);
             return;
@@ -55,7 +55,7 @@ impl Sha256Context {
     }
 
     /// Complete the SHA256 computation, returning the hash output.
-    pub fn finish(mut self) -> [u8; Self::OUTPUT_SZ] {
+    pub(crate) fn finish(mut self) -> [u8; Self::OUTPUT_SZ] {
         let bytes = self
             .nblocks
             .checked_mul(Self::BLOCK_SZ as u64)
@@ -89,10 +89,10 @@ impl Sha256Context {
     }
 
     /// The internal block size of SHA256.
-    pub const BLOCK_SZ: usize = 64;
+    pub(crate) const BLOCK_SZ: usize = 64;
 
     /// The output size of SHA256.
-    pub const OUTPUT_SZ: usize = 32;
+    pub(crate) const OUTPUT_SZ: usize = 32;
 }
 
 // The state is keyed when hashing an HMAC key, and the buffer may hold secret input.
@@ -106,13 +106,13 @@ impl Zeroable for Sha256Context {}
 
 /// A context for incremental computation of SHA384.
 #[derive(Clone)]
-pub struct Sha384Context {
+pub(crate) struct Sha384Context {
     inner: Sha512Context,
 }
 
 impl Sha384Context {
     /// Start a new SHA384 hash computation.
-    pub const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             inner: Sha512Context {
                 h: [
@@ -132,24 +132,24 @@ impl Sha384Context {
     }
 
     /// Add `bytes` to the ongoing hash computation.
-    pub fn update(&mut self, bytes: &[u8]) {
+    pub(crate) fn update(&mut self, bytes: &[u8]) {
         self.inner.update(bytes)
     }
 
     /// Complete the SHA384 computation, returning the hash output.
-    pub fn finish(self) -> [u8; Self::OUTPUT_SZ] {
+    pub(crate) fn finish(self) -> [u8; Self::OUTPUT_SZ] {
         let inner = self.inner.finish();
         // SAFETY: 48 is less than 64.
         inner[..Self::OUTPUT_SZ].try_into().unwrap()
     }
 
     /// The output size of SHA384.
-    pub const OUTPUT_SZ: usize = 48;
+    pub(crate) const OUTPUT_SZ: usize = 48;
 }
 
 /// A context for incremental computation of SHA512.
 #[derive(Clone)]
-pub struct Sha512Context {
+pub(crate) struct Sha512Context {
     h: [u64; 8],
     blockwise: Blockwise<{ Self::BLOCK_SZ }>,
     // u64 so 32-bit targets can hash past 4 GiB.
@@ -158,7 +158,7 @@ pub struct Sha512Context {
 
 impl Sha512Context {
     /// Start a new SHA512 hash computation.
-    pub const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             h: [
                 0x6a09e667f3bcc908,
@@ -176,7 +176,7 @@ impl Sha512Context {
     }
 
     /// Add `bytes` to the ongoing hash computation.
-    pub fn update(&mut self, bytes: &[u8]) {
+    pub(crate) fn update(&mut self, bytes: &[u8]) {
         if self.blockwise.used() == 0 && bytes.len().is_multiple_of(Self::BLOCK_SZ) {
             self.update_blocks(bytes);
             return;
@@ -199,7 +199,7 @@ impl Sha512Context {
     }
 
     /// Complete the SHA512 computation, returning the hash output.
-    pub fn finish(mut self) -> [u8; Self::OUTPUT_SZ] {
+    pub(crate) fn finish(mut self) -> [u8; Self::OUTPUT_SZ] {
         let bytes = self
             .nblocks
             .checked_mul(Self::BLOCK_SZ as u64)
@@ -233,10 +233,10 @@ impl Sha512Context {
     }
 
     /// The internal block size of SHA512.
-    pub const BLOCK_SZ: usize = 128;
+    pub(crate) const BLOCK_SZ: usize = 128;
 
     /// The output size of SHA512.
-    pub const OUTPUT_SZ: usize = 64;
+    pub(crate) const OUTPUT_SZ: usize = 64;
 }
 
 // The state is keyed when hashing an HMAC key, and the buffer may hold secret input.

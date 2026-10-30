@@ -2,8 +2,7 @@ use aws_lc_rs::rsa::KeyPair;
 use aws_lc_rs::{digest, hmac, signature::Ed25519KeyPair};
 use proptest::collection::vec;
 use proptest::prelude::*;
-use rind::signing::eddsa::Ed25519SigningKey;
-use rind::signing::rsa::{KeySize, SigningKey};
+use rind::signature::{self, KeySize, RsaKeyPair};
 
 #[test]
 fn rsa_2048_key_generation() {
@@ -44,7 +43,7 @@ fn rsa_8192_key_generation() {
 }
 
 fn check_key_generation(size: KeySize) {
-    let key = SigningKey::generate(size).unwrap();
+    let key = RsaKeyPair::generate(size).unwrap();
     let mut buf = [0u8; 8192];
     let key_enc = key.to_pkcs8_der(&mut buf).unwrap();
 
@@ -54,7 +53,7 @@ fn check_key_generation(size: KeySize) {
 #[test]
 fn ed25519_key_generation() {
     for _ in 0..100 {
-        let key = Ed25519SigningKey::generate().unwrap();
+        let key = signature::Ed25519KeyPair::generate().unwrap();
 
         let mut buf = [0u8; 128];
         let key_enc = key.to_pkcs8_der(&mut buf).unwrap();
@@ -475,17 +474,18 @@ mod aead {
 /// ECDSA and ECDH on one curve: aws-lc-rs and rind accept each other's keys,
 /// signatures, and public keys.
 macro_rules! ec_crosschecks {
-    ($curve:ident, $Curve:ident, $Hash:ident, $ecdh:ident, $signing:ident, $fixed:ident, $asn1:ident) => {
+    ($curve:ident, $ecdh:ident, $fixed_signing:ident, $fixed:ident, $asn1_signing:ident, $asn1:ident) => {
         mod $curve {
             use aws_lc_rs::agreement::{self, $ecdh, EphemeralPrivateKey};
+            use aws_lc_rs::encoding::{AsBigEndian, AsDer};
             use aws_lc_rs::rand::SystemRandom;
             use aws_lc_rs::signature::{
-                $asn1, $fixed, $signing, EcdsaKeyPair, KeyPair, UnparsedPublicKey,
+                $asn1, $asn1_signing, $fixed, $fixed_signing, EcdsaKeyPair, KeyPair,
+                UnparsedPublicKey,
             };
             use proptest::collection::vec;
             use proptest::prelude::*;
-            use rind::hashing::$Hash;
-            use rind::signing::ecdsa::{$Curve, SigningKey, VerifyingKey};
+            use rind::signature::{self, KeyPair as _};
 
             // Each case generates keys on both sides, which is slow under emulation.
             proptest! {
@@ -493,34 +493,60 @@ macro_rules! ec_crosschecks {
 
                 #[test]
                 fn ecdsa(message in vec(any::<u8>(), 0..300)) {
-                    // aws-lc-rs accepts our key and derives the same public key.
-                    let ours = SigningKey::<$Curve>::generate().unwrap();
-                    let public = ours.public_key().unwrap().public_key.as_bytes_uncompressed();
+                    // aws-lc-rs accepts our key and derives the same public
+                    // key, encodings, and scalar.
+                    let ours = signature::EcdsaKeyPair::generate(&signature::$fixed_signing).unwrap();
+                    let public = ours.public_key().as_ref();
                     let theirs_from_ours = EcdsaKeyPair::from_pkcs8(
-                        &$signing,
+                        &$fixed_signing,
                         ours.to_pkcs8_der(&mut [0; 256]).unwrap(),
                     )
                     .expect("aws-lc-rs rejected a key we generated");
-                    prop_assert_eq!(theirs_from_ours.public_key().as_ref(), &public[..]);
+                    prop_assert_eq!(theirs_from_ours.public_key().as_ref(), public);
+                    let spki = theirs_from_ours.public_key().as_der().unwrap();
+                    prop_assert_eq!(spki.as_ref(), ours.to_spki_der(&mut [0; 256]).unwrap().to_vec());
+                    let scalar = theirs_from_ours.private_key().as_be_bytes().unwrap();
+                    prop_assert_eq!(scalar.as_ref(), ours.to_private_key_be(&mut [0; 64]).unwrap().to_vec());
+
+                    // We load its scalar and point as the same key, and refuse
+                    // the scalar with another key's point.
+                    let reloaded = signature::EcdsaKeyPair::from_private_key_and_public_key(
+                        &signature::$asn1_signing,
+                        scalar.as_ref(),
+                        public,
+                    )
+                    .unwrap();
+                    prop_assert_eq!(reloaded.public_key().as_ref(), public);
+                    let other = EcdsaKeyPair::generate(&$fixed_signing).unwrap();
+                    prop_assert!(signature::EcdsaKeyPair::from_private_key_and_public_key(
+                        &signature::$asn1_signing,
+                        scalar.as_ref(),
+                        other.public_key().as_ref(),
+                    )
+                    .is_err());
 
                     // It verifies our signatures, in both encodings.
                     let theirs_verifier = |alg| UnparsedPublicKey::new(alg, public);
-                    let mut buf = [0; 128];
-                    let signature = ours.sign::<$Hash>(&[&message], &mut buf).unwrap();
-                    theirs_verifier(&$fixed).verify(&message, signature).unwrap();
-                    let signature = ours.sign_asn1::<$Hash>(&[&message], &mut buf).unwrap();
-                    theirs_verifier(&$asn1).verify(&message, signature).unwrap();
+                    let signature = ours.sign(&message).unwrap();
+                    theirs_verifier(&$fixed).verify(&message, signature.as_ref()).unwrap();
+                    let signature = reloaded.sign(&message).unwrap();
+                    theirs_verifier(&$asn1).verify(&message, signature.as_ref()).unwrap();
 
-                    // We verify its signatures, and refuse one over another message.
-                    let theirs = EcdsaKeyPair::generate(&$signing).unwrap();
-                    let signature = theirs.sign(&SystemRandom::new(), &message).unwrap();
-                    let verifier =
-                        VerifyingKey::<$Curve>::from_x962_uncompressed(theirs.public_key().as_ref())
-                            .unwrap();
-                    verifier.verify::<$Hash>(&[&message], signature.as_ref()).unwrap();
-                    prop_assert!(
-                        verifier.verify::<$Hash>(&[&message, b"!"], signature.as_ref()).is_err()
-                    );
+                    // We verify its signatures, in both encodings, and refuse
+                    // one over another message.
+                    for (signing, ours_verification) in [
+                        (&$fixed_signing, &signature::$fixed),
+                        (&$asn1_signing, &signature::$asn1),
+                    ] {
+                        let theirs = EcdsaKeyPair::generate(signing).unwrap();
+                        let signature = theirs.sign(&SystemRandom::new(), &message).unwrap();
+                        let verifier =
+                            signature::UnparsedPublicKey::new(ours_verification, theirs.public_key());
+                        verifier.verify(&message, signature.as_ref()).unwrap();
+                        prop_assert!(
+                            verifier.verify(&[&message[..], b"!"].concat(), signature.as_ref()).is_err()
+                        );
+                    }
                 }
 
                 #[test]
@@ -555,30 +581,29 @@ macro_rules! ec_crosschecks {
 
 ec_crosschecks!(
     p256,
-    P256,
-    Sha256,
     ECDH_P256,
     ECDSA_P256_SHA256_FIXED_SIGNING,
     ECDSA_P256_SHA256_FIXED,
+    ECDSA_P256_SHA256_ASN1_SIGNING,
     ECDSA_P256_SHA256_ASN1
 );
 
 ec_crosschecks!(
     p384,
-    P384,
-    Sha384,
     ECDH_P384,
     ECDSA_P384_SHA384_FIXED_SIGNING,
     ECDSA_P384_SHA384_FIXED,
+    ECDSA_P384_SHA384_ASN1_SIGNING,
     ECDSA_P384_SHA384_ASN1
 );
 
 mod ed25519 {
+    use aws_lc_rs::encoding::AsDer;
     use aws_lc_rs::signature::{ED25519, Ed25519KeyPair, KeyPair, UnparsedPublicKey};
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::sample::Index;
-    use rind::signing::eddsa::{Ed25519SigningKey, Ed25519VerifyingKey};
+    use rind::signature::{self, KeyPair as _};
 
     proptest! {
         #[test]
@@ -588,26 +613,49 @@ mod ed25519 {
             flip in any::<Option<Index>>(),
         ) {
             // Signing is deterministic, so one seed gives both sides the same
-            // public key and signatures.
-            let ours = Ed25519SigningKey::from_bytes(&seed).unwrap();
+            // public key, encoding, and signatures.
+            let ours = signature::Ed25519KeyPair::from_seed_unchecked(&seed).unwrap();
             let theirs = Ed25519KeyPair::from_seed_unchecked(&seed).unwrap();
-            let public = ours.public_key().as_bytes();
-            prop_assert_eq!(&public[..], theirs.public_key().as_ref());
-            let mut signature = ours.sign(&message);
+            let public = ours.public_key().as_ref();
+            prop_assert_eq!(public, theirs.public_key().as_ref());
+            let spki = theirs.public_key().as_der().unwrap();
+            prop_assert_eq!(ours.to_spki_der(&mut [0; 64]).unwrap().to_vec(), spki.as_ref());
+            prop_assert_eq!(ours.seed(), seed);
+            let signature = ours.sign(&message);
             let theirs_signature = theirs.sign(&message);
-            prop_assert_eq!(&signature[..], theirs_signature.as_ref());
+            prop_assert_eq!(signature.as_ref(), theirs_signature.as_ref());
 
             // Both verify it, and refuse it with any one bit flipped.
+            let mut signature = signature.as_ref().to_vec();
             if let Some(flip) = flip {
                 let bit = flip.index(signature.len() * 8);
                 signature[bit / 8] ^= 1 << (bit % 8);
             }
-            let ours_result = Ed25519VerifyingKey::from_bytes(&public)
-                .unwrap()
-                .verify(&signature, &message);
+            let ours_result =
+                signature::UnparsedPublicKey::new(&signature::ED25519, public).verify(&message, &signature);
             let theirs_result = UnparsedPublicKey::new(&ED25519, public).verify(&message, &signature);
             prop_assert_eq!(ours_result.is_ok(), flip.is_none());
             prop_assert_eq!(theirs_result.is_ok(), flip.is_none());
+        }
+
+        #[test]
+        fn seed_and_public_key(seed in any::<[u8; 32]>(), other in any::<[u8; 32]>()) {
+            // Both load a seed with its public key, and refuse it with another's.
+            let public = Ed25519KeyPair::from_seed_unchecked(&seed).unwrap();
+            let public = public.public_key().as_ref();
+            let wrong = Ed25519KeyPair::from_seed_unchecked(&other).unwrap();
+            let wrong = wrong.public_key().as_ref();
+
+            signature::Ed25519KeyPair::from_seed_and_public_key(&seed, public).unwrap();
+            Ed25519KeyPair::from_seed_and_public_key(&seed, public).unwrap();
+            prop_assert_eq!(
+                signature::Ed25519KeyPair::from_seed_and_public_key(&seed, wrong).is_ok(),
+                seed == other
+            );
+            prop_assert_eq!(
+                Ed25519KeyPair::from_seed_and_public_key(&seed, wrong).is_ok(),
+                seed == other
+            );
         }
     }
 }
@@ -618,65 +666,61 @@ mod rsa {
     use aws_lc_rs::encoding::AsDer;
     use aws_lc_rs::rand::SystemRandom;
     use aws_lc_rs::rsa::{KeyPair, KeySize};
-    use aws_lc_rs::signature::{
-        self, KeyPair as _, RsaEncoding, UnparsedPublicKey, VerificationAlgorithm,
-    };
+    use aws_lc_rs::signature::{self, KeyPair as _, UnparsedPublicKey};
     use proptest::collection::vec;
     use proptest::prelude::*;
     use rind::Error;
-    use rind::signing::rsa::{SigningKey, VerifyingKey};
+    use rind::signature::{KeyPair as _, RsaKeyPair};
 
-    type Sign = for<'a> fn(&SigningKey, &'a mut [u8], &[u8]) -> Result<&'a [u8], Error>;
-    type Verify = fn(&VerifyingKey, &[u8], &[u8]) -> Result<(), Error>;
-
+    /// One padding and hash: each side's signing and verification constants.
     struct Scheme {
-        sign: Sign,
-        verify: Verify,
-        theirs_sign: &'static dyn RsaEncoding,
-        theirs_verify: &'static dyn VerificationAlgorithm,
+        ours_sign: &'static rind::signature::RsaSignatureEncoding,
+        ours_verify: &'static rind::signature::RsaParameters,
+        theirs_sign: &'static signature::RsaSignatureEncoding,
+        theirs_verify: &'static signature::RsaParameters,
         /// PKCS#1 v1.5 signatures have no randomness, so both sides must agree.
         deterministic: bool,
     }
 
     const SCHEMES: [Scheme; 6] = [
         Scheme {
-            sign: SigningKey::sign_pkcs1_sha256,
-            verify: VerifyingKey::verify_pkcs1_sha256,
+            ours_sign: &rind::signature::RSA_PKCS1_SHA256,
+            ours_verify: &rind::signature::RSA_PKCS1_2048_8192_SHA256,
             theirs_sign: &signature::RSA_PKCS1_SHA256,
             theirs_verify: &signature::RSA_PKCS1_2048_8192_SHA256,
             deterministic: true,
         },
         Scheme {
-            sign: SigningKey::sign_pkcs1_sha384,
-            verify: VerifyingKey::verify_pkcs1_sha384,
+            ours_sign: &rind::signature::RSA_PKCS1_SHA384,
+            ours_verify: &rind::signature::RSA_PKCS1_2048_8192_SHA384,
             theirs_sign: &signature::RSA_PKCS1_SHA384,
             theirs_verify: &signature::RSA_PKCS1_2048_8192_SHA384,
             deterministic: true,
         },
         Scheme {
-            sign: SigningKey::sign_pkcs1_sha512,
-            verify: VerifyingKey::verify_pkcs1_sha512,
+            ours_sign: &rind::signature::RSA_PKCS1_SHA512,
+            ours_verify: &rind::signature::RSA_PKCS1_2048_8192_SHA512,
             theirs_sign: &signature::RSA_PKCS1_SHA512,
             theirs_verify: &signature::RSA_PKCS1_2048_8192_SHA512,
             deterministic: true,
         },
         Scheme {
-            sign: SigningKey::sign_pss_sha256,
-            verify: VerifyingKey::verify_pss_sha256,
+            ours_sign: &rind::signature::RSA_PSS_SHA256,
+            ours_verify: &rind::signature::RSA_PSS_2048_8192_SHA256,
             theirs_sign: &signature::RSA_PSS_SHA256,
             theirs_verify: &signature::RSA_PSS_2048_8192_SHA256,
             deterministic: false,
         },
         Scheme {
-            sign: SigningKey::sign_pss_sha384,
-            verify: VerifyingKey::verify_pss_sha384,
+            ours_sign: &rind::signature::RSA_PSS_SHA384,
+            ours_verify: &rind::signature::RSA_PSS_2048_8192_SHA384,
             theirs_sign: &signature::RSA_PSS_SHA384,
             theirs_verify: &signature::RSA_PSS_2048_8192_SHA384,
             deterministic: false,
         },
         Scheme {
-            sign: SigningKey::sign_pss_sha512,
-            verify: VerifyingKey::verify_pss_sha512,
+            ours_sign: &rind::signature::RSA_PSS_SHA512,
+            ours_verify: &rind::signature::RSA_PSS_2048_8192_SHA512,
             theirs_sign: &signature::RSA_PSS_SHA512,
             theirs_verify: &signature::RSA_PSS_2048_8192_SHA512,
             deterministic: false,
@@ -706,19 +750,21 @@ mod rsa {
         #[test]
         fn sign_verify(message in vec(any::<u8>(), 0..300)) {
             for theirs in &*THEIRS {
-                let ours = SigningKey::from_pkcs8_der(theirs.as_der().unwrap().as_ref()).unwrap();
+                let ours = RsaKeyPair::from_pkcs8(theirs.as_der().unwrap().as_ref()).unwrap();
                 let public = theirs.public_key().as_ref();
-                let verifier = VerifyingKey::from_pkcs1_der(public).unwrap();
+                prop_assert_eq!(ours.public_key().as_ref(), public);
+                let spki = theirs.public_key().as_der().unwrap();
+                prop_assert_eq!(ours.to_spki_der(&mut [0; 512]).unwrap().to_vec(), spki.as_ref());
                 let rng = SystemRandom::new();
                 let len = theirs.public_modulus_len();
-                prop_assert_eq!(ours.modulus_len_bytes(), len);
+                prop_assert_eq!(ours.public_modulus_len(), len);
 
                 for scheme in &SCHEMES {
                     // It verifies our signature.
-                    let mut buf = vec![0u8; len];
-                    let ours_signature = (scheme.sign)(&ours, &mut buf, &message).unwrap();
+                    let mut ours_signature = vec![0u8; len];
+                    ours.sign(scheme.ours_sign, &message, &mut ours_signature).unwrap();
                     UnparsedPublicKey::new(scheme.theirs_verify, public)
-                        .verify(&message, ours_signature)
+                        .verify(&message, &ours_signature)
                         .unwrap();
 
                     // We verify its signature, and refuse it over another message.
@@ -727,11 +773,12 @@ mod rsa {
                         .sign(scheme.theirs_sign, &rng, &message, &mut theirs_signature)
                         .unwrap();
                     if scheme.deterministic {
-                        prop_assert_eq!(ours_signature, &theirs_signature[..]);
+                        prop_assert_eq!(&ours_signature, &theirs_signature);
                     }
-                    (scheme.verify)(&verifier, &theirs_signature, &message).unwrap();
+                    let verifier = rind::signature::UnparsedPublicKey::new(scheme.ours_verify, public);
+                    verifier.verify(&message, &theirs_signature).unwrap();
                     prop_assert_eq!(
-                        (scheme.verify)(&verifier, &theirs_signature, &[&message[..], b"!"].concat()),
+                        verifier.verify(&[&message[..], b"!"].concat(), &theirs_signature),
                         Err(Error::BadSignature)
                     );
                 }
@@ -744,11 +791,17 @@ mod rsa {
         let private = include_bytes!("../src/high/rsa/rsa2047.pkcs8.der");
         assert!(KeyPair::from_pkcs8(private).is_err());
         assert_eq!(
-            SigningKey::from_pkcs8_der(private).err(),
+            RsaKeyPair::from_pkcs8(private).err(),
             Some(Error::OutOfRange)
         );
+        let public = include_bytes!("../src/high/rsa/rsa2047.pub.der");
         assert_eq!(
-            VerifyingKey::from_pkcs1_der(include_bytes!("../src/high/rsa/rsa2047.pub.der")).err(),
+            rind::signature::UnparsedPublicKey::new(
+                &rind::signature::RSA_PKCS1_2048_8192_SHA256,
+                public
+            )
+            .verify(b"", &[0; 256])
+            .err(),
             Some(Error::OutOfRange)
         );
     }

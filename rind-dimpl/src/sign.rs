@@ -5,8 +5,11 @@ use dimpl::crypto::{
     check_verify_scheme,
 };
 use dimpl::{CryptoError, CryptoOperation};
-use rind::hashing::{Sha256, Sha384};
-use rind::signing::ecdsa::{self, Curve, P256, P384};
+use rind::signature::{
+    ECDSA_P256_SHA256_ASN1, ECDSA_P256_SHA256_ASN1_SIGNING, ECDSA_P256_SHA384_ASN1,
+    ECDSA_P384_SHA256_ASN1, ECDSA_P384_SHA384_ASN1, ECDSA_P384_SHA384_ASN1_SIGNING, EcdsaKeyPair,
+    EcdsaSigningAlgorithm, EcdsaVerificationAlgorithm, UnparsedPublicKey,
+};
 use x509_cert::Certificate;
 use x509_cert::der::Decode;
 use x509_cert::spki::ObjectIdentifier;
@@ -15,6 +18,23 @@ const ID_EC_PUBLIC_KEY: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.840
 const SECP256R1: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.840.10045.3.1.7");
 const SECP384R1: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.3.132.0.34");
 
+/// Each curve, and the one hash its key signs with.
+///
+/// A key is bound to its hash when loaded, as with dimpl's aws-lc-rs
+/// provider, so each curve signs with its own hash only.
+const CURVES: [(NamedGroup, HashAlgorithm, &EcdsaSigningAlgorithm); 2] = [
+    (
+        NamedGroup::Secp256r1,
+        HashAlgorithm::SHA256,
+        &ECDSA_P256_SHA256_ASN1_SIGNING,
+    ),
+    (
+        NamedGroup::Secp384r1,
+        HashAlgorithm::SHA384,
+        &ECDSA_P384_SHA384_ASN1_SIGNING,
+    ),
+];
+
 #[derive(Debug)]
 pub(crate) struct Keys;
 
@@ -22,41 +42,49 @@ pub(crate) static KEYS: Keys = Keys;
 
 impl KeyProvider for Keys {
     fn load_private_key(&self, der: &[u8]) -> Result<Box<dyn SigningKey>, CryptoError> {
-        let key = if let Ok(key) = ecdsa::SigningKey::from_pkcs8_der(der) {
-            Key::P256(key)
-        } else if let Ok(key) = ecdsa::SigningKey::from_pkcs8_der(der) {
-            Key::P384(key)
-        } else if let Ok(key) = ecdsa::SigningKey::from_sec1_der(der) {
-            Key::P256(key)
-        } else if let Ok(key) = ecdsa::SigningKey::from_sec1_der(der) {
-            Key::P384(key)
-        } else {
-            return Err(CryptoError::InvalidPrivateKey);
+        type Load = fn(&'static EcdsaSigningAlgorithm, &[u8]) -> Result<EcdsaKeyPair, rind::Error>;
+        let load = |load: Load| {
+            CURVES.into_iter().find_map(|(group, hash, algorithm)| {
+                let key = load(algorithm, der).ok()?;
+                Some(Box::new(Key { key, group, hash }) as Box<dyn SigningKey>)
+            })
         };
-        Ok(Box::new(key))
+        load(EcdsaKeyPair::from_pkcs8)
+            .or_else(|| load(EcdsaKeyPair::from_private_key_der))
+            .ok_or(CryptoError::InvalidPrivateKey)
     }
 }
 
-enum Key {
-    P256(ecdsa::SigningKey<P256>),
-    P384(ecdsa::SigningKey<P384>),
+struct Key {
+    key: EcdsaKeyPair,
+    group: NamedGroup,
+    hash: HashAlgorithm,
 }
 
 impl fmt::Debug for Key {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::P256(_) => "P256",
-            Self::P384(_) => "P384",
-        })
+        f.debug_struct("Key")
+            .field("group", &self.group)
+            .field("hash", &self.hash)
+            .finish_non_exhaustive()
     }
 }
 
 impl SigningKey for Key {
     fn sign(&mut self, data: &[u8], hash: HashAlgorithm, out: &mut Buf) -> Result<(), CryptoError> {
-        match self {
-            Self::P256(key) => sign(key, NamedGroup::Secp256r1, data, hash, out),
-            Self::P384(key) => sign(key, NamedGroup::Secp384r1, data, hash, out),
+        if hash != self.hash {
+            return Err(CryptoError::SigningKeyHashMismatch {
+                key_hash: self.hash,
+                requested: hash,
+            });
         }
+        let signature = self
+            .key
+            .sign(data)
+            .map_err(|_| CryptoError::OperationFailed(CryptoOperation::Sign))?;
+        out.clear();
+        out.extend_from_slice(signature.as_ref());
+        Ok(())
     }
 
     fn algorithm(&self) -> SignatureAlgorithm {
@@ -64,36 +92,12 @@ impl SigningKey for Key {
     }
 
     fn hash_algorithm(&self) -> HashAlgorithm {
-        match self {
-            Self::P256(_) => HashAlgorithm::SHA256,
-            Self::P384(_) => HashAlgorithm::SHA384,
-        }
+        self.hash
     }
 
     fn supported_hash_algorithms(&self) -> &[HashAlgorithm] {
-        // DTLS 1.2 may pair either curve with either hash.
-        &[HashAlgorithm::SHA256, HashAlgorithm::SHA384]
+        core::slice::from_ref(&self.hash)
     }
-}
-
-fn sign<C: Curve>(
-    key: &ecdsa::SigningKey<C>,
-    group: NamedGroup,
-    data: &[u8],
-    hash: HashAlgorithm,
-    out: &mut Buf,
-) -> Result<(), CryptoError> {
-    // Fits a DER signature on P-384, the largest curve.
-    let mut signature = [0u8; 128];
-    let signature = match hash {
-        HashAlgorithm::SHA256 => key.sign_asn1::<Sha256>(&[data], &mut signature),
-        HashAlgorithm::SHA384 => key.sign_asn1::<Sha384>(&[data], &mut signature),
-        _ => return Err(CryptoError::SigningKeyUnsupportedHash { group, hash }),
-    }
-    .map_err(|_| CryptoError::OperationFailed(CryptoOperation::Sign))?;
-    out.clear();
-    out.extend_from_slice(signature);
-    Ok(())
 }
 
 #[derive(Debug)]
@@ -127,46 +131,43 @@ impl SignatureVerifier for Verifier {
             .ok_or(CryptoError::MissingEcCurveParameter)?
             .decode_as()
             .map_err(|_| CryptoError::InvalidEcCurveParameter)?;
-        type Verify = fn(NamedGroup, &[u8], &[u8], &[u8], HashAlgorithm) -> Result<(), CryptoError>;
-        let (group, verify): (_, Verify) = match curve {
-            SECP256R1 => (NamedGroup::Secp256r1, verify::<P256>),
-            SECP384R1 => (NamedGroup::Secp384r1, verify::<P384>),
+        let group = match curve {
+            SECP256R1 => NamedGroup::Secp256r1,
+            SECP384R1 => NamedGroup::Secp384r1,
             _ => return Err(CryptoError::UnsupportedEcCurve),
         };
         check_verify_scheme(algorithm, hash, group)?;
+
+        // DTLS 1.2 may pair either curve with either hash.
+        let verification: &'static EcdsaVerificationAlgorithm = match (group, hash) {
+            (NamedGroup::Secp256r1, HashAlgorithm::SHA256) => &ECDSA_P256_SHA256_ASN1,
+            (NamedGroup::Secp256r1, HashAlgorithm::SHA384) => &ECDSA_P256_SHA384_ASN1,
+            (NamedGroup::Secp384r1, HashAlgorithm::SHA256) => &ECDSA_P384_SHA256_ASN1,
+            (NamedGroup::Secp384r1, HashAlgorithm::SHA384) => &ECDSA_P384_SHA384_ASN1,
+            _ => {
+                return Err(CryptoError::UnsupportedSignatureVerification {
+                    signature: algorithm,
+                    hash,
+                    group,
+                });
+            }
+        };
 
         let point = spki
             .subject_public_key
             .as_bytes()
             .ok_or(CryptoError::InvalidSubjectPublicKey)?;
-        verify(group, point, data, signature, hash)
+        // rind refuses a bad signature as `BadSignature`, and a bad point
+        // with an encoding or curve error.
+        UnparsedPublicKey::new(verification, point)
+            .verify(data, signature)
+            .map_err(|err| match err {
+                rind::Error::BadSignature => CryptoError::SignatureVerificationFailed {
+                    signature: algorithm,
+                    hash,
+                    group,
+                },
+                _ => CryptoError::InvalidPublicKey(group),
+            })
     }
-}
-
-fn verify<C: Curve>(
-    group: NamedGroup,
-    point: &[u8],
-    data: &[u8],
-    signature: &[u8],
-    hash: HashAlgorithm,
-) -> Result<(), CryptoError> {
-    let key = ecdsa::VerifyingKey::<C>::from_x962_uncompressed(point)
-        .map_err(|_| CryptoError::InvalidPublicKey(group))?;
-    let signature_alg = SignatureAlgorithm::ECDSA;
-    match hash {
-        HashAlgorithm::SHA256 => key.verify_asn1::<Sha256>(&[data], signature),
-        HashAlgorithm::SHA384 => key.verify_asn1::<Sha384>(&[data], signature),
-        _ => {
-            return Err(CryptoError::UnsupportedSignatureVerification {
-                signature: signature_alg,
-                hash,
-                group,
-            });
-        }
-    }
-    .map_err(|_| CryptoError::SignatureVerificationFailed {
-        signature: signature_alg,
-        hash,
-        group,
-    })
 }

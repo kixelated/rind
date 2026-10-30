@@ -21,37 +21,30 @@
 
 use core::fmt;
 
-use rind::hashing::Sha256;
-use rind::signing::ecdsa::{P256, SigningKey};
+use rind::signature::{ECDSA_P256_SHA256_ASN1_SIGNING, EcdsaKeyPair, KeyPair as _};
 use rustls_pki_types::PrivatePkcs8KeyDer;
 
 /// An ECDSA P-256 key pair that signs rcgen certificates with SHA-256.
-pub struct KeyPair {
-    key: SigningKey<P256>,
-    // rcgen borrows the public key, so encode the uncompressed point
-    // (0x04 || x || y) once.
-    public_key: [u8; 65],
-}
+pub struct KeyPair(EcdsaKeyPair);
 
 impl KeyPair {
     /// Generate a random key pair.
     pub fn generate() -> Result<Self, rind::Error> {
-        let key = SigningKey::<P256>::generate()?;
-        let public_key = key.public_key()?.public_key.as_bytes_uncompressed();
-        Ok(Self { key, public_key })
+        EcdsaKeyPair::generate(&ECDSA_P256_SHA256_ASN1_SIGNING).map(Self)
     }
 
     /// Encode the private key as PKCS#8 DER, the form rustls loads.
     pub fn to_pkcs8_der(&self) -> Result<PrivatePkcs8KeyDer<'static>, rind::Error> {
         let mut buffer = [0u8; 256];
-        let der = self.key.to_pkcs8_der(&mut buffer)?;
+        let der = self.0.to_pkcs8_der(&mut buffer)?;
         Ok(PrivatePkcs8KeyDer::from(der.to_vec()))
     }
 }
 
 impl rcgen::PublicKeyData for KeyPair {
+    // rcgen takes the uncompressed point (0x04 || x || y) for EC keys.
     fn der_bytes(&self) -> &[u8] {
-        &self.public_key
+        self.0.public_key().as_ref()
     }
 
     fn algorithm(&self) -> &'static rcgen::SignatureAlgorithm {
@@ -61,12 +54,8 @@ impl rcgen::PublicKeyData for KeyPair {
 
 impl rcgen::SigningKey for KeyPair {
     fn sign(&self, msg: &[u8]) -> Result<Vec<u8>, rcgen::Error> {
-        let mut buffer = [0u8; 128];
-        let signature = self
-            .key
-            .sign_asn1::<Sha256>(&[msg], &mut buffer)
-            .map_err(|_| rcgen::Error::RemoteKeyError)?;
-        Ok(signature.to_vec())
+        let signature = self.0.sign(msg).map_err(|_| rcgen::Error::RemoteKeyError)?;
+        Ok(signature.as_ref().to_vec())
     }
 }
 

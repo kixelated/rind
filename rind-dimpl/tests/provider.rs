@@ -147,7 +147,17 @@ fn signatures_are_checked_against_the_certificate() {
     let (cert, key) = certificate(&rcgen::PKCS_ECDSA_P256_SHA256);
     let mut key = provider.key_provider.load_private_key(&key).unwrap();
     let mut signature = Buf::new();
-    key.sign(b"transcript", HashAlgorithm::SHA384, &mut signature)
+
+    // A key signs only with the hash it was loaded for.
+    assert_eq!(key.supported_hash_algorithms(), [HashAlgorithm::SHA256]);
+    assert_eq!(
+        key.sign(b"transcript", HashAlgorithm::SHA384, &mut signature),
+        Err(CryptoError::SigningKeyHashMismatch {
+            key_hash: HashAlgorithm::SHA256,
+            requested: HashAlgorithm::SHA384,
+        })
+    );
+    key.sign(b"transcript", HashAlgorithm::SHA256, &mut signature)
         .unwrap();
 
     let verify = |cert: &[u8], data: &[u8], signature: &[u8], hash, algorithm| {
@@ -160,7 +170,7 @@ fn signatures_are_checked_against_the_certificate() {
         &cert,
         b"transcript",
         &signature,
-        HashAlgorithm::SHA384,
+        HashAlgorithm::SHA256,
         ecdsa,
     )
     .unwrap();
@@ -173,24 +183,24 @@ fn signatures_are_checked_against_the_certificate() {
         })
     };
     assert_eq!(
-        verify(&cert, b"other", &signature, HashAlgorithm::SHA384, ecdsa),
-        failed(HashAlgorithm::SHA384)
+        verify(&cert, b"other", &signature, HashAlgorithm::SHA256, ecdsa),
+        failed(HashAlgorithm::SHA256)
     );
     assert_eq!(
         verify(
             &cert,
             b"transcript",
             &signature,
-            HashAlgorithm::SHA256,
+            HashAlgorithm::SHA384,
             ecdsa
         ),
-        failed(HashAlgorithm::SHA256)
+        failed(HashAlgorithm::SHA384)
     );
     let mut altered = signature.to_vec();
     *altered.last_mut().unwrap() ^= 1;
     assert_eq!(
-        verify(&cert, b"transcript", &altered, HashAlgorithm::SHA384, ecdsa),
-        failed(HashAlgorithm::SHA384)
+        verify(&cert, b"transcript", &altered, HashAlgorithm::SHA256, ecdsa),
+        failed(HashAlgorithm::SHA256)
     );
 
     assert_eq!(
@@ -212,7 +222,7 @@ fn signatures_are_checked_against_the_certificate() {
             &cert,
             b"transcript",
             &signature,
-            HashAlgorithm::SHA384,
+            HashAlgorithm::SHA256,
             SignatureAlgorithm::RSA
         ),
         Err(CryptoError::UnsupportedSignatureAlgorithm(
@@ -224,7 +234,7 @@ fn signatures_are_checked_against_the_certificate() {
             &cert[1..],
             b"transcript",
             &signature,
-            HashAlgorithm::SHA384,
+            HashAlgorithm::SHA256,
             ecdsa
         ),
         Err(CryptoError::CertificateParseFailed)
@@ -235,7 +245,7 @@ fn signatures_are_checked_against_the_certificate() {
             &ed25519,
             b"transcript",
             &signature,
-            HashAlgorithm::SHA384,
+            HashAlgorithm::SHA256,
             ecdsa
         ),
         Err(CryptoError::UnsupportedPublicKeyAlgorithm)

@@ -42,9 +42,9 @@ pub(crate) enum KeyFormatError {
     MismatchedPkcs8Algorithm,
     MismatchedPkcs8Parameters,
     MismatchedPkcs8PublicKey,
+    MismatchedPublicKey,
     MismatchedSec1Curve,
     MismatchedSec1PublicKey,
-    MismatchedSpkiAlgorithm,
 }
 
 impl From<KeyFormatError> for Error {
@@ -66,9 +66,9 @@ impl core::fmt::Display for KeyRejected {
                 write!(f, "mismatched PKCS#8 parameters")
             }
             KeyFormatError::MismatchedPkcs8PublicKey => write!(f, "mismatched PKCS#8 public key"),
+            KeyFormatError::MismatchedPublicKey => write!(f, "mismatched public key"),
             KeyFormatError::MismatchedSec1Curve => write!(f, "mismatched SEC1 curve"),
             KeyFormatError::MismatchedSec1PublicKey => write!(f, "mismatched SEC1 public key"),
-            KeyFormatError::MismatchedSpkiAlgorithm => write!(f, "mismatched SPKI algorithm"),
         }
     }
 }
@@ -176,8 +176,8 @@ mod tests {
             "mismatched SEC1 public key"
         );
         assert_eq!(
-            display(KeyFormatError::MismatchedSpkiAlgorithm),
-            "mismatched SPKI algorithm"
+            display(KeyFormatError::MismatchedPublicKey),
+            "mismatched public key"
         );
     }
 }

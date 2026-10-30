@@ -14,7 +14,7 @@ use crate::mid::rng::{RandomSource, SystemRandom};
 
 /// A P-256 public key.
 #[derive(Clone, Debug)]
-pub struct PublicKey {
+pub(crate) struct PublicKey {
     /// `x || y`, big-endian.
     xy: [u8; 64],
 }
@@ -27,7 +27,7 @@ impl PublicKey {
     /// This must be exactly 65 bytes in length, using the X9.62
     /// uncompressed encoding.  An error is returned if a coordinate
     /// is not below the field prime, or the point is not on the curve.
-    pub fn from_x962_uncompressed(bytes: &[u8]) -> Result<Self, Error> {
+    pub(crate) fn from_x962_uncompressed(bytes: &[u8]) -> Result<Self, Error> {
         let _entry = low::Entry::new_public();
         match bytes.first() {
             Some(&0x04) => (),
@@ -40,12 +40,6 @@ impl PublicKey {
             true => Ok(Self { xy }),
             false => Err(Error::NotOnCurve),
         }
-    }
-
-    /// Encodes this public key using the X9.62 uncompressed encoding.
-    pub fn as_bytes_uncompressed(&self) -> [u8; Self::BYTES] {
-        let _entry = low::Entry::new_public();
-        uncompressed(&self.xy)
     }
 
     pub(crate) fn raw_ecdsa_verify(&self, r: &Scalar, s: &Scalar, e: &Scalar) -> Result<(), Error> {
@@ -146,7 +140,7 @@ impl fmt::Debug for PrivateKey {
 ///
 /// This backs ECDSA, so it can be serialized and deserialized. Its
 /// Diffie-Hellman operation is only for tests with known scalars.
-pub struct StaticPrivateKey(PrivateKey);
+pub(crate) struct StaticPrivateKey(PrivateKey);
 
 impl StaticPrivateKey {
     /// Generate a new random private key using the system RNG.
@@ -234,7 +228,7 @@ impl Drop for SharedSecret {
 
 /// An integer mod the curve order `n`, as little-endian words.
 #[derive(Default)]
-pub struct Scalar([u64; 4]);
+pub(crate) struct Scalar([u64; 4]);
 
 impl Scalar {
     pub(crate) const BYTES: usize = 32;
@@ -363,6 +357,6 @@ mod tests {
         let key = StaticPrivateKey::new_random().unwrap();
         let encoded = key.public_key_uncompressed();
         let decoded = PublicKey::from_x962_uncompressed(&encoded).unwrap();
-        assert_eq!(decoded.as_bytes_uncompressed(), encoded);
+        assert_eq!(decoded.xy, encoded[1..]);
     }
 }

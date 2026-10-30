@@ -8,7 +8,7 @@ use crate::mid::p384;
 use crate::mid::rng::RandomSource;
 
 /// A generalisation of elliptic curves for use with ECDSA.
-pub trait Curve: private::Sealed {
+pub(crate) trait Curve {
     /// Private key type for this curve.
     type PrivateKey: PrivateKey<Self>;
 
@@ -26,8 +26,7 @@ pub trait Curve: private::Sealed {
 }
 
 /// A generic elliptic curve private key scalar, on curve `C`.
-#[allow(unreachable_pub)]
-pub trait PrivateKey<C: Curve + ?Sized> {
+pub(crate) trait PrivateKey<C: Curve + ?Sized> {
     /// Decode a private key from `bytes`.
     ///
     /// `bytes` may be larger or smaller than the size of `n`: excess bytes
@@ -63,8 +62,7 @@ pub trait PrivateKey<C: Curve + ?Sized> {
 }
 
 /// A generic elliptic curve public key point, on curve `C`.
-#[allow(unreachable_pub)]
-pub trait PublicKey<C: Curve + ?Sized> {
+pub(crate) trait PublicKey<C: Curve + ?Sized> {
     /// Decode a point from its uncompressed encoding.
     ///
     /// `bytes` must be precisely `LEN_BYTES` in length.
@@ -81,8 +79,7 @@ pub trait PublicKey<C: Curve + ?Sized> {
 }
 
 /// A generic elliptic curve scalar, on curve `C`.
-#[allow(unreachable_pub)]
-pub trait Scalar<C: Curve + ?Sized> {
+pub(crate) trait Scalar<C: Curve + ?Sized> {
     /// Length of an encoded scalar.
     const LEN_BYTES: usize;
 
@@ -113,10 +110,6 @@ pub trait Scalar<C: Curve + ?Sized> {
     fn write_bytes(&self, target: &mut [u8]);
 }
 
-mod private {
-    pub trait Sealed {}
-}
-
 // enough for p384
 pub(crate) const MAX_SCALAR_LEN: usize = 48;
 pub(crate) const MAX_UNCOMPRESSED_PUBLIC_KEY_LEN: usize = 97;
@@ -126,7 +119,7 @@ pub(crate) const MAX_UNCOMPRESSED_PUBLIC_KEY_LEN: usize = 97;
 /// P-256 is also known as "NISTP256", "prime256v1", or "secp256r1".
 ///
 /// See [SEC1](https://www.secg.org/sec1-v2.pdf) for one definition.
-pub struct P256;
+pub(crate) struct P256;
 
 impl Curve for P256 {
     type PrivateKey = p256::StaticPrivateKey;
@@ -141,8 +134,6 @@ impl Curve for P256 {
         p256::StaticPrivateKey::generate(rng)
     }
 }
-
-impl private::Sealed for P256 {}
 
 impl PrivateKey<P256> for p256::StaticPrivateKey {
     fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
@@ -216,7 +207,7 @@ impl Scalar<P256> for p256::Scalar {
 /// P-384 is also known as "NISTP384", or "secp384r1".
 ///
 /// See [SEC1](https://www.secg.org/sec1-v2.pdf) for one definition.
-pub struct P384;
+pub(crate) struct P384;
 
 impl Curve for P384 {
     type PrivateKey = p384::StaticPrivateKey;
@@ -231,8 +222,6 @@ impl Curve for P384 {
         p384::StaticPrivateKey::generate(rng)
     }
 }
-
-impl private::Sealed for P384 {}
 
 impl PrivateKey<P384> for p384::StaticPrivateKey {
     fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {

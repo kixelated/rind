@@ -17,3 +17,4 @@ pub(super) mod kem;
 pub(super) mod pkcs1;
 pub(super) mod pkcs8;
 pub(super) mod rsa;
+pub(super) mod signature;

@@ -23,10 +23,10 @@ fn rsa_key_generation(c: &mut Criterion) {
     });
 
     group.bench_function("rind", |b| {
-        use rind::signing::rsa;
+        use rind::signature::{KeySize, RsaKeyPair};
 
         b.iter(|| {
-            black_box(rsa::SigningKey::generate(rsa::KeySize::Rsa2048).unwrap());
+            black_box(RsaKeyPair::generate(KeySize::Rsa2048).unwrap());
         })
     });
 

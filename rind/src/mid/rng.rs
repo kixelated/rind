@@ -8,7 +8,7 @@ use crate::Error;
 
 /// The library's external and internal trait for all
 /// random consumption.
-pub trait RandomSource {
+pub(crate) trait RandomSource {
     fn fill(&mut self, out: &mut [u8]) -> Result<(), Error>;
 }
 

@@ -153,7 +153,7 @@ fn signing() {
             .load_private_key(&key.serialize_der())
             .unwrap();
 
-        for hash in [HashAlgorithm::SHA256, HashAlgorithm::SHA384] {
+        for hash in key.supported_hash_algorithms().to_vec() {
             let mut signature = Buf::new();
             key.sign(b"transcript", hash, &mut signature).unwrap();
             public(signature.as_ref());

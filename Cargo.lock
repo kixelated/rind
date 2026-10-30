@@ -3007,7 +3007,6 @@ dependencies = [
  "proptest",
  "serde",
  "serde_json",
- "tempfile",
 ]
 
 [[package]]
@@ -3052,6 +3051,7 @@ dependencies = [
 name = "rind-dimpl"
 version = "0.1.0"
 dependencies = [
+ "aws-lc-rs",
  "crabgrind 0.4.0",
  "dimpl",
  "rcgen",
