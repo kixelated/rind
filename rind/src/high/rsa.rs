@@ -525,7 +525,7 @@ impl SigningKey {
 
         let m = PosInt::from_bytes(m)?;
         let c = self.0.private_op(&m).map_err(|_| Error::BadSignature)?;
-        c.to_bytes(signature)
+        self.to_signature(&c, signature)
     }
 
     fn _sign_pss<'a, H: Hash>(
@@ -545,7 +545,28 @@ impl SigningKey {
         pkcs1::encode_pss_sig::<H>(m, &mut SystemRandom, hash.as_ref())?;
         let m = PosInt::from_bytes(m)?;
         let c = self.0.private_op(&m).map_err(|_| Error::BadSignature)?;
-        c.to_bytes(signature)
+        self.to_signature(&c, signature)
+    }
+
+    /// Writes `c` to the front of `signature` in exactly the modulus length,
+    /// as PKCS#1's I2OSP requires, however many of its leading bytes are zero.
+    fn to_signature<'a, const N: usize>(
+        &self,
+        c: &PosInt<N>,
+        signature: &'a mut [u8],
+    ) -> Result<&'a [u8], Error> {
+        let mut bytes = [0u8; rsa_pub::MAX_PUBLIC_MODULUS_BYTES];
+        let bytes = c.to_bytes(&mut bytes)?;
+        // `c` is below the modulus, so any bytes beyond its length are zero.
+        let bytes = &bytes[bytes.len().saturating_sub(self.0.modulus_len_bytes())..];
+
+        let signature = signature
+            .get_mut(..self.0.modulus_len_bytes())
+            .ok_or(Error::OutOfRange)?;
+        let (zeroes, value) = signature.split_at_mut(signature.len() - bytes.len());
+        zeroes.fill(0);
+        value.copy_from_slice(bytes);
+        Ok(signature)
     }
 }
 

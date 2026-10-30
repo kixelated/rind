@@ -21,4 +21,3 @@ configured. The token can publish new crates, so release-plz creates each
 ## Required
 
 - [rind-instant-acme](/quest/m1/moq/instant-acme.md) - part of the release
-- [Verification](/quest/m1/moq/verify.md) - every backend and adapter proven
