@@ -31,8 +31,10 @@ pub(crate) fn decrypt(
 /// Blocks copied aside per call of the s2n-bignum kernels.
 ///
 /// Their proofs require the input and output not to overlap, so in-place
-/// operation goes through this bounce buffer, which stays in L1.
-const CHUNK_BLOCKS: usize = 32;
+/// operation goes through this bounce buffer. Each call fills and drains the
+/// kernel's pipeline: on Neoverse N2, 64 blocks ran 16 KiB 5% faster than 32
+/// and 11% faster than 16.
+const CHUNK_BLOCKS: usize = 64;
 
 // AES-GCM encrypt (if `ENC` is `true`) or decrypt.
 fn cipher<const ENC: bool>(
