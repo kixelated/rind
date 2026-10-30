@@ -2,7 +2,7 @@
 name = "rind-rustls"
 version = "0.1.0"
 edition = "2024"
-repository = "https://github.com/kixelated/rind"
+repository = "https://github.com/moq-dev/rind"
 license = "Apache-2.0 OR ISC OR MIT-0"
 description = "rustls CryptoProvider backed by rind"
 categories = ["network-programming", "cryptography"]

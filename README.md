@@ -1,5 +1,5 @@
 <h1 align="center">rind</h1>
-<img width="40%" align="right" src="https://raw.githubusercontent.com/kixelated/rind/main/admin/picture.png">
+<img width="40%" align="right" src="https://raw.githubusercontent.com/moq-dev/rind/main/admin/picture.png">
 
 > **rind** is a compendium of **high quality**,
 > **fast** and **easy to build** cryptography for Rust, aimed
@@ -27,7 +27,7 @@ This project is very new, so exercise due caution.  The overriding
 goal of this crate is for use with `rustls` via [rind-rustls][],
 but there is also a public API for general-purpose use.
 
-[![Build Status](https://img.shields.io/github/actions/workflow/status/kixelated/rind/build.yml)](https://github.com/kixelated/rind/actions/workflows/build.yml?query=branch%3Amain)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/moq-dev/rind/build.yml)](https://github.com/moq-dev/rind/actions/workflows/build.yml?query=branch%3Amain)
 [![Latest release](https://img.shields.io/crates/v/rind)](https://crates.io/crates/rind)
 [![Documentation](https://img.shields.io/docsrs/rind)](https://docs.rs/rind/)
 
