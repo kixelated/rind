@@ -13,4 +13,3 @@ pub(crate) mod chacha20;
 pub(crate) mod cpu;
 pub(crate) mod curve25519;
 pub(crate) mod posint;
-pub(crate) mod sha2;
