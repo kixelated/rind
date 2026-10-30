@@ -109,7 +109,7 @@ class Architecture_aarch64(Architecture):
 
     constant_reference_page_offs = True
 
-    fn_arg_regs = "x0 x1 x2 x3 x4 x5".split()
+    fn_arg_regs = "x0 x1 x2 x3 x4 x5 x6 x7".split()
 
     cpp_definitions = dict(__linux__="1", __ELF__="1")
 

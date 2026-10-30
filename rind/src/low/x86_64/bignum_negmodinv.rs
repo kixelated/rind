@@ -205,6 +205,9 @@ pub(crate) fn bignum_negmodinv(z: &mut [u64], x: &[u64]) {
         Q!("    mov             " h!() ", " d!()),
         Q!("    mov             " ishort!() ", 1"),
         Q!("    mov             " t!() ", " k!()),
+        // JCC erratum (SKX102): pad so this loop's
+        Q!("    .byte           " "0x0f, 0x1f, 0x40, 0x00"),
+        // back-edge does not straddle a 32-byte boundary at 0-mod-32 entry
         Q!(Label!("Lbignum_negmodinv_innerloop", 6) ":"),
         Q!("    adc             " h!() ", [" z!() "+ 8 * " i!() "]"),
         Q!("    sbb             " e!() ", " e!()),

@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 
 pub(crate) mod aes;
+pub(crate) mod aes128_gcm_dec;
+pub(crate) mod aes128_gcm_enc;
+pub(crate) mod aes256_gcm_dec;
+pub(crate) mod aes256_gcm_enc;
 pub(crate) mod aes_ctr;
 pub(crate) mod aes_gcm;
 pub(crate) mod bignum_add;

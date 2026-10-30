@@ -29,9 +29,7 @@ if __name__ == "__main__":
         open("../../rind/src/low/x86_64/curve25519_x25519base.rs", "w") as output,
     ):
         d = RustDriver(output, Architecture_amd64)
-        d.add_const_symbol("Lcurve25519_x25519base_edwards25519_0g")
-        d.add_const_symbol("Lcurve25519_x25519base_edwards25519_8g")
-        d.add_const_symbol("Lcurve25519_x25519base_edwards25519_gtable")
+        d.add_const_symbol("curve25519_x25519base_constant")
         d.emit_rust_function(
             "curve25519_x25519base",
             parameter_map=[
