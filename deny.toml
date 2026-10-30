@@ -55,5 +55,6 @@ unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 # rind-str0m pins str0m's unreleased provider interface on dimpl 0.9 until a
-# str0m release carries it.
-allow-git = ["https://github.com/algesten/str0m"]
+# str0m release carries it, and rind-instant-acme pins instant-acme's
+# unreleased CryptoProvider until 0.9.
+allow-git = ["https://github.com/algesten/str0m", "https://github.com/djc/instant-acme"]
