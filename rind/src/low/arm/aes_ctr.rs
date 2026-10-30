@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 
-use crate::low::{AesKey, zeroise};
+use crate::low::AesKey;
 
 /// XORs eight blocks of AES-CTR keystream into `inout`.
 ///
@@ -16,5 +16,4 @@ pub(crate) fn apply_8(key: &AesKey, nonce: &[u8; 12], counter: u32, inout: &mut 
             *b ^= k;
         }
     }
-    zeroise(&mut keystream);
 }
