@@ -75,11 +75,13 @@ pub(crate) static DIGESTINFO_SHA512: &[u8] = &[
 ///
 /// `sLen` is fixed as `hLen`.
 /// `MGF` is `MGF1` with hash `H`.
-/// `out` is the modulus-length output buffer.
+/// `out` is the output buffer of `emLen = ceil(emBits / 8)` octets, where
+/// `em_bits` is one less than the modulus bit length.
 /// `hash` is the message hash, made by the caller using `H`.
 /// `rng` is used to generate the salt.
 pub(crate) fn encode_pss_sig<H: Hash>(
     out: &mut [u8],
+    em_bits: usize,
     rng: &mut dyn RandomSource,
     hash: &[u8],
 ) -> Result<(), Error> {
@@ -132,7 +134,7 @@ pub(crate) fn encode_pss_sig<H: Hash>(
 
     // 11. Set the leftmost 8emLen - emBits bits of the leftmost octet in
     //     maskedDB to zero.
-    db[0] &= 0x7f;
+    db[0] &= u8::MAX >> (8 * em_len - em_bits);
 
     // 12. Let EM = maskedDB || H || 0xbc.
     let (bc, h_out) = h_bc.split_last_mut().unwrap();
@@ -149,10 +151,15 @@ pub(crate) fn encode_pss_sig<H: Hash>(
 ///
 /// `MGF` is `MGF1` with hash `H`.
 ///
-/// `em` is the modulus-length input and temporary buffer.
+/// `em` is the input and temporary buffer of `emLen = ceil(emBits / 8)`
+/// octets, where `em_bits` is one less than the modulus bit length.
 ///
 /// `m_hash` is the message hash, made by the caller using `H`.
-pub(crate) fn verify_pss_sig<H: Hash>(em: &mut [u8], m_hash: &[u8]) -> Result<(), Error> {
+pub(crate) fn verify_pss_sig<H: Hash>(
+    em: &mut [u8],
+    em_bits: usize,
+    m_hash: &[u8],
+) -> Result<(), Error> {
     // 1.   If the length of M is greater than the input limitation for
     //      the hash function (2^61 - 1 octets for SHA-1), output
     //      "inconsistent" and stop.
@@ -161,6 +168,7 @@ pub(crate) fn verify_pss_sig<H: Hash>(em: &mut [u8], m_hash: &[u8]) -> Result<()
 
     // 3.   If emLen < hLen + sLen + 2, output "inconsistent" and stop.
     let em_len = em.len();
+    let top_mask = u8::MAX >> (8 * em_len - em_bits);
     let h_len = m_hash.len();
     let s_len = h_len;
     if em_len < h_len + s_len + 2 {
@@ -181,7 +189,7 @@ pub(crate) fn verify_pss_sig<H: Hash>(em: &mut [u8], m_hash: &[u8]) -> Result<()
     // 6.   If the leftmost 8emLen - emBits bits of the leftmost octet in
     //      maskedDB are not all equal to zero, output "inconsistent" and
     //      stop.
-    if masked_db[0] & 0x80 != 0x00 {
+    if masked_db[0] & !top_mask != 0x00 {
         return Err(Error::BadSignature);
     }
 
@@ -192,7 +200,7 @@ pub(crate) fn verify_pss_sig<H: Hash>(em: &mut [u8], m_hash: &[u8]) -> Result<()
 
     // 9.   Set the leftmost 8emLen - emBits bits of the leftmost octet
     //      in DB to zero.
-    db[0] &= 0x7f;
+    db[0] &= top_mask;
 
     // 10.  If the emLen - hLen - sLen - 2 leftmost octets of DB are not
     //      zero or if the octet at position emLen - hLen - sLen - 1 (the
@@ -339,7 +347,7 @@ mod tests {
         );
         let hash = b"\xe3\xb0\xc4\x42\x98\xfc\x1c\x14\x9a\xfb\xf4\xc8\x99\x6f\xb9\x24\
                      \x27\xae\x41\xe4\x64\x9b\x93\x4c\xa4\x95\x99\x1b\x78\x52\xb8\x55";
-        encode_pss_sig::<hash::Sha256>(&mut buf, &mut seed, hash).unwrap();
+        encode_pss_sig::<hash::Sha256>(&mut buf, 2047, &mut seed, hash).unwrap();
 
         assert_eq!(
             buf,
@@ -366,6 +374,6 @@ mod tests {
             ],
         );
 
-        verify_pss_sig::<hash::Sha256>(&mut buf, hash).unwrap();
+        verify_pss_sig::<hash::Sha256>(&mut buf, 2047, hash).unwrap();
     }
 }

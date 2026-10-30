@@ -19,6 +19,9 @@ carries that interface:
 
 Public API: none beyond the release's own changes.
 
+- Verification of rind-str0m (its round-trip test against str0m's aws-lc-rs
+  provider, on every backend) lands here (maintainer, 2026-10-29).
+
 ## Required
 
 - [str0m releases its dimpl 0.9 provider interface](/quest/m1/moq/str0m-release.md) - the release this switches to

@@ -72,10 +72,13 @@ impl<const N: usize> PosInt<N> {
 
     /// The length in bytes, without leading zeroes.
     pub(crate) fn len_bytes(&self) -> usize {
+        self.len_bits().div_ceil(8)
+    }
+
+    /// The length in bits, without leading zeroes.
+    pub(crate) fn len_bits(&self) -> usize {
         let top = self.as_words().iter().rposition(|w| *w != 0);
-        top.map_or(0, |i| {
-            i * 8 + (64 - self.words[i].leading_zeros() as usize).div_ceil(8)
-        })
+        top.map_or(0, |i| i * 64 + 64 - self.words[i].leading_zeros() as usize)
     }
 
     pub(crate) fn is_even(&self) -> bool {
@@ -145,6 +148,7 @@ mod tests {
         let x = PosInt::<2>::from_bytes(b"\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09").unwrap();
         assert_eq!(x.as_words(), &[0x0203040506070809, 0x01]);
         assert_eq!(x.len_bytes(), 9);
+        assert_eq!(x.len_bits(), 65);
         let mut out = [0u8; 17];
         assert_eq!(
             x.to_bytes(&mut out).unwrap(),
@@ -159,6 +163,7 @@ mod tests {
         let x = PosInt::<2>::from_bytes(b"\x00\x00").unwrap();
         assert_eq!(x.as_words(), &[]);
         assert_eq!(x.len_bytes(), 0);
+        assert_eq!(x.len_bits(), 0);
     }
 
     #[test]

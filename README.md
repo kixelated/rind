@@ -209,10 +209,11 @@ have some different options depending on CPU features:
 
 ### Symmetric cryptography
 SHA1 and SHA256 have straightforward implementations using hashing intrinsics
-(aka "SHA-NI" on x86_64, "sha" extension on aarch64) with runtime fallback
-on x86_64 to a pure Rust version if needed. 32-bit `arm` always runs the pure
-Rust SHA1, SHA256, and SHA512: libcrux has no SHA1, and its SHA2 leaves the
-message schedule on the stack.
+(aka "SHA-NI" on x86_64, "sha" extension on aarch64). Without SHA-NI, x86_64
+selects at runtime an AVX2 message schedule with scalar rounds for SHA1, as
+aws-lc does, and a pure Rust version for SHA256. 32-bit `arm` always runs the pure
+Rust SHA1, SHA256, and SHA512: libcrux has no SHA1, and the pure Rust SHA256
+is faster than libcrux's.
 
 SHA384/SHA512 on x86_64 has an AVX2 by-4 implementation, plus an AVX2 interleaved
 single block implementation.

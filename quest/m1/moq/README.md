@@ -58,8 +58,7 @@ Targets, refused rather than falling back:
 
 Each quest lands the tests for what it adds: Wycheproof vectors where they
 exist, differential tests against aws-lc-rs as a dev-dependency, and a
-benchmark against aws-lc-rs. [Verification](/quest/m1/moq/verify.md) closes
-the gaps across the inherited surface and every backend.
+benchmark against aws-lc-rs.
 
 These quests cover every gap MoQ's 2026-10-26 inventory found. If a MoQ area
 quest turns up another, add a quest here rather than letting MoQ keep a C or
@@ -70,9 +69,10 @@ RustCrypto dependency.
 - [str0m releases its dimpl 0.9 provider interface](/quest/m1/moq/str0m-release.md) - waiting on the release `rind-str0m` targets
 - [rind-str0m on a str0m release](/quest/m1/moq/str0m.md) - publishable once it depends on that release
 - [instant-acme 0.9 is released](/quest/m1/moq/instant-acme-release.md) - waiting on the release with a pluggable `CryptoProvider`
-- [rind-instant-acme](/quest/m1/moq/instant-acme.md) - instant-acme 0.9's `CryptoProvider`
+- [rind-instant-acme](/quest/m1/moq/instant-acme.md) - instant-acme's `CryptoProvider`, on its main branch until 0.9 ships
 - [libcrux releases its bignum constant-time fix](/quest/m1/moq/libcrux-ct-fixes.md) - waiting on libcrux's fix, then dropping its armv7 ctgrind suppression
 - [armv7 ctgrind on PRs](/quest/m1/moq/armv7-ctgrind-pr.md) - the release job gates PRs if it is fast enough
-- [Zeroing matches aws-lc](/quest/m1/moq/zeroing-parity.md) - owned keys wipe on drop; scratch and stack-copy wipes beyond aws-lc are reverted
-- [Verification](/quest/m1/moq/verify.md) - Wycheproof, aws-lc-rs differential tests, adapter handshakes, and benchmarks on every backend
+- [Publish rind-instant-acme](/quest/m1/moq/instant-acme-publish.md) - switch to the 0.9 release and publish
+- [Inherited wipes match aws-lc](/quest/m1/moq/inherited-wipes.md) - graviola's wipes and the ECDH shared point follow the zeroing rule
+- [SHA-1 AVX2 rounds in Rust](/quest/m1/moq/sha1-rust.md) - no new inline assembly in the SHA-1 path
 - [Release](/quest/m1/moq/release.md) - publish the rind release MoQ switches to

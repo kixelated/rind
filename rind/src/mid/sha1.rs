@@ -7,7 +7,7 @@
 //! matters, such as in signatures.
 
 use crate::low::cpu::verify_cpu_features;
-use crate::low::{Blockwise, Zeroable, zeroise, zeroise_value};
+use crate::low::{Blockwise, Zeroable, zeroise_value};
 
 /// A context for incremental computation of SHA1.
 #[derive(Clone)]
@@ -37,9 +37,8 @@ impl Sha1Context {
 
         let bytes = self.blockwise.add_leading(bytes);
 
-        if let Some(mut block) = self.blockwise.take() {
+        if let Some(block) = self.blockwise.take() {
             self.update_blocks(&block);
-            zeroise(&mut block);
         }
 
         let (whole_blocks, remainder) = {

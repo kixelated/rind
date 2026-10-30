@@ -10,10 +10,19 @@ use crate::Error;
 use crate::low::zeroise;
 
 /// An in-progress HMAC computation, using hash function `H`.
-#[derive(Clone)]
 pub struct Hmac<H: Hash> {
     inner: H::Context,
     outer: H::Context,
+}
+
+// Not derived: that would also require `H: Clone`, which HKDF's generic `Prk<H>` cannot assume.
+impl<H: Hash> Clone for Hmac<H> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            outer: self.outer.clone(),
+        }
+    }
 }
 
 impl<H: Hash> Hmac<H> {
@@ -24,9 +33,8 @@ impl<H: Hash> Hmac<H> {
         let key = key.as_ref();
         // shorten long keys
         if key.len() > key_block.len() {
-            let mut h_key = H::hash(key);
+            let h_key = H::hash(key);
             key_block[..h_key.as_ref().len()].copy_from_slice(h_key.as_ref());
-            zeroise(h_key.as_mut());
         } else {
             key_block[..key.len()].copy_from_slice(key);
         }
@@ -57,14 +65,11 @@ impl<H: Hash> Hmac<H> {
     /// Complete the HMAC signing operation, consuming it.
     ///
     /// The HMAC output (sometimes called a "signature", or "tag") is returned.
-    pub fn finish(self) -> HashOutput {
-        // Finish copies of the states rather than moving them out, so `self`
-        // wipes the originals in place when it drops.
-        let mut inner_output = self.inner.clone().finish();
-        let mut outer = self.outer.clone();
-        outer.update(inner_output.as_ref());
+    pub fn finish(mut self) -> HashOutput {
+        let mut inner_output = self.inner.finish();
+        self.outer.update(inner_output.as_ref());
         zeroise(inner_output.as_mut());
-        outer.finish()
+        self.outer.finish()
     }
 
     /// Complete the HMAC signing operation and compare the result against `expected_tag`.

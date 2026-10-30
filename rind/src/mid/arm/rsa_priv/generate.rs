@@ -346,7 +346,6 @@ fn random_prime(
         {
             *word = u64::from_be_bytes(bytes.try_into().unwrap());
         }
-        low::zeroise(&mut buffer);
         ct::secret_slice(&candidate.0[..len]);
 
         if is_prime(&candidate.0[..len], size, sieve, checks_random)? {
