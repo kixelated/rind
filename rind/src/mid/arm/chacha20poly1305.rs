@@ -40,8 +40,8 @@ impl ChaCha20Poly1305 {
         // block 0 keys Poly1305
         check_counter(1, cipher_inout.len())?;
         // libcrux reads and writes separate buffers.
-        let mut plain = cipher_inout.to_vec();
-        let result = libcrux_chacha20poly1305::encrypt_detached(
+        let plain = cipher_inout.to_vec();
+        libcrux_chacha20poly1305::encrypt_detached(
             &self.key,
             &plain,
             cipher_inout,
@@ -49,9 +49,8 @@ impl ChaCha20Poly1305 {
             aad,
             nonce,
         )
-        .map(|_| ());
-        zeroise(&mut plain);
-        result.map_err(|_| Error::WrongLength)
+        .map(|_| ())
+        .map_err(|_| Error::WrongLength)
     }
 
     /// Decrypts and verifies the given message.

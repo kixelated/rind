@@ -92,12 +92,11 @@ impl PrivateKey {
     /// Returns a [`SharedSecret`].  May return an error in fault conditions.
     pub fn diffie_hellman(self, peer: &PublicKey) -> Result<SharedSecret, Error> {
         let _entry = low::Entry::new_secret();
-        let mut d = self.scalar.as_bytes();
+        let d = self.scalar.as_bytes();
         let mut point = [0u8; 64];
         let ok = libcrux_p256::dh_responder(&mut point, &peer.xy, &d);
         let mut secret = SharedSecret([0u8; 32]);
         secret.0.copy_from_slice(&point[..32]);
-        low::zeroise(&mut d);
         low::zeroise(&mut point);
         match ok {
             true => Ok(secret),
@@ -107,10 +106,9 @@ impl PrivateKey {
 
     /// `x || y` of the public key.
     fn public_point(&self) -> [u8; 64] {
-        let mut d = self.scalar.as_bytes();
+        let d = self.scalar.as_bytes();
         let mut xy = [0u8; 64];
         let ok = libcrux_p256::dh_initiator(&mut xy, &d);
-        low::zeroise(&mut d);
         match low::ct::into_public(ok) {
             true => low::ct::into_public(xy),
             false => panic!("internal fault"),
@@ -216,16 +214,14 @@ impl StaticPrivateKey {
     ///
     /// HACL* recomputes `r` from `k` itself, so the passed `r` is unused.
     pub(crate) fn raw_ecdsa_sign(&self, k: &Self, e: &Scalar, _r: &Scalar) -> Scalar {
-        let mut d = self.0.scalar.as_bytes();
-        let mut k = k.0.scalar.as_bytes();
+        let d = self.0.scalar.as_bytes();
+        let k = k.0.scalar.as_bytes();
         let e = e.as_bytes();
         let mut sig = [0u8; 64];
         // This fails only for a zero `r` or `s`; the caller already refused a
         // zero `r`, and a zero `s` (probability 2^-256) makes the signature
         // invalid either way.
         let ok = libcrux_p256::ecdsa_sign_p256_without_hash(&mut sig, e.len() as u32, &e, &d, &k);
-        low::zeroise(&mut d);
-        low::zeroise(&mut k);
         let sig = low::ct::into_public(sig);
         match low::ct::into_public(ok) {
             true => Scalar::from_bytes_checked(&sig[32..]).unwrap_or_default(),
@@ -276,7 +272,6 @@ impl Scalar {
         let mut r = Self::default();
         // Fails only for an even or unit modulus.
         bignum256::r#mod(&CURVE_ORDER, &wide, &mut r.0);
-        low::zeroise(&mut wide);
         Ok(r)
     }
 

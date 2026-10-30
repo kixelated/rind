@@ -72,6 +72,5 @@ RustCrypto dependency.
 - [instant-acme 0.9 is released](/quest/m1/moq/instant-acme-release.md) - waiting on the release with a pluggable `CryptoProvider`
 - [rind-instant-acme](/quest/m1/moq/instant-acme.md) - instant-acme 0.9's `CryptoProvider`
 - [ctgrind on armv7](/quest/m1/moq/armv7-ctgrind.md) - the constant-time check runs on the armv7 build
-- [Remaining wipes match aws-lc](/quest/m1/moq/zeroing-rest.md) - the wipes #58 did not cover follow the same rule
 - [Verification](/quest/m1/moq/verify.md) - Wycheproof, aws-lc-rs differential tests, adapter handshakes, and benchmarks on every backend
 - [Release](/quest/m1/moq/release.md) - publish the rind release MoQ switches to

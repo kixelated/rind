@@ -33,10 +33,10 @@ impl<H: Hash> Prk<H> {
     pub fn extract(salt: &[u8], ikm: &[u8]) -> Self {
         let mut hmac = Hmac::<H>::new(salt);
         hmac.update(ikm);
-        let mut prk = hmac.finish();
-        let hmac = Hmac::new(&prk);
-        zeroise(prk.as_mut());
-        Self { hmac }
+        let prk = hmac.finish();
+        Self {
+            hmac: Hmac::new(&prk),
+        }
     }
 
     /// Fills `out` with key material derived for the concatenation of `info` (HKDF-Expand).
