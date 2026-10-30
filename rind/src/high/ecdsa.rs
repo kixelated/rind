@@ -64,7 +64,7 @@ impl<C: Curve> SigningKey<C> {
     /// Load an ECDSA private key in SEC.1 format.
     pub fn from_sec1_der(bytes: &[u8]) -> Result<Self, Error> {
         let _entry = Entry::new_secret();
-        let ecpk = asn1::pkix::EcPrivateKey::from_bytes(bytes).map_err(Error::Asn1Error)?;
+        let ecpk = asn1::pkix::EcPrivateKey::from_bytes(bytes).map_err(KeyFormatError::Asn1)?;
 
         // nb. ecpk.version has one variant, so if it decoded property it is guaranteed
         // to be EcPrivateKeyVer::ecPrivkeyVer1
@@ -125,7 +125,7 @@ impl<C: Curve> SigningKey<C> {
 
         let used = ecpk
             .encode(&mut asn1::Encoder::new(output))
-            .map_err(Error::Asn1Error)?;
+            .map_err(|_| Error::WrongLength)?;
 
         // The caller owns the encoding, as with the key's `as_bytes`.
         let output = output.get(..used).ok_or(Error::WrongLength)?;
@@ -155,7 +155,7 @@ impl<C: Curve> SigningKey<C> {
 
         let len = spki
             .encode(&mut asn1::Encoder::new(output))
-            .map_err(Error::Asn1Error)?;
+            .map_err(|_| Error::WrongLength)?;
         Ok(&output[..len])
     }
 
@@ -206,7 +206,7 @@ impl<C: Curve> SigningKey<C> {
         let sig = asn1::pkix::EcdsaSigValue { r, s };
         let sig_len = sig
             .encode(&mut asn1::Encoder::new(asn1_signature))
-            .map_err(Error::Asn1Error)?;
+            .map_err(|_| Error::WrongLength)?;
         Ok(&asn1_signature[..sig_len])
     }
 
@@ -396,23 +396,21 @@ mod tests {
 
         assert_eq!(
             SigningKey::<curve::P256>::from_sec1_der(include_bytes!("ecdsa/secp384r1.der")).err(),
-            Some(Error::KeyFormatError(KeyFormatError::MismatchedSec1Curve)),
+            Some(KeyFormatError::MismatchedSec1Curve.into()),
         );
         assert_eq!(
             SigningKey::<curve::P256>::from_sec1_der(include_bytes!(
                 "ecdsa/secp256r1.wrong-public-key.der"
             ))
             .err(),
-            Some(Error::KeyFormatError(
-                KeyFormatError::MismatchedSec1PublicKey
-            )),
+            Some(KeyFormatError::MismatchedSec1PublicKey.into()),
         );
         assert_eq!(
             SigningKey::<curve::P256>::from_sec1_der(include_bytes!(
                 "ecdsa/secp256r1.wrong-version.der"
             ))
             .err(),
-            Some(Error::Asn1Error(asn1::Error::UnhandledEnumValue)),
+            Some(KeyFormatError::Asn1(asn1::Error::UnhandledEnumValue).into()),
         );
 
         check_sign_verify::<curve::P384>(
@@ -431,7 +429,7 @@ mod tests {
 
         assert_eq!(
             SigningKey::<curve::P384>::from_sec1_der(include_bytes!("ecdsa/secp256r1.der")).err(),
-            Some(Error::KeyFormatError(KeyFormatError::MismatchedSec1Curve)),
+            Some(KeyFormatError::MismatchedSec1Curve.into()),
         );
     }
 
@@ -479,6 +477,12 @@ mod tests {
 
         let signature = sk.sign_asn1::<hash::Sha512>(&message, &mut buffer).unwrap();
         vk.verify_asn1::<hash::Sha512>(&message, signature).unwrap();
+
+        assert_eq!(
+            sk.sign_asn1::<hash::Sha256>(&message, &mut [0u8; 8]),
+            Err(Error::WrongLength)
+        );
+        assert_eq!(sk.to_spki_der(&mut [0u8; 8]), Err(Error::WrongLength));
     }
 
     fn check_pairwise_sec1<C: Curve>(sec1_der: &[u8]) {
@@ -487,6 +491,10 @@ mod tests {
         assert!(buf.len() > sec1_der.len());
         let encoded = loaded.to_sec1_der(&mut buf).unwrap();
         assert_eq!(sec1_der, encoded);
+        assert_eq!(
+            loaded.to_sec1_der(&mut buf[..sec1_der.len() - 1]),
+            Err(Error::WrongLength)
+        );
     }
 
     fn check_pairwise_pkcs8<C: Curve>(pkcs8_der: &[u8]) {
@@ -495,6 +503,10 @@ mod tests {
         assert!(buf.len() > pkcs8_der.len());
         let encoded = loaded.to_pkcs8_der(&mut buf).unwrap();
         assert_eq!(pkcs8_der, encoded);
+        assert_eq!(
+            loaded.to_pkcs8_der(&mut buf[..pkcs8_der.len() - 1]),
+            Err(Error::WrongLength)
+        );
     }
 
     #[test]

@@ -53,7 +53,7 @@ mod error;
 mod test;
 
 // vvv Public API
-pub use error::Error;
+pub use error::{Error, KeyRejected};
 
 /// Non-API documentation
 #[cfg(doc)]
