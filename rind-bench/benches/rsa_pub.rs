@@ -54,6 +54,33 @@ fn rsa2048_pkcs1_sha256_verify(c: &mut Criterion) {
             black_box(peer_public_key.verify(message, signature)).unwrap();
         })
     });
+    group.finish();
+
+    // A key parsed once, as a JWT verifier holds it, keeps its setup.
+    let mut group = c.benchmark_group("rsa2048-pkcs1-sha256-verify-parsed");
+    group.throughput(Throughput::Elements(1));
+
+    group.bench_function("aws-lc-rs", |b| {
+        use aws_lc_rs::signature;
+        let peer_public_key =
+            signature::ParsedPublicKey::new(&signature::RSA_PKCS1_2048_8192_SHA256, public_key)
+                .unwrap();
+
+        b.iter(|| {
+            black_box(peer_public_key.verify_sig(message, signature)).unwrap();
+        })
+    });
+
+    group.bench_function("rind", |b| {
+        use rind::signature;
+        let peer_public_key =
+            signature::ParsedPublicKey::new(&signature::RSA_PKCS1_2048_8192_SHA256, public_key)
+                .unwrap();
+
+        b.iter(|| {
+            black_box(peer_public_key.verify(message, signature)).unwrap();
+        })
+    });
 }
 
 fn rsa2048_pss_sha256_verify(c: &mut Criterion) {
