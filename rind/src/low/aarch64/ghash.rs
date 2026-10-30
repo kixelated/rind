@@ -13,6 +13,11 @@ use crate::low;
 pub(crate) struct GhashTable {
     powers: [uint64x2_t; 8],
     powers_xor: [uint64x2_t; 8],
+    /// H to H^4 in the layout `gcm_init_v8` writes, which s2n-bignum's
+    /// AES-GCM kernels read: H, m(H, H^2), H^2, H^3, m(H^3, H^4), H^4, with
+    /// each power's 64-bit halves swapped and m(A, B) holding the Karatsuba
+    /// middle terms of A and B in its low and high halves.
+    pub(crate) htable: [uint64x2_t; 6],
 }
 
 impl GhashTable {
@@ -42,7 +47,23 @@ impl GhashTable {
             ]
         };
 
-        Self { powers, powers_xor }
+        // SAFETY: this crate requires the `neon` cpu feature
+        let htable = unsafe {
+            [
+                vextq_u64(h, h, 1),
+                vzip1q_u64(powers_xor[0], powers_xor[1]),
+                vextq_u64(h2, h2, 1),
+                vextq_u64(h3, h3, 1),
+                vzip1q_u64(powers_xor[2], powers_xor[3]),
+                vextq_u64(h4, h4, 1),
+            ]
+        };
+
+        Self {
+            powers,
+            powers_xor,
+            htable,
+        }
     }
 }
 
@@ -50,6 +71,7 @@ impl Drop for GhashTable {
     fn drop(&mut self) {
         low::zeroise(&mut self.powers);
         low::zeroise(&mut self.powers_xor);
+        low::zeroise(&mut self.htable);
     }
 }
 
@@ -103,19 +125,22 @@ impl<'a> Ghash<'a> {
     }
 
     pub(crate) fn into_bytes(self) -> [u8; 16] {
+        self.state()
+    }
+
+    /// The running hash, in the byte order s2n-bignum's AES-GCM kernels hold it.
+    pub(crate) fn state(&self) -> [u8; 16] {
         to_u128(self.current).to_be_bytes()
+    }
+
+    /// Resumes from a running hash that [`Self::state`] returned.
+    pub(crate) fn set_state(&mut self, state: [u8; 16]) {
+        self.current = from_u128(u128::from_be_bytes(state));
     }
 
     fn one_block(&mut self, block: u128) {
         // SAFETY: this crate requires the `neon` cpu feature
         self.current = unsafe { veorq_u64(self.current, from_u128(block)) };
-        self.current = mul(self.current, self.table.powers[0]);
-    }
-
-    #[inline]
-    pub(crate) fn add_block(&mut self, block: uint8x16_t) {
-        // SAFETY: This crate requires the `neon` CPU feature.
-        self.current = unsafe { veorq_u64(self.current, to_uint64x2_be(block)) };
         self.current = mul(self.current, self.table.powers[0]);
     }
 
@@ -144,35 +169,6 @@ impl<'a> Ghash<'a> {
             from_u128(b7),
             from_u128(b8),
         );
-    }
-
-    #[inline]
-    pub(crate) fn add_eight_blocks(
-        &mut self,
-        b1: uint8x16_t,
-        b2: uint8x16_t,
-        b3: uint8x16_t,
-        b4: uint8x16_t,
-        b5: uint8x16_t,
-        b6: uint8x16_t,
-        b7: uint8x16_t,
-        b8: uint8x16_t,
-    ) {
-        // SAFETY: this crate requires the `neon` cpu feature
-        unsafe {
-            let b1 = veorq_u64(self.current, to_uint64x2_be(b1));
-            self.current = mul8(
-                self.table,
-                b1,
-                to_uint64x2_be(b2),
-                to_uint64x2_be(b3),
-                to_uint64x2_be(b4),
-                to_uint64x2_be(b5),
-                to_uint64x2_be(b6),
-                to_uint64x2_be(b7),
-                to_uint64x2_be(b8),
-            );
-        }
     }
 }
 
@@ -330,18 +326,6 @@ fn from_u128(u: u128) -> uint64x2_t {
 fn to_u128(u: uint64x2_t) -> u128 {
     // SAFETY: u128 and uint64x2_t have the same size and meaning of bits
     unsafe { mem::transmute(u) }
-}
-
-#[inline]
-#[target_feature(enable = "neon")]
-// Make a copy of `u` with the bytes reversed, and cast to `uint64x2_t`.
-pub(crate) fn to_uint64x2_be(u: uint8x16_t) -> uint64x2_t {
-    // Reverse the order of the bytes in each of the two 64-bit lanes in `u`.
-    let u = vrev64q_u8(u);
-    let u = vreinterpretq_u64_u8(u);
-
-    // Swap the locations of the two 64-bit lanes to finish reversing the bytes.
-    vextq_u64(u, u, 1)
 }
 
 // SAFETY: u128 and uint64x2_t have the same size and meaning of bits

@@ -459,8 +459,8 @@ pub(crate) fn edwards25519_scalarmulbase(res: &mut [u64; 8], scalar: &[u64; 4]) 
         // Initialize accumulator "acc" to either 0 or 2^251 * B depending on
         // bit 251 of the (reduced) scalar. That leaves bits 0..250 to handle.
 
-        Q!("    lea             " "r10, [rip + {Ledwards25519_scalarmulbase_0g}]"),
-        Q!("    lea             " "r11, [rip + {Ledwards25519_scalarmulbase_251g}]"),
+        Q!("    lea             " "r10, [rip + {edwards25519_scalarmulbase_constant}]"),
+        Q!("    lea             " "r11, [r10 + 8 * 12]"),
 
         Q!("    mov             " "rax, [r10]"),
         Q!("    mov             " "rcx, [r11]"),
@@ -543,7 +543,7 @@ pub(crate) fn edwards25519_scalarmulbase(res: &mut [u64; 8], scalar: &[u64; 4]) 
         // end because we made sure bit 251 is clear in the reduced scalar.
 
         Q!("    mov             " i!() ", 0"),
-        Q!("    lea             " "rax, [rip + {Ledwards25519_scalarmulbase_gtable}]"),
+        Q!("    lea             " "rax, [r10 + 8 * 24]"),
         Q!("    mov             " tab!() ", rax"),
         Q!("    mov             " bias!() ", 0"),
 
@@ -2320,9 +2320,7 @@ pub(crate) fn edwards25519_scalarmulbase(res: &mut [u64; 8], scalar: &[u64; 4]) 
         Q!("    pop             " "rbx"),
         inout("rdi") res.as_mut_ptr() => _,
         inout("rsi") scalar.as_ptr() => _,
-        Ledwards25519_scalarmulbase_0g = sym Ledwards25519_scalarmulbase_0g,
-        Ledwards25519_scalarmulbase_251g = sym Ledwards25519_scalarmulbase_251g,
-        Ledwards25519_scalarmulbase_gtable = sym Ledwards25519_scalarmulbase_gtable,
+        edwards25519_scalarmulbase_constant = sym edwards25519_scalarmulbase_constant,
         // clobbers
         out("r10") _,
         out("r11") _,
@@ -2340,17 +2338,12 @@ pub(crate) fn edwards25519_scalarmulbase(res: &mut [u64; 8], scalar: &[u64; 4]) 
 }
 
 // ****************************************************************************
-// The precomputed data (all read-only). This is currently part of the same
-// text section, which gives position-independent code with simple PC-relative
-// addressing. However it could be put in a separate section via something like
-//
-// .section .rodata
+// The precomputed data (all read-only).
 // ****************************************************************************
 
-// 0 * B = 0 and 2^251 * B in extended-projective coordinates
-// but with Z = 1 assumed and hence left out, so they are (X,Y,T) only.
-
-static Ledwards25519_scalarmulbase_0g: [u64; 12] = [
+static edwards25519_scalarmulbase_constant: [u64; 6072] = [
+    // 0 * B = 0 and 2^251 * B in extended-projective coordinates
+    // but with Z = 1 assumed and hence left out, so they are (X,Y,T) only.
     0x0000000000000000,
     0x0000000000000000,
     0x0000000000000000,
@@ -2363,9 +2356,6 @@ static Ledwards25519_scalarmulbase_0g: [u64; 12] = [
     0x0000000000000000,
     0x0000000000000000,
     0x0000000000000000,
-];
-
-static Ledwards25519_scalarmulbase_251g: [u64; 12] = [
     0x525f946d7c7220e7,
     0x4636b0b2f1e35444,
     0x796e9d70e892ae0f,
@@ -2380,9 +2370,7 @@ static Ledwards25519_scalarmulbase_251g: [u64; 12] = [
     0x70d685f68f859714,
     // Precomputed table of multiples of generator for edwards25519
     // all in precomputed extended-projective (y-x,x+y,2*d*x*y) triples.
-];
 
-static Ledwards25519_scalarmulbase_gtable: [u64; 6048] = [
     // 2^0 * 1 * G
     0x9d103905d740913e,
     0xfd399f05d140beb3,

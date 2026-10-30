@@ -180,7 +180,7 @@ pub(crate) fn bignum_tomont_p256(z: &mut [u64; 4], x: &[u64; 4]) {
         Q!("    mov             " d!() ", " v!()),
         Q!("    sbb             " d!() ", r15"),
 
-        // This last last comparison in the chain will actually even set the mask
+        // This last comparison in the chain will actually even set the mask
         // for us, so we don't need to separately create it from the carry.
         // This means p_256 - 1 < (c,d1,d0,d5,d4), i.e. we are so far >= p_256
 
