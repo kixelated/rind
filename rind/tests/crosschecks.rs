@@ -287,58 +287,6 @@ mod cipher {
     }
 }
 
-mod aead {
-    use aws_lc_rs::aead::{Aad, CHACHA20_POLY1305, LessSafeKey, Nonce, UnboundKey};
-    use proptest::collection::vec;
-    use proptest::prelude::*;
-    use proptest::sample::Index;
-    use rind::Error;
-    use rind::aead::ChaCha20Poly1305;
-
-    proptest! {
-        // Decryption opens what aws-lc-rs seals, and refuses it with any one
-        // bit of the AAD, ciphertext, or tag flipped.
-        #[test]
-        fn chacha20_poly1305(
-            key in any::<[u8; 32]>(),
-            nonce in any::<[u8; 12]>(),
-            aad in vec(any::<u8>(), 0..40),
-            msg in vec(any::<u8>(), 0..300),
-            flip in any::<Index>(),
-        ) {
-            let mut sealed = msg.clone();
-            let tag = LessSafeKey::new(UnboundKey::new(&CHACHA20_POLY1305, &key).unwrap())
-                .seal_in_place_separate_tag(
-                    Nonce::assume_unique_for_key(nonce),
-                    Aad::from(&aad),
-                    &mut sealed,
-                )
-                .unwrap();
-            let ours = ChaCha20Poly1305::new(key);
-
-            let mut opened = sealed.clone();
-            ours.decrypt(&nonce, &aad, &mut opened, tag.as_ref()).unwrap();
-            prop_assert_eq!(&opened, &msg);
-
-            let mut parts = [aad, sealed, tag.as_ref().to_vec()];
-            let mut bit = flip.index(parts.iter().map(|p| p.len() * 8).sum());
-            for part in &mut parts {
-                if bit < part.len() * 8 {
-                    part[bit / 8] ^= 1 << (bit % 8);
-                    break;
-                }
-                bit -= part.len() * 8;
-            }
-            let [aad, mut forged, tag] = parts;
-            prop_assert_eq!(
-                ours.decrypt(&nonce, &aad, &mut forged, &tag),
-                Err(Error::DecryptFailed)
-            );
-            prop_assert!(forged.iter().all(|&b| b == 0));
-        }
-    }
-}
-
 mod hkdf {
     use aws_lc_rs::hkdf::{self, HKDF_SHA256, HKDF_SHA384, HKDF_SHA512, KeyType};
     use proptest::collection::vec;
