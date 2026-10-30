@@ -15,7 +15,3 @@ Decided by the maintainer on 2026-10-30, from the follow-ups of
 - Decide the order once from the detection #84 adds, at provider setup,
   not per connection.
 - Check how aws-lc-rs's rustls provider makes the same choice and match it.
-
-## Required
-
-- [armv7 crypto instructions](/quest/m2/armv7-crypto-ext.md) - the detection this reads

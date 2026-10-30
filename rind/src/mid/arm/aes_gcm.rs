@@ -17,6 +17,8 @@ use crate::low::{
 ///
 /// - AES-192 is not supported, as it is rarely used.
 /// - Only nonces that are 12-bytes/96-bits are supported.
+// A process only ever builds one variant, so boxing would buy nothing.
+#[expect(clippy::large_enum_variant)]
 pub(crate) enum AesGcm {
     Portable(Portable),
     /// The crypto extension's, which the key picks when the CPU has it.
