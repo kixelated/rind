@@ -17,8 +17,7 @@ jobs:
   build:
     strategy:
       matrix:
-        # aarch64 runs nightly only, to keep hosted arm64 runners off the PR path.
-        os: ${{ github.event_name == 'schedule' && fromJSON('["ubuntu-latest", "ubuntu-24.04-arm"]') || fromJSON('["ubuntu-latest"]') }}
+        os: [ubuntu-latest, ubuntu-24.04-arm]
         build: ["", --release]
 
     runs-on: ${{ matrix.os }}
