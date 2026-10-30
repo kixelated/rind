@@ -102,11 +102,11 @@ fn mlkem768() {
 
 #[test]
 fn hkdf() {
-    use rind::hashing::hkdf::Prk;
-    use rind::hashing::{Sha256, Sha512};
+    use rind::hkdf::*;
 
-    check_zeroed_on_drop(Box::pin(Prk::<Sha256>::extract(b"salt", b"ikm")));
-    check_zeroed_on_drop(Box::pin(Prk::<Sha512>::extract(b"salt", b"ikm")));
+    for algorithm in [HKDF_SHA256, HKDF_SHA384, HKDF_SHA512] {
+        check_zeroed_on_drop(Box::pin(Salt::new(algorithm, b"salt").extract(b"ikm")));
+    }
 }
 
 #[test]

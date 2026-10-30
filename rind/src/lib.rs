@@ -179,12 +179,34 @@ pub mod hmac {
     };
 }
 
-/// HKDF, and the hash functions that parameterize it and signatures.
+/// Key derivation with HKDF.
+///
+/// A [`hkdf::Salt`] extracts a [`hkdf::Prk`] from a secret, which then expands
+/// into any number of keys, each exactly as long as what it becomes.
+///
+/// ```
+/// use rind::{aead, hkdf, hmac};
+///
+/// let prk = hkdf::Salt::new(hkdf::HKDF_SHA256, b"salt").extract(b"input key material");
+///
+/// let aead_key = aead::UnboundKey::from(prk.expand(&[b"aead".as_slice()], &aead::AES_256_GCM).unwrap());
+/// let hmac_key = hmac::Key::from(prk.expand(&[b"hmac".as_slice()], hmac::HMAC_SHA256).unwrap());
+///
+/// let info: [&[u8]; 2] = [b"label", b"context"];
+/// let mut bytes = [0u8; 16];
+/// prk.expand(&info, bytes.len()).unwrap().fill(&mut bytes).unwrap();
+/// ```
+pub mod hkdf {
+    pub use super::high::hkdf::{
+        Algorithm, HKDF_SHA256, HKDF_SHA384, HKDF_SHA512, KeyType, Okm, Prk, Salt,
+    };
+}
+
+/// The hash functions that parameterize signatures.
 ///
 /// To hash a message, use [`digest`].
 pub mod hashing {
     pub use super::high::hash::{LegacySha1, Sha256, Sha384, Sha512};
-    pub use super::high::hkdf;
 }
 
 /// Authenticated encryption.

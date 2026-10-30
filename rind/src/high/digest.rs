@@ -117,7 +117,7 @@ pub struct Digest {
     value: [u8; MAX_OUTPUT_LEN],
 }
 
-const MAX_OUTPUT_LEN: usize = sha2::Sha512Context::OUTPUT_SZ;
+pub(super) const MAX_OUTPUT_LEN: usize = sha2::Sha512Context::OUTPUT_SZ;
 
 impl Digest {
     /// A digest of `algorithm` holding `value`, which must be its output length.

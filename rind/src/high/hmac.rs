@@ -16,7 +16,7 @@ pub(crate) struct Hmac<H: Hash> {
     outer: H::Context,
 }
 
-// Not derived: that would also require `H: Clone`, which HKDF's generic `Prk<H>` cannot assume.
+// Not derived: that would also require `H: Clone`, which code generic over `H: Hash` cannot assume.
 impl<H: Hash> Clone for Hmac<H> {
     fn clone(&self) -> Self {
         Self {
@@ -102,7 +102,7 @@ pub static HMAC_SHA512: Algorithm = Algorithm(&digest::SHA512);
 
 /// An HMAC key, keyed once and reused for every message; wiped on drop.
 #[derive(Clone)]
-pub struct Key(Keyed);
+pub struct Key(pub(super) Keyed);
 
 impl Key {
     /// Keys `algorithm` with `key_value`, which may be any length.
@@ -178,7 +178,7 @@ impl AsRef<[u8]> for Tag {
 // `Zeroable` allows: every field is a plain integer or byte array.
 #[derive(Clone)]
 #[repr(u8)]
-enum Keyed {
+pub(super) enum Keyed {
     Sha1(Hmac<LegacySha1>),
     Sha256(Hmac<Sha256>),
     Sha384(Hmac<Sha384>),
