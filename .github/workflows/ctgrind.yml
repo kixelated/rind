@@ -26,8 +26,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: true
           persist-credentials: false
+
+      - uses: ./.github/actions/vectors
 
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@master

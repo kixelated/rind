@@ -6,6 +6,7 @@ use core::marker::PhantomData;
 use super::hash::{Hash, HashOutput};
 use super::hmac::Hmac;
 use crate::Error;
+use crate::low::zeroise;
 use crate::mid::rng::RandomSource;
 
 /// A limited implementation of SP800-90A -- enough for RFC6979 ECDSA.
@@ -114,6 +115,14 @@ impl<H: Hash> RandomSource for HmacDrbg<H> {
         self.update(&[]);
 
         Ok(())
+    }
+}
+
+// Under RFC 6979, K and V derive from the signing key and determine the next nonce.
+impl<H: Hash> Drop for HmacDrbg<H> {
+    fn drop(&mut self) {
+        zeroise(self.k.as_mut());
+        zeroise(self.v.as_mut());
     }
 }
 

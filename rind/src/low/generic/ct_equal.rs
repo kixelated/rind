@@ -10,6 +10,7 @@ pub(crate) fn ct_equal(a: &[u8], b: &[u8]) -> bool {
 
     // SAFETY: prior code guarantees a.len() == b.len()
     let diff = unsafe { ct_compare_bytes(a.as_ptr(), b.as_ptr(), a.len()) };
-    // Whether they matched is public: callers accept or reject on it.
-    crate::low::ct::into_public(diff) == 0
+    // The result stays secret: a caller that accepts or rejects on it
+    // declassifies it, but ML-KEM's implicit rejection must not.
+    diff == 0
 }

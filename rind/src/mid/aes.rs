@@ -106,18 +106,26 @@ pub(super) fn check_gcm_lengths(aad: usize, msg: usize) -> Result<(), Error> {
     check_counter(2, msg)
 }
 
-fn expand_key(key: &[u8]) -> Result<AesKey, Error> {
-    low::ct::secret_slice(key);
-    match key.len() {
-        16 | 32 => Ok(AesKey::new(key)),
-        _ => Err(Error::WrongLength),
+pub(super) fn expand_key(key: &[u8]) -> Result<AesKey, Error> {
+    if !matches!(key.len(), 16 | 32) {
+        return Err(Error::WrongLength);
     }
+
+    // Mark a copy: the caller's buffer may be shared, or a promoted constant.
+    let mut copy = [0u8; 32];
+    let copy_key = &mut copy[..key.len()];
+    copy_key.copy_from_slice(key);
+    low::ct::secret_slice(copy_key);
+    let expanded = AesKey::new(copy_key);
+    zeroise(&mut copy);
+    Ok(expanded)
 }
 
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
+    use crate::mid::aes_gcm::AesGcm;
     use crate::test::*;
 
     #[test]
@@ -127,6 +135,7 @@ mod tests {
             let supported = len == 16 || len == 32;
             assert_eq!(Aes::new(&key[..len]).is_ok(), supported, "len {len}");
             assert_eq!(AesCtr::new(&key[..len]).is_ok(), supported, "len {len}");
+            assert_eq!(AesGcm::new(&key[..len]).is_ok(), supported, "len {len}");
         }
     }
 
