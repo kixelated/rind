@@ -65,8 +65,8 @@ impl PublicKey {
 
 /// A P-256 ephemeral private key.
 ///
-/// This can be used at most once for the Diffie-Hellman operation,
-/// and that is the most common usage pattern for key exchange.
+/// `agreement::EphemeralPrivateKey` uses one for a single Diffie-Hellman
+/// operation.
 pub(crate) struct PrivateKey {
     scalar: Scalar,
 }
@@ -144,8 +144,8 @@ impl fmt::Debug for PrivateKey {
 
 /// A P-256 static private key.
 ///
-/// This can be used many times for the Diffie-Hellman operation.
-/// It can also be serialized and deserialized.
+/// This backs ECDSA, so it can be serialized and deserialized. Its
+/// Diffie-Hellman operation is only for tests with known scalars.
 pub struct StaticPrivateKey(PrivateKey);
 
 impl StaticPrivateKey {

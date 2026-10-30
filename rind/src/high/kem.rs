@@ -192,7 +192,9 @@ mod tests {
     }
 
     fn secret_bytes(secret: &SharedSecret) -> Vec<u8> {
-        low::ct::into_public(secret.as_ref().to_vec())
+        let bytes = secret.as_ref().to_vec();
+        low::ct::public_slice(&bytes);
+        bytes
     }
 
     #[test]

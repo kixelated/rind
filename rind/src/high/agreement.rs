@@ -218,10 +218,9 @@ mod tests {
                 agree_ephemeral(alice, &UnparsedPublicKey::new(algorithm, &bob_public)).unwrap();
             let bob_secret =
                 agree_ephemeral(bob, &UnparsedPublicKey::new(algorithm, &alice_public)).unwrap();
-            assert_eq!(
-                low::ct::into_public(alice_secret.as_ref().to_vec()),
-                low::ct::into_public(bob_secret.as_ref().to_vec()),
-            );
+            low::ct::public_slice(alice_secret.as_ref());
+            low::ct::public_slice(bob_secret.as_ref());
+            assert_eq!(alice_secret.as_ref(), bob_secret.as_ref());
         }
     }
 
@@ -343,7 +342,9 @@ mod tests {
         proptest! {
             #[test]
             fn ecdh(private in any::<[u8; 32]>(), peer in peer()) {
-                let ours = x25519::StaticPrivateKey::from_array(&private);
+                // rind marks its copy secret, which aws-lc-rs's must not be.
+                let ours_private = private;
+                let ours = x25519::StaticPrivateKey::from_array(&ours_private);
                 let theirs = PrivateKey::from_private_key(&X25519, &private).unwrap();
                 let theirs_public = theirs.compute_public_key().unwrap();
                 prop_assert_eq!(&ours.public_key().as_bytes()[..], theirs_public.as_ref());
