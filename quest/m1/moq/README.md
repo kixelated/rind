@@ -76,6 +76,5 @@ RustCrypto dependency.
 - [Truncated hash comparison never panics](/quest/m1/moq/truncated-ct-equal.md) - an out-of-range truncation length is refused, not asserted
 - [Wipe hash scratch](/quest/m1/moq/hash-scratch-wipe.md) - SHA compress functions leave no copy of a hashed secret on the stack
 - [ctgrind on aarch64](/quest/m1/moq/aarch64-ctgrind.md) - the constant-time check runs on graviola's aarch64 backend
-- [Wipe HMAC and DRBG state](/quest/m1/moq/state-wipe.md) - `Hmac` and `HmacDrbg` zero their keyed state on drop
 - [Verification](/quest/m1/moq/verify.md) - Wycheproof, aws-lc-rs differential tests, adapter handshakes, and benchmarks on every backend
 - [Release](/quest/m1/moq/release.md) - publish the rind release MoQ switches to

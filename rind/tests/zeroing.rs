@@ -123,6 +123,27 @@ fn hkdf() {
 }
 
 #[test]
+fn hmac() {
+    use rind::hashing::hmac::Hmac;
+    use rind::hashing::{Hash, LegacySha1, Sha256, Sha384, Sha512};
+
+    // A partial block leaves message bytes buffered beside the keyed states.
+    fn check<H: Hash>()
+    where
+        Hmac<H>: Unpin,
+    {
+        let mut hmac = Hmac::<H>::new([0xffu8; 32]);
+        hmac.update([0xffu8; 3]);
+        check_zeroed_on_drop(Box::pin(hmac));
+    }
+
+    check::<LegacySha1>();
+    check::<Sha256>();
+    check::<Sha384>();
+    check::<Sha512>();
+}
+
+#[test]
 fn aes_gcm() {
     use rind::aead::AesGcm;
 
