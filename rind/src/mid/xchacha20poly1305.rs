@@ -1,6 +1,7 @@
 // Written for Graviola by Joe Birr-Pixton, 2024.
 // SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 
+use super::chacha20::check_counter;
 use crate::Error;
 use crate::low::chacha20::XChaCha20;
 use crate::low::poly1305::Poly1305;
@@ -28,17 +29,24 @@ impl XChaCha20Poly1305 {
     ///
     /// On exit, `cipher_inout` contains the ciphertext of the message,
     /// and `tag_out` contains the authentication tag.
+    ///
+    /// Fails with [`Error::WrongLength`], leaving `cipher_inout` unchanged,
+    /// if the message is longer than the 2^38 - 64 bytes its 32-bit block
+    /// counter covers.
     pub fn encrypt(
         &self,
         nonce: &[u8; 24],
         aad: &[u8],
         cipher_inout: &mut [u8],
         tag_out: &mut [u8; 16],
-    ) {
+    ) -> Result<(), Error> {
         let _entry = Entry::new_secret();
+        // block 0 keys Poly1305
+        check_counter(1, cipher_inout.len())?;
         self.cipher(nonce, aad, cipher_inout, tag_out, true);
         low::ct::public_slice(cipher_inout);
         low::ct::public_slice(tag_out);
+        Ok(())
     }
 
     /// Decrypts and verifies the given message.
@@ -51,6 +59,8 @@ impl XChaCha20Poly1305 {
     ///
     /// On success, `cipher_inout` contains the plaintext of the message,
     /// and `Ok(())` is returned.
+    /// A message past [`Self::encrypt`]'s limit fails with
+    /// `Err(Error::WrongLength)`, leaving `cipher_inout` unchanged.
     /// Otherwise, `Err(Error::DecryptFailed)` is returned and `cipher_inout`
     /// is cleared.
     pub fn decrypt(
@@ -61,6 +71,7 @@ impl XChaCha20Poly1305 {
         tag: &[u8],
     ) -> Result<(), Error> {
         let _entry = Entry::new_secret();
+        check_counter(1, cipher_inout.len())?;
         let mut actual_tag = [0u8; 16];
         self.cipher(nonce, aad, cipher_inout, &mut actual_tag, false);
 
@@ -146,7 +157,7 @@ mod tests {
         let nonce = *b"@ABCDEFGHIJKLMNOPQRSTUVW";
         let mut tag = [0u8; 16];
 
-        k.encrypt(&nonce, &aad, &mut buffer[..], &mut tag);
+        k.encrypt(&nonce, &aad, &mut buffer[..], &mut tag).unwrap();
 
         assert_eq!(
             buffer,

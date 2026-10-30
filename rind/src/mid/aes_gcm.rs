@@ -1,6 +1,7 @@
 // Written for Graviola by Joe Birr-Pixton, 2024.
 // SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 
+use super::aes::check_gcm_lengths;
 use crate::Error;
 use crate::low::ghash::{Ghash, GhashTable};
 use crate::low::{self, AesKey, Entry, aes_gcm, ct_equal};
@@ -47,14 +48,19 @@ impl AesGcm {
     ///
     /// On exit, `cipher_inout` contains the ciphertext of the message,
     /// and `tag_out` contains the authentication tag.
+    ///
+    /// Fails with [`Error::WrongLength`], leaving `cipher_inout` unchanged,
+    /// if the message is longer than GCM's 2^36 - 32 bytes, or `aad` is
+    /// 2^61 bytes or longer.
     pub fn encrypt(
         &self,
         nonce: &[u8; 12],
         aad: &[u8],
         cipher_inout: &mut [u8],
         tag_out: &mut [u8; 16],
-    ) {
+    ) -> Result<(), Error> {
         let _entry = Entry::new_secret();
+        check_gcm_lengths(aad.len(), cipher_inout.len())?;
         let mut ghash = Ghash::new(&self.gh);
 
         let counter = self.nonce_to_y0(nonce);
@@ -79,6 +85,7 @@ impl AesGcm {
 
         low::ct::public_slice(cipher_inout);
         low::ct::public_slice(tag_out);
+        Ok(())
     }
 
     /// Decrypts and verifies the given message.
@@ -91,6 +98,8 @@ impl AesGcm {
     ///
     /// On success, `cipher_inout` contains the plaintext of the message,
     /// and `Ok(())` is returned.
+    /// A message past [`Self::encrypt`]'s limits fails with
+    /// `Err(Error::WrongLength)`, leaving `cipher_inout` unchanged.
     /// Otherwise, `Err(Error::DecryptFailed)` is returned and `cipher_inout`
     /// is cleared.
     pub fn decrypt(
@@ -101,6 +110,7 @@ impl AesGcm {
         tag: &[u8],
     ) -> Result<(), Error> {
         let _entry = Entry::new_secret();
+        check_gcm_lengths(aad.len(), cipher_inout.len())?;
         let mut ghash = Ghash::new(&self.gh);
 
         let counter = self.nonce_to_y0(nonce);
@@ -148,7 +158,7 @@ mod tests {
     fn smoketest() {
         let t = AesGcm::new(&[0; 16]);
         let mut tag = [0u8; 16];
-        t.encrypt(&[0u8; 12], &[], &mut [], &mut tag);
+        t.encrypt(&[0u8; 12], &[], &mut [], &mut tag).unwrap();
         assert_eq!(
             &tag,
             b"\x58\xe2\xfc\xce\xfa\x7e\x30\x61\x36\x7f\x1d\x57\xa4\xe7\x45\x5a"
@@ -161,7 +171,8 @@ mod tests {
         let mut tag = [0u8; 16];
         // not divisible by 128, 64, 16 to cover by-8, by-4, and trailing cases
         let mut cipher = [b'p'; 4164];
-        t.encrypt(b"noncenonceno", b"aad", &mut cipher, &mut tag);
+        t.encrypt(b"noncenonceno", b"aad", &mut cipher, &mut tag)
+            .unwrap();
 
         let expected = include_bytes!("../testdata/aes-gcm-ciphertext.bin");
         let (expected_cipher, expected_tag) = expected.split_at(expected.len() - 16);
@@ -211,12 +222,16 @@ mod tests {
                             return;
                         }
                         let mut got_tag = [0u8; 16];
-                        self.key.as_ref().unwrap().encrypt(
-                            &self.nonce[..].try_into().unwrap(),
-                            &self.aad,
-                            &mut self.pt,
-                            &mut got_tag,
-                        );
+                        self.key
+                            .as_ref()
+                            .unwrap()
+                            .encrypt(
+                                &self.nonce[..].try_into().unwrap(),
+                                &self.aad,
+                                &mut self.pt,
+                                &mut got_tag,
+                            )
+                            .unwrap();
                         assert_eq!(self.pt, self.ct);
                         let tag = value.bytes();
                         assert_eq!(&got_tag[..tag.len()], &tag[..]);
