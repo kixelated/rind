@@ -227,12 +227,6 @@ impl RsaComponentsBuffer {
             (MAX_PRIVATE_MODULUS_BYTES + 1) * 5;
 }
 
-impl Drop for RsaComponentsBuffer {
-    fn drop(&mut self) {
-        low::zeroise(&mut self.0);
-    }
-}
-
 impl Default for RsaComponentsBuffer {
     fn default() -> Self {
         Self([0u8; 4619])

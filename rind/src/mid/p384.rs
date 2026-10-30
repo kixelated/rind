@@ -110,7 +110,10 @@ impl PrivateKey {
     /// Returns a [`SharedSecret`].  May return an error in fault conditions.
     pub fn diffie_hellman(self, peer: &PublicKey) -> Result<SharedSecret, Error> {
         let _entry = low::Entry::new_secret();
-        let result = JacobianMontPoint::multiply_w5(&self.scalar, &peer.precomp_w5).as_affine();
+        let mut shared_point = JacobianMontPoint::multiply_w5(&self.scalar, &peer.precomp_w5);
+        let result = shared_point.as_affine();
+        // aws-lc wipes the product point, but not the coordinates derived from it.
+        low::zeroise(&mut shared_point.xyz);
         match low::ct::into_public(result.on_curve()) {
             true => Ok(SharedSecret(util::u64x6_to_big_endian(
                 &result.x().demont().0,
