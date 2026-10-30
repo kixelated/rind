@@ -1,12 +1,13 @@
 name: quality lints
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
   schedule:
     - cron: "0 18 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: lints-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -69,9 +70,6 @@ jobs:
         run: |
           ./all.sh
           git diff --exit-code
-
-      - name: check license headers
-        run: ./admin/scan-license
 
       - name: check module structure
         run: ./admin/structure

@@ -32,7 +32,8 @@ Run `just ci` before every push, and mark the PR ready with `/quest-review` when
 Keep it a draft only while its description lists a decision the maintainer still owns.
 Fix any merge conflicts and failing CI checks.
 
-Every PR runs **Check** (`just ci` over the diff) plus the platform workflows inherited from graviola: the OS and toolchain matrix, ASAN, cranelift, ctgrind, fuzz smoke tests, and Intel SDE CPU models.
+Every PR runs only **Check** (`just ci` over the diff).
+The platform workflows inherited from graviola run nightly, or on demand with `gh workflow run <name> --ref <branch>`.
 Merge with `gh pr merge --squash <number>` once checks pass, the review is clean, and the maintainer has approved merging that PR.
 
 # AI
