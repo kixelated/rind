@@ -130,7 +130,7 @@ impl AesGcm {
             *out ^= *e;
         }
 
-        if ct_equal(&actual_tag, tag) {
+        if low::ct::into_public(ct_equal(&actual_tag, tag)) {
             low::ct::public_slice(cipher_inout);
             Ok(())
         } else {
