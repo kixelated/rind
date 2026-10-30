@@ -44,3 +44,56 @@ jobs:
         with:
           mode: simulation
           run: cargo codspeed run
+
+  # The arm64 runner executes 32-bit ARM natively, so this times the armv7
+  # build without emulation. Its Neoverse core is no phone or board, so read
+  # rind's time relative to aws-lc-rs in the same run, not as a device's.
+  armv7:
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          targets: armv7-unknown-linux-gnueabihf
+
+      - name: Install armhf toolchain and OpenSSL
+        run: |
+          sudo dpkg --add-architecture armhf
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6:armhf libssl-dev:armhf
+
+      # Only rind and aws-lc-rs, the library it is measured against.
+      - name: Run benchmarks
+        run: cargo bench -p rind-bench --target armv7-unknown-linux-gnueabihf -- --noplot '(^|/)(rind|aws-lc-rs)(/|$)'
+        env:
+          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
+          CC_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-gcc
+          CXX_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-g++
+          ARMV7_UNKNOWN_LINUX_GNUEABIHF_OPENSSL_INCLUDE_DIR: /usr/include
+          ARMV7_UNKNOWN_LINUX_GNUEABIHF_OPENSSL_LIB_DIR: /usr/lib/arm-linux-gnueabihf
+
+      # One row per benchmark, in run order, with rind's time over aws-lc-rs's.
+      - name: Summarize
+        shell: bash
+        run: |
+          find target/criterion -path '*/new/benchmark.json' -printf '%T@ %p\n' | sort -n | cut -d' ' -f2- |
+            while read -r f; do
+              jq -c --slurpfile e "${f%benchmark.json}estimates.json" '.full_id | split("/")
+                | {lib: map(select(. == "rind" or . == "aws-lc-rs"))[0],
+                   key: map(if . == "rind" or . == "aws-lc-rs" then "*" else . end) | join("/"),
+                   ns: ($e[0].slope // $e[0].mean).point_estimate}' "$f"
+            done |
+            jq -rs 'def time: if . == null then "-" elif . < 1e3 then "\(round) ns"
+                      elif . < 1e6 then "\(. / 10 | round / 100) µs" else "\(. / 1e4 | round / 100) ms" end;
+              reduce (.[] | select(.lib)) as $b ({}; .[$b.key][$b.lib] = $b.ns)
+              | "| benchmark | rind | aws-lc-rs | rind / aws-lc-rs |", "|---|---|---|---|",
+                (to_entries[] | .value as $v
+                  | "| \(.key) | \($v.rind | time) | \($v["aws-lc-rs"] | time) | \(if $v.rind and $v["aws-lc-rs"] then $v.rind / $v["aws-lc-rs"] * 100 | round / 100 else "-" end) |")' |
+            tee -a "$GITHUB_STEP_SUMMARY"
