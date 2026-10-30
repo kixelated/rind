@@ -95,9 +95,11 @@ impl DecapKey {
     }
 }
 
+// The public `ek` is wiped too, so the whole value is zero after drop.
 impl Drop for DecapKey {
     fn drop(&mut self) {
         low::zeroise(&mut self.dk[0..]);
+        low::zeroise(&mut self.ek.0[0..]);
     }
 }
 

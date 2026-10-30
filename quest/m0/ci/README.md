@@ -21,4 +21,3 @@ hosted jobs and 140 runs sat queued:
 
 ## Required
 
-- [Platform CI nightly](/quest/m0/ci/nightly.md) - platform workflows leave the PR path, and superseded runs cancel

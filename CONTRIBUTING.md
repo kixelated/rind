@@ -32,7 +32,8 @@ Run `just ci` before every push, and mark the PR ready with `/quest-review` when
 Keep it a draft only while its description lists a decision the maintainer still owns.
 Fix any merge conflicts and failing CI checks.
 
-Every PR runs the platform workflows inherited from graviola: the OS and toolchain matrix, ASAN, cranelift, ctgrind, fuzz smoke tests, and Intel SDE CPU models.
+PRs run no CI of their own.
+The platform workflows inherited from graviola run nightly, or on demand with `gh workflow run <name> --ref <branch>`.
 PRs land only through `quest land`: once the review is clean and the maintainer has approved merging, queue the PR with `quest merge <pr> <token> --land <head>`.
 The Land workflow squashes the queue onto `main`, runs `just ci` once on the organization's queue runner, and fast-forwards `main` to the longest passing prefix, ejecting with a comment a PR that conflicts or fails alone.
 The admin bypass of `main`'s ruleset is for emergencies.

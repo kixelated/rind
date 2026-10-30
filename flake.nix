@@ -83,6 +83,8 @@
                 # turns that skip into an error (see sh/dispatch.sh).
                 shellcheck
                 actionlint
+                # sh/alert.sh reads the workflows.
+                yq-go
                 nixfmt
                 # admin/ scripts.
                 python3

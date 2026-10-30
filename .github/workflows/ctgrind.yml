@@ -1,12 +1,13 @@
 name: ctgrind
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
   schedule:
     - cron: "0 18 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ctgrind-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -16,11 +17,8 @@ jobs:
   build:
     strategy:
       matrix:
-        include:
-          - os: ubuntu-latest
-            build: ""
-          - os: ubuntu-latest
-            build: --release
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+        build: ["", --release]
 
     runs-on: ${{ matrix.os }}
     steps:
