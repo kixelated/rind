@@ -14,7 +14,9 @@ queue, so rind matches kixelated/quest and moq-dev/moq's planned gate
 instead of moving twice.
 
 - Copy kixelated/quest's `land.yml`, running its check on the queue runner
-  (moq-dev/moq's `vars.MOQ_QUEUE_RUNNER`) rather than a hosted one. Follow
+  (label `moq-queue`, moq-dev/moq's `vars.MOQ_QUEUE_RUNNER`) rather than a
+  hosted one. The runner's group must admit rind, which is the maintainer's
+  setting; ask if it does not. Follow
   moq-dev/moq's `quest/m0/ci/land.md` for the push credential (a bot in an
   Environment limited to `main`), the ruleset, and ejection on failure.
 - The `main` ruleset requires a check PR heads never carry, so only the
@@ -25,4 +27,4 @@ instead of moving twice.
 
 ## Required
 
-- [rind moves to moq-dev](/quest/m0/ci/transfer.md) - the queue runner belongs to the organization
+- [Follow the move to moq-dev](/quest/m0/ci/transfer.md) - secrets and apps the gate needs live on the organization

@@ -16,11 +16,11 @@ hosted jobs and 140 runs sat queued:
 - PRs reach `main` through `quest land` on a self-hosted runner, the engine
   kixelated/quest already uses and moq-dev/moq is adopting
   (`quest/m0/ci/land.md` there), rather than GitHub's merge queue.
-- rind moves to the moq-dev organization first, so it can share moq's queue
-  runner and the organization's runner limits.
+- rind moved to the moq-dev organization (2026-10-29), so it can share moq's
+  queue runner and the organization's runner limits.
 
 ## Required
 
 - [Platform CI nightly](/quest/m0/ci/nightly.md) - platform workflows leave the PR path, and superseded runs cancel
-- [rind moves to moq-dev](/quest/m0/ci/transfer.md) - the maintainer transfers the repository; links, apps, and secrets follow
+- [Follow the move to moq-dev](/quest/m0/ci/transfer.md) - links, apps, and secrets name `moq-dev/rind`
 - [Land through quest land](/quest/m0/ci/land.md) - `just ci` on the organization's queue runner gates `main`
