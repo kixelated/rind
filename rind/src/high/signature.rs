@@ -707,7 +707,11 @@ impl Drop for RsaKeyPair {
 }
 
 /// An RSA public key, as a PKCS#1 `RSAPublicKey`.
+// Aligned like the private key's words, so on 32-bit targets the key pair's
+// padding falls inside this value, which `RsaKeyPair`'s drop wipes whole,
+// rather than after it, where `tests/zeroing.rs` finds stale bytes.
 #[derive(Clone)]
+#[repr(align(8))]
 pub struct RsaSubjectPublicKey {
     bytes: [u8; Self::MAX_LEN],
     len: usize,

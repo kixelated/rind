@@ -82,6 +82,9 @@ cargo bench
 
 With [Nix](https://nixos.org), `nix develop` (or direnv) provides CI's
 toolchain, and `just check` runs CI's gate over what the branch changed.
+On Linux, `just armv7` runs the nightly armv7 job: it builds and lints for
+32-bit ARM, then runs the tests under qemu, with and without the ARMv8 crypto
+extension.
 
 ## Algorithms
 
@@ -93,7 +96,7 @@ describes `main`, and changes alongside the code it describes.
 
 | Algorithm | x86_64 | aarch64 | armv7 |
 |---|---|---|---|
-| AES-128-GCM, AES-256-GCM | Graviola | [s2n-bignum] CTR and GHASH of whole blocks ✓, run from a copy of the input since its proofs exclude in-place operation; Graviola key schedule, H powers, and GHASH of the AAD, final partial block, and lengths | crypto extension: [aws-lc] AES and GHASH (copied), rind GCM; otherwise: [libcrux-aes] |
+| AES-128-GCM, AES-256-GCM | Graviola | [s2n-bignum] CTR and GHASH of whole blocks ✓, run from a copy of the input since its proofs exclude in-place operation; Graviola key schedule, H powers, single-block AES (H, the tag mask, and a final partial block), and GHASH of the AAD, final partial block, and lengths | crypto extension: [aws-lc] AES and GHASH (copied), rind GCM; otherwise: [libcrux-aes] |
 | AES block (header protection), AES-CTR (SRTP) | Graviola block, rind CTR | Graviola block, rind CTR | crypto extension: [aws-lc] block and CTR (copied); otherwise: [libcrux-aes] block (copied), rind CTR |
 | ChaCha20 (header protection) | Graviola | Graviola | [HACL\*] block function ✓ (copied), rind keystream |
 | ChaCha20-Poly1305, XChaCha20-Poly1305 | Graviola | Graviola | [HACL\*] ChaCha20 block function and Poly1305 ✓; Graviola AEAD; rind HChaCha20 |

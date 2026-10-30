@@ -24,4 +24,3 @@ quest here if it still matters.
 
 ## Required
 
-- [armv7 AEAD copy](/quest/m2/perf/armv7-aead-copy.md) - armv7 AEADs seal and open in place without copying the buffer
