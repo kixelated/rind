@@ -28,6 +28,18 @@ pub fn check() -> Result<(), MissingFeature> {
     }
 }
 
+/// Reports whether rind runs AES on CPU instructions, as aws-lc's `EVP_has_aes_hardware` does.
+///
+/// Where it doesn't, ChaCha20-Poly1305 is faster than AES-GCM, so a protocol
+/// that negotiates between them should prefer it.
+pub fn has_aes_hardware() -> bool {
+    #[cfg(target_arch = "arm")]
+    return super::HaveCryptoExt::check().is_some();
+    // rind requires AES instructions on these architectures.
+    #[cfg(not(target_arch = "arm"))]
+    return true;
+}
+
 /// Panics with [`check`]'s error rather than run instructions this CPU lacks.
 pub(crate) fn verify_cpu_features() {
     // Every operation calls this, and a single-block one costs little more
