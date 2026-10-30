@@ -10,7 +10,6 @@ use crate::high::hash::{self, Hash};
 use crate::high::{pkcs1, pkcs8};
 use crate::low::Entry;
 use crate::low::PosInt;
-use crate::low::zeroise;
 use crate::mid::rng::SystemRandom;
 use crate::mid::{rsa_priv, rsa_pub};
 
@@ -352,17 +351,13 @@ impl SigningKey {
 
         let mut pkcs1_buffer = [0u8; Self::MAX_PKCS1_BUFFER_LEN];
 
-        let rc = pkcs8::Key::construct(
+        pkcs8::Key::construct(
             self.to_pkcs1_der(&mut pkcs1_buffer)?,
             None,
             asn1::oid::rsaEncryption.clone(),
             Some(asn1::Any::Null(asn1::Null)),
         )
-        .encode(output);
-
-        zeroise(&mut pkcs1_buffer);
-
-        rc
+        .encode(output)
     }
 
     /// Decodes an RSA signing key from PKCS#8 DER format.

@@ -1,0 +1,33 @@
+[package]
+name = "rind-instant-acme"
+version = "0.1.0"
+edition = "2024"
+repository = "https://github.com/moq-dev/rind"
+license = "Apache-2.0 OR ISC OR MIT-0"
+description = "instant-acme CryptoProvider backed by rind"
+categories = ["network-programming", "cryptography"]
+rust-version.workspace = true
+readme = "README.md"
+# instant-acme's pluggable CryptoProvider is unreleased. Publish once a 0.9
+# release carries it and this git dependency moves to crates.io.
+publish = false
+
+[dependencies]
+instant-acme = { git = "https://github.com/djc/instant-acme", rev = "1cbc35cca446e6d6813b3c13ac843d50948facd0", default-features = false }
+rind = { version = "0.1.0", path = "../rind" }
+rustls-pki-types = "1"
+
+[dev-dependencies]
+aws-lc-rs = { version = "1.16", default-features = false, features = ["alloc", "prebuilt-nasm", "non-fips"] }
+base64 = "0.23"
+# Requests reach valgrind only once `rind/__ctgrind` turns on crabgrind's default
+# features, as `admin/ctgrind` does; otherwise they build as no-ops.
+crabgrind = { version = "0.4", default-features = false }
+# aws-lc-rs is the differential oracle; hyper-rustls is the HTTPS client the
+# Pebble test drives on rind-rustls.
+instant-acme = { git = "https://github.com/djc/instant-acme", rev = "1cbc35cca446e6d6813b3c13ac843d50948facd0", default-features = false, features = ["aws-lc-rs", "hyper-rustls"] }
+rcgen = { version = "0.14", default-features = false, features = ["pem"] }
+rind-rcgen = { path = "../rind-rcgen" }
+rind-rustls = { path = "../rind-rustls" }
+serde_json = "1"
+tokio = { version = "1", features = ["io-util", "macros", "net", "process", "rt", "time"] }

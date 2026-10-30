@@ -99,7 +99,7 @@ aws-lc-rs shapes with no consumer, kept out until one appears:
 ### Consumers
 
 `rind-rustls`, `rind-dimpl`, `rind-str0m`, `rind-jsonwebtoken`,
-`rind-object-store`, `rind-rcgen`, and the planned `rind-instant-acme`. MoQ
+`rind-object-store`, `rind-rcgen`, and `rind-instant-acme`. MoQ
 (moq-dev/moq at `80cafb3`) does not call rind yet; its direct aws-lc-rs and
 RustCrypto callers are the planned ones: moq-e2ee (AES-128-GCM, HKDF, HMAC),
 moq-quic (Retry integrity and token AEADs, HKDF, HMAC), moq-auth (key
