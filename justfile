@@ -36,7 +36,6 @@ fix $BASE="":
 audit:
     cargo deny check
 
-# Open or update the release PR, then publish whatever it already merged.
-release:
-    release-plz release-pr --git-token "$GITHUB_TOKEN"
-    release-plz release --git-token "$GITHUB_TOKEN"
+# Open or update the release PR, then publish a release PR landed since BEFORE.
+release $BEFORE="":
+    sh/release.sh "$BEFORE"
