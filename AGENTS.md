@@ -24,7 +24,7 @@ This is one Rust workspace: the `rind` library, its `rind-<consumer>` adapter cr
 - Land the ideal implementation now rather than a partial one plus follow-ups; split off only work that is independently landable.
 - Be adversarial: attack your own approach, reports, reviews, and other PRs as hard as anyone else's.
 - When a decision is the maintainer's (API shape, naming, scope) or you are unsure, ask with an interactive prompt of 2-3 options and a recommendation.
-- Every test runs in CI. The `Check` gate holds only fast, high-signal tests; slow suites run in the other workflows.
+- Every test runs in CI. The `just ci` gate holds only fast, high-signal tests; slow suites run in the other workflows.
 - Never add or change a rule in an `AGENTS.md`, `CONTRIBUTING.md`, or skill without being prompted, and read `PROMPTING.md` first. A fact your own change made stale is fixed inline like any other doc.
 - No em dashes.
 - Match the existing conventions, patterns, and naming when possible.
