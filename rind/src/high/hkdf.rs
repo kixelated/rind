@@ -14,8 +14,6 @@
 //! prk.expand(&[b"label", b"context"], &mut key).unwrap();
 //! ```
 
-use core::marker::PhantomData;
-
 use super::hash::Hash;
 use super::hmac::Hmac;
 use crate::Error;
@@ -23,9 +21,9 @@ use crate::low::zeroise;
 
 /// A pseudorandom key, from which [`Prk::expand`] derives any number of keys.
 pub struct Prk<H: Hash> {
-    // Sized for the largest hash output; only the first hash length is used.
-    key: [u8; 64],
-    _hash: PhantomData<H>,
+    // Keyed once here so each expand block skips the two key compressions;
+    // the hash contexts wipe themselves on drop.
+    hmac: Hmac<H>,
 }
 
 impl<H: Hash> Prk<H> {
@@ -36,15 +34,9 @@ impl<H: Hash> Prk<H> {
         let mut hmac = Hmac::<H>::new(salt);
         hmac.update(ikm);
         let mut prk = hmac.finish();
-
-        let mut key = [0u8; 64];
-        key[..prk.as_ref().len()].copy_from_slice(prk.as_ref());
+        let hmac = Hmac::new(&prk);
         zeroise(prk.as_mut());
-
-        Self {
-            key,
-            _hash: PhantomData,
-        }
+        Self { hmac }
     }
 
     /// Fills `out` with key material derived for the concatenation of `info` (HKDF-Expand).
@@ -59,7 +51,7 @@ impl<H: Hash> Prk<H> {
         }
 
         for (i, chunk) in out.chunks_mut(hash_len).enumerate() {
-            let mut ctx = Hmac::<H>::new(&self.key[..hash_len]);
+            let mut ctx = self.hmac.clone();
             if i > 0 {
                 ctx.update(&block);
             }
@@ -74,12 +66,6 @@ impl<H: Hash> Prk<H> {
         // The last block's tail is key material the caller did not take.
         zeroise(block.as_mut());
         Ok(())
-    }
-}
-
-impl<H: Hash> Drop for Prk<H> {
-    fn drop(&mut self) {
-        zeroise(&mut self.key);
     }
 }
 
@@ -129,7 +115,9 @@ mod tests {
         for (ikm, salt, info, prk, okm) in cases {
             let got =
                 Prk::<Sha256>::extract(&hex::decode(salt).unwrap(), &hex::decode(ikm).unwrap());
-            assert_eq!(hex::encode(&got.key[..32]), prk);
+            // HMAC of the empty message under the stored key identifies the PRK.
+            let wanted = Hmac::<Sha256>::new(hex::decode(prk).unwrap()).finish();
+            assert_eq!(got.hmac.clone().finish(), wanted);
 
             let mut out = vec![0u8; okm.len() / 2];
             got.expand(&[&hex::decode(info).unwrap()], &mut out)
