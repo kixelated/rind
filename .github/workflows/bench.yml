@@ -63,6 +63,16 @@ jobs:
           toolchain: stable
           targets: armv7-unknown-linux-gnueabihf
 
+      # Hosted hardware can change under the same label. The 32-bit
+      # personality makes the kernel list the features armv7 code sees, such
+      # as the crypto instructions aws-lc-rs uses.
+      - name: Record the CPU
+        shell: bash
+        run: |
+          model=$(lscpu | sed -n 's/^Model name: *//p' | head -n1)
+          features=$(setarch linux32 grep -m1 '^Features' /proc/cpuinfo | cut -d: -f2)
+          echo "CPU: $model; AArch32 features:$features" | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Install armhf toolchain and OpenSSL
         run: |
           sudo dpkg --add-architecture armhf
