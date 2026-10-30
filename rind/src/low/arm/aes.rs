@@ -1,4 +1,4 @@
-// Copyright Cryspen.
+// Copyright 2023 Cryspen Sarl
 // SPDX-License-Identifier: Apache-2.0
 //
 // The AES block cipher, from libcrux-aes 0.0.10's portable bitsliced

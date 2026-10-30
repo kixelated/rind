@@ -20,11 +20,10 @@ use instant_acme::{
     CryptoProvider, EcCurve, Error, HmacKey, HmacKeyProvider, Jwk, JwkThumbFields, Sha256,
     SigningAlgorithm, SigningKey, SigningKeyProvider,
 };
-use rind::digest;
-use rind::hashing::hmac::Hmac;
 use rind::signature::{
     ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair, EcdsaSigningAlgorithm, KeyPair as _,
 };
+use rind::{digest, hmac};
 use rustls_pki_types::PrivatePkcs8KeyDer;
 
 /// An instant-acme [`CryptoProvider`] that signs with ECDSA P-256 account keys and HS256 EAB keys on rind.
@@ -103,17 +102,15 @@ struct HmacSha256Provider;
 impl HmacKeyProvider for HmacSha256Provider {
     fn load_key(&self, key_value: &[u8]) -> Box<dyn HmacKey> {
         // Keep the keyed state rather than a copy of the secret.
-        Box::new(HmacSha256Key(Hmac::new(key_value)))
+        Box::new(HmacSha256Key(hmac::Key::new(hmac::HMAC_SHA256, key_value)))
     }
 }
 
-struct HmacSha256Key(Hmac<rind::hashing::Sha256>);
+struct HmacSha256Key(hmac::Key);
 
 impl HmacKey for HmacSha256Key {
     fn sign(&self, data: &[u8]) -> Vec<u8> {
-        let mut hmac = self.0.clone();
-        hmac.update(data);
-        hmac.finish().as_ref().to_vec()
+        hmac::sign(&self.0, data).as_ref().to_vec()
     }
 
     fn algorithm(&self) -> SigningAlgorithm {

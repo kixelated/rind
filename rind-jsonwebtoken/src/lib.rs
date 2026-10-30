@@ -20,9 +20,6 @@ use jsonwebtoken::signature::{self, Signer, Verifier};
 use jsonwebtoken::{Algorithm, DecodingKey, DecodingKeyKind, EncodingKey};
 use pkcs1::der::asn1::UintRef;
 use pkcs1::der::{Decode, Encode};
-use rind::digest;
-use rind::hashing::hmac::Hmac;
-use rind::hashing::{Sha256, Sha384, Sha512};
 use rind::signature::{
     ECDSA_P256_SHA256_FIXED, ECDSA_P256_SHA256_FIXED_SIGNING, ECDSA_P384_SHA384_FIXED,
     ECDSA_P384_SHA384_FIXED_SIGNING, ED25519, EcdsaKeyPair, EcdsaSigningAlgorithm, Ed25519KeyPair,
@@ -31,6 +28,7 @@ use rind::signature::{
     RSA_PSS_2048_8192_SHA256, RSA_PSS_2048_8192_SHA384, RSA_PSS_2048_8192_SHA512, RSA_PSS_SHA256,
     RSA_PSS_SHA384, RSA_PSS_SHA512, RsaKeyPair, RsaSignatureEncoding, VerificationAlgorithm,
 };
+use rind::{digest, hmac};
 
 /// A jsonwebtoken [`CryptoProvider`] that signs and verifies every algorithm with rind.
 pub static DEFAULT_PROVIDER: CryptoProvider = CryptoProvider {
@@ -89,9 +87,9 @@ fn new_signer(algorithm: &Algorithm, key: &EncodingKey) -> Result<Box<dyn JwtSig
 
     Ok(match algorithm {
         // HMAC keeps the keyed state rather than a copy of the secret.
-        Algorithm::HS256 => signer(algorithm, Hmac::<Sha256>::new(der)),
-        Algorithm::HS384 => signer(algorithm, Hmac::<Sha384>::new(der)),
-        Algorithm::HS512 => signer(algorithm, Hmac::<Sha512>::new(der)),
+        Algorithm::HS256 => signer(algorithm, hmac::Key::new(hmac::HMAC_SHA256, der)),
+        Algorithm::HS384 => signer(algorithm, hmac::Key::new(hmac::HMAC_SHA384, der)),
+        Algorithm::HS512 => signer(algorithm, hmac::Key::new(hmac::HMAC_SHA512, der)),
         Algorithm::ES256 => ecdsa(&ECDSA_P256_SHA256_FIXED_SIGNING)?,
         Algorithm::ES384 => ecdsa(&ECDSA_P384_SHA384_FIXED_SIGNING)?,
         Algorithm::EdDSA => signer(
@@ -143,10 +141,15 @@ fn new_verifier(algorithm: &Algorithm, key: &DecodingKey) -> Result<Box<dyn JwtV
         Ok(verifier(algorithm, key))
     };
 
+    let hmac = |hmac_algorithm| -> Result<Box<dyn JwtVerifier>> {
+        let key = hmac::Key::new(hmac_algorithm, key.try_get_as_bytes()?);
+        Ok(verifier(algorithm, key))
+    };
+
     Ok(match algorithm {
-        Algorithm::HS256 => verifier(algorithm, Hmac::<Sha256>::new(key.try_get_as_bytes()?)),
-        Algorithm::HS384 => verifier(algorithm, Hmac::<Sha384>::new(key.try_get_as_bytes()?)),
-        Algorithm::HS512 => verifier(algorithm, Hmac::<Sha512>::new(key.try_get_as_bytes()?)),
+        Algorithm::HS256 => hmac(hmac::HMAC_SHA256)?,
+        Algorithm::HS384 => hmac(hmac::HMAC_SHA384)?,
+        Algorithm::HS512 => hmac(hmac::HMAC_SHA512)?,
         Algorithm::ES256 => ecdsa(&ECDSA_P256_SHA256_FIXED)?,
         Algorithm::ES384 => ecdsa(&ECDSA_P384_SHA384_FIXED)?,
         Algorithm::EdDSA => parse(
@@ -164,28 +167,17 @@ fn new_verifier(algorithm: &Algorithm, key: &DecodingKey) -> Result<Box<dyn JwtV
     })
 }
 
-// rind's hash markers name no trait to be generic over.
-macro_rules! hmac {
-    ($($hash:ty),*) => {$(
-        impl Sign for Hmac<$hash> {
-            fn sign_message(&self, message: &[u8]) -> RindResult<Vec<u8>> {
-                let mut mac = self.clone();
-                mac.update(message);
-                Ok(mac.finish().as_ref().to_vec())
-            }
-        }
-
-        impl Verify for Hmac<$hash> {
-            fn verify_message(&self, message: &[u8], signature: &[u8]) -> RindResult<()> {
-                let mut mac = self.clone();
-                mac.update(message);
-                mac.verify(signature)
-            }
-        }
-    )*};
+impl Sign for hmac::Key {
+    fn sign_message(&self, message: &[u8]) -> RindResult<Vec<u8>> {
+        Ok(hmac::sign(self, message).as_ref().to_vec())
+    }
 }
 
-hmac!(Sha256, Sha384, Sha512);
+impl Verify for hmac::Key {
+    fn verify_message(&self, message: &[u8], signature: &[u8]) -> RindResult<()> {
+        hmac::verify(self, message, signature)
+    }
+}
 
 impl Sign for EcdsaKeyPair {
     fn sign_message(&self, message: &[u8]) -> RindResult<Vec<u8>> {
