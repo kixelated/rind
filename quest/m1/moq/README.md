@@ -73,7 +73,9 @@ RustCrypto dependency.
 - [rind-instant-acme](/quest/m1/moq/instant-acme.md) - instant-acme 0.9's `CryptoProvider`
 - [AEADs refuse over-long messages](/quest/m1/moq/aead-length.md) - `encrypt` returns an error past the algorithm's limit
 - [ctgrind covers every secret](/quest/m1/moq/ctgrind-gaps.md) - ML-KEM, ECDSA nonces, and AES key setup run under ctgrind
-- [libcrux releases its constant-time fixes](/quest/m1/moq/libcrux-ct-fixes.md) - waiting on libcrux's fixes for armv7 ctgrind's two reports
+- [libcrux releases its bignum constant-time fix](/quest/m1/moq/libcrux-ct-fixes.md) - waiting on libcrux's fix, then dropping its armv7 ctgrind suppression
+- [Wipe libcrux's secret stack copies on armv7](/quest/m1/moq/libcrux-stack-wipe.md) - report upstream and scrub what rind can meanwhile
+- [armv7 ctgrind on PRs](/quest/m1/moq/armv7-ctgrind-pr.md) - the release job gates PRs if it is fast enough
 - [Run doctests under Cranelift](/quest/m1/moq/cranelift-doctest.md) - the rcgen example runs again
 - [Verification](/quest/m1/moq/verify.md) - Wycheproof, aws-lc-rs differential tests, adapter handshakes, and benchmarks on every backend
 - [Release](/quest/m1/moq/release.md) - publish the rind release MoQ switches to
