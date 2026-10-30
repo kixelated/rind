@@ -3,6 +3,9 @@
 //! RSA private operations over HACL*'s `Bignum64`, the arithmetic
 //! libcrux's RSA-PSS uses, composed by the Chinese remainder theorem.
 
+use core::ops::Deref;
+
+use libcrux_hacl_rs::bignum::base::{self, bn_mont_ctx_u64};
 use libcrux_hacl_rs::bignum::bignum64;
 
 use super::rsa_pub::{MAX_PUBLIC_MODULUS_BYTES, RsaPublicKey};
@@ -143,20 +146,29 @@ impl RsaPrivateKey {
 
         // Widths were checked in `new`.
         let w = self.p.as_words().len().max(self.q.as_words().len());
-        let p = self.p.words_at_width(w)?;
-        let q = self.q.words_at_width(w)?;
         let dp = self.dp.words_at_width(w)?;
         let dq = self.dq.words_at_width(w)?;
         let iqmp = self.iqmp.words_at_width(w)?;
         let c = c.words_at_width(w * 2)?;
 
+        // Each prime's length in words is public.
+        let p = Mont::new_secret(self.p.words_at_width(w)?, self.p.as_words().len());
+        let q = Mont::new_secret(self.q.words_at_width(w)?, self.q.as_words().len());
+
         let mut scratch = CrtScratch::default();
-        let ok = scratch.compute(w, Primes { p, q, dp, dq, iqmp }, c);
+        scratch.compute(
+            w,
+            Primes {
+                p: &p,
+                q: &q,
+                dp,
+                dq,
+                iqmp,
+            },
+            c,
+        );
         let m = RsaPosIntModN::from_words(&scratch.m[..n.len()]);
         drop(scratch);
-        if !ok {
-            return Err(Error::DecryptFailed);
-        }
         let m = low::ct::into_public(m?);
 
         // validate the result as a fault attack countermeasure,
@@ -172,8 +184,8 @@ impl RsaPrivateKey {
 
 /// The CRT inputs, each `w` words wide.
 struct Primes<'a> {
-    p: &'a [u64],
-    q: &'a [u64],
+    p: &'a Mont,
+    q: &'a Mont,
     dp: &'a [u64],
     dq: &'a [u64],
     iqmp: &'a [u64],
@@ -191,9 +203,8 @@ struct CrtScratch {
 }
 
 impl CrtScratch {
-    /// Leaves `c ^ d mod n` in `m`, returning false if HACL* refused an
-    /// input (an even or unit prime, or an over-wide exponent).
-    fn compute(&mut self, w: usize, k: Primes<'_>, c: &[u64]) -> bool {
+    /// Leaves `c ^ d mod n` in `m`.
+    fn compute(&mut self, w: usize, k: Primes<'_>, c: &[u64]) {
         let len = w as u32;
         let bits = len * 64;
         let (m_1, m_2) = (&mut self.m_1[..w], &mut self.m_2[..w]);
@@ -204,10 +215,10 @@ impl CrtScratch {
         // i.   Let m_1 = c^dP mod p and m_2 = c^dQ mod q.
         // (do reductions of c first, so the mod exp can be done at
         // width of p or q rather than pq.)
-        let mut ok = bignum64::r#mod(len, k.p, c, t);
-        ok &= bignum64::mod_exp_consttime(len, k.p, t, bits, k.dp, m_1);
-        ok &= bignum64::r#mod(len, k.q, c, t);
-        ok &= bignum64::mod_exp_consttime(len, k.q, t, bits, k.dq, m_2);
+        bignum64::mod_precomp(k.p, c, t);
+        bignum64::mod_exp_consttime_precomp(k.p, t, bits, k.dp, m_1);
+        bignum64::mod_precomp(k.q, c, t);
+        bignum64::mod_exp_consttime_precomp(k.q, t, bits, k.dq, m_2);
 
         // ii. If u > 2, let m_i = c^(d_i) mod r_i, i = 3, ..., u.
         // (we don't support multiprime rsa)
@@ -216,18 +227,17 @@ impl CrtScratch {
         // (m_2 < q may exceed p, so reduce it first.)
         wide.fill(0);
         wide[..w].copy_from_slice(m_2);
-        ok &= bignum64::r#mod(len, k.p, wide, t);
-        bignum64::sub_mod(len, k.p, m_1, t, h);
+        bignum64::mod_precomp(k.p, wide, t);
+        bignum64::sub_mod(len, &k.p[0].n, m_1, t, h);
         bignum64::mul(len, h, k.iqmp, wide);
-        ok &= bignum64::r#mod(len, k.p, wide, h);
+        bignum64::mod_precomp(k.p, wide, h);
 
         // iv.  Let m = m_2 + q * h.
         // (no carry: m < pq < 2^(128w))
-        bignum64::mul(len, k.q, h, qh);
+        bignum64::mul(len, &k.q[0].n, h, qh);
         wide.fill(0);
         wide[..w].copy_from_slice(m_2);
         let _carry = bignum64::add(len * 2, wide, qh, m);
-        ok
     }
 }
 
@@ -254,6 +264,51 @@ impl Drop for CrtScratch {
         low::zeroise(&mut self.wide);
         low::zeroise(&mut self.qh);
         low::zeroise(&mut self.m);
+    }
+}
+
+/// A HACL* Montgomery context, zeroed on drop.
+struct Mont(Box<[bn_mont_ctx_u64]>);
+
+impl Mont {
+    /// A context for a public `n`, which must be odd and above one.
+    fn new(n: &[u64]) -> Self {
+        Self(bignum64::mont_ctx_init(n.len() as u32, n))
+    }
+
+    /// A context for a secret `n`, which must be odd with `used`
+    /// significant words.
+    ///
+    /// `mont_ctx_init` reads `n`'s highest nonzero word to set how many
+    /// times it loops, so this takes it from `used`, which is public.
+    fn new_secret(n: &[u64], used: usize) -> Self {
+        let len = n.len() as u32;
+        let mut r2 = vec![0; n.len()].into_boxed_slice();
+        base::bn_precomp_r2_mod_n_u64(len, 64 * (used as u32 - 1), n, &mut r2);
+        Self(Box::new([bn_mont_ctx_u64 {
+            len,
+            n: n.into(),
+            mu: base::mod_inv_uint64(n[0]),
+            r2,
+        }]))
+    }
+}
+
+impl Deref for Mont {
+    type Target = [bn_mont_ctx_u64];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Drop for Mont {
+    fn drop(&mut self) {
+        for k in self.0.iter_mut() {
+            low::zeroise(&mut k.n);
+            low::zeroise(&mut k.r2);
+            low::zeroise_value(&mut k.mu);
+        }
     }
 }
 

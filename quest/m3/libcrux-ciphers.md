@@ -15,7 +15,8 @@ switches back once libcrux exports them.
 
 Delete `rind/src/low/arm/{aes,aes_ctr,chacha20}.rs` and the `libcrux-macros`
 dependency, and implement `low`'s `AesKey`, `aes_ctr::apply_8`, and
-`chacha20::ChaCha20` over the exported API, so `mid::aes`, `mid::chacha20`,
+`chacha20::ChaCha20` over the exported API (`XChaCha20`'s HChaCha20 stays
+rind's unless libcrux exports it too), so `mid::aes`, `mid::chacha20`,
 and their tests stay shared. Update the armv7 epic's raw-cipher bullet if the
 epic still exists.
 

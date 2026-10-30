@@ -24,12 +24,12 @@ crabgrind = { version = "0.4", optional = true }
 [target.'cfg(target_arch = "arm")'.dependencies]
 fiat-crypto = { version = "0.3", default-features = false }
 libcrux-aes = { version = "0.0.10", default-features = false }
-libcrux-chacha20poly1305 = "0.0.10"
 libcrux-ed25519 = { version = "0.0.10", default-features = false }
 libcrux-hacl-rs = { version = "0.0.6", features = ["alloc"] }
 libcrux-macros = "0.0.4"
 libcrux-ml-kem = { version = "0.0.11", default-features = false, features = ["mlkem768"] }
 libcrux-p256 = { version = "0.0.9", features = ["expose-hacl"] }
+libcrux-poly1305 = { version = "0.0.7", features = ["expose-hacl"] }
 libcrux-traits = "0.0.9"
 
 [dev-dependencies]

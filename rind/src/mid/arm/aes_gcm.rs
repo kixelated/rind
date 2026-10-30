@@ -73,7 +73,10 @@ impl AesGcm {
             ),
             _ => PortableAesGcm256::encrypt(cipher_inout, tag_out, &self.key, nonce, aad, &plain),
         }
-        .map_err(|_| Error::WrongLength)
+        .map_err(|_| Error::WrongLength)?;
+        low::ct::public_slice(cipher_inout);
+        low::ct::public_slice(tag_out);
+        Ok(())
     }
 
     /// Decrypts and verifies the given message.
@@ -125,7 +128,8 @@ impl AesGcm {
             Err(_) => false,
         };
 
-        if result {
+        if low::ct::into_public(result) {
+            low::ct::public_slice(cipher_inout);
             Ok(())
         } else {
             // avoid unauthenticated plaintext leak

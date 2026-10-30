@@ -29,17 +29,18 @@ impl SigningKey {
         // `h := SHA512(seed)`
         // `s := ed25519-clamp(h[0..32])`
         // `prefix := h[32..64]`
-        let (s, prefix): ([u8; 32], [u8; 32]) = {
+        let mut h = {
             let mut ctx = Sha512Context::new();
             ctx.update(seed);
-            let h = ctx.finish();
-
-            (h[0..32].try_into().unwrap(), h[32..64].try_into().unwrap())
+            ctx.finish()
         };
+        let s = UnreducedScalar::clamp_from_le_bytes(h[0..32].try_into().unwrap());
+        let prefix: [u8; 32] = h[32..64].try_into().unwrap();
+        // aws-lc wipes the hashed seed.
+        low::zeroise(&mut h);
 
         // Step: rfc8032 5.1.5.3, 5.1.5.4
         // Compute `[s]B` and compress to get the public key bytes
-        let s = UnreducedScalar::clamp_from_le_bytes(&s);
         let point = s.base_mul();
         let bytes = point.compress().0;
 
@@ -56,10 +57,10 @@ impl SigningKey {
         // Step: rfc8032 5.1.6.2
         // Compute the deterministic nonce
         // `r := SHA-512(dom2(F, C) || prefix || msg) mod L`
-        let r: Scalar = {
-            let r = ed25519_digest(&self.prefix, msg, &[]);
-            Scalar::reduce_from_le_bytes(&r)
-        };
+        let mut r_hash = ed25519_digest(&self.prefix, msg, &[]);
+        let mut r_wide = util::little_endian_to_u64x8(&r_hash);
+        let mut r = Scalar([0u64; 4]);
+        low::bignum_mod_n25519(&mut r.0, &r_wide);
 
         // Step: rfc8032 5.1.6.3
         // Compute the commitment point `R := [r]B`.
@@ -79,6 +80,11 @@ impl SigningKey {
         // Step: rfc8032 5.1.6.5
         // Compute the proof `S := (k * s + r) mod L`
         let s = Scalar::madd_n25519(&k.0, &self.s.0, &r.0);
+        // aws-lc wipes the nonce as a hash, as words, and reduced. It wipes
+        // the challenge `k` too, but any verifier recomputes that.
+        low::zeroise(&mut r_hash);
+        low::zeroise(&mut r_wide);
+        low::zeroise(&mut r.0);
 
         let mut sig = [0u8; 64];
         sig[0..32].copy_from_slice(&sig_r.0);
@@ -270,16 +276,18 @@ struct UnreducedScalar([u64; 4]);
 impl UnreducedScalar {
     /// Read a uniformly random 32-byte little-endian string, and clamp it.
     fn clamp_from_le_bytes(x: &[u8; 32]) -> Self {
-        let mut x = *x;
+        // Clamp the words rather than a byte copy, which would be one more
+        // copy of the hashed seed to wipe.
+        let mut x = util::little_endian_to_u64x4(x);
 
         // Clamp the scalar:
         // <https://mailarchive.ietf.org/arch/msg/cfrg/pt2bt3fGQbNF8qdEcorp-rJSJrc/>
         // <https://neilmadden.blog/2020/05/28/whats-the-curve25519-clamping-all-about/>
-        x[0] &= 0b1111_1000;
-        x[31] &= 0b0111_1111;
-        x[31] |= 0b0100_0000;
+        x[0] &= !0b111;
+        x[3] &= !(1 << 63);
+        x[3] |= 1 << 62;
 
-        Self(util::little_endian_to_u64x4(&x))
+        Self(x)
     }
 
     /// Scalar multiply this scalar by the base-point: `[self]B`.
