@@ -48,7 +48,11 @@ fn export() {
     let der = key.to_pkcs8_der().unwrap();
 
     let reloaded = SigningKey::<P256>::from_pkcs8_der(der.secret_pkcs8_der()).unwrap();
-    let public_key = reloaded.private_key.public_key_uncompressed();
+    let public_key = reloaded
+        .public_key()
+        .unwrap()
+        .public_key
+        .as_bytes_uncompressed();
     public(&public_key);
     assert_eq!(public_key, key.der_bytes());
 }

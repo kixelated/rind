@@ -14,7 +14,7 @@ cfg_if::cfg_if! {
         #[path = "arm/ed25519.rs"]
         pub(super) mod ed25519;
         #[path = "arm/mlkem768.rs"]
-        pub mod mlkem768;
+        pub(super) mod mlkem768;
         #[path = "arm/p256.rs"]
         pub(super) mod p256;
         #[path = "arm/rsa_priv.rs"]
@@ -27,7 +27,7 @@ cfg_if::cfg_if! {
         pub(super) mod aes_gcm;
         pub(super) mod chacha20poly1305;
         pub(super) mod ed25519;
-        pub mod mlkem768;
+        pub(super) mod mlkem768;
         pub(super) mod p256;
         pub(super) mod rsa_priv;
         pub(super) mod rsa_pub;

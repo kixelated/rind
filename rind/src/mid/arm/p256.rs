@@ -67,19 +67,19 @@ impl PublicKey {
 ///
 /// This can be used at most once for the Diffie-Hellman operation,
 /// and that is the most common usage pattern for key exchange.
-pub struct PrivateKey {
+pub(crate) struct PrivateKey {
     scalar: Scalar,
 }
 
 impl PrivateKey {
     /// Generate a new random private key using the system RNG.
-    pub fn new_random() -> Result<Self, Error> {
+    pub(crate) fn new_random() -> Result<Self, Error> {
         Self::generate(&mut SystemRandom)
     }
 
     /// Derive the corresponding public key, and return it in
     /// X9.62 uncompressed encoding.
-    pub fn public_key_uncompressed(&self) -> [u8; PublicKey::BYTES] {
+    pub(crate) fn public_key_uncompressed(&self) -> [u8; PublicKey::BYTES] {
         let _entry = low::Entry::new_secret();
         uncompressed(&self.public_point())
     }
@@ -90,7 +90,7 @@ impl PrivateKey {
     /// already checked to be on the curve.)
     ///
     /// Returns a [`SharedSecret`].  May return an error in fault conditions.
-    pub fn diffie_hellman(self, peer: &PublicKey) -> Result<SharedSecret, Error> {
+    pub(crate) fn diffie_hellman(&self, peer: &PublicKey) -> Result<SharedSecret, Error> {
         let _entry = low::Entry::new_secret();
         let d = self.scalar.as_bytes();
         let mut point = [0u8; 64];
@@ -150,7 +150,8 @@ pub struct StaticPrivateKey(PrivateKey);
 
 impl StaticPrivateKey {
     /// Generate a new random private key using the system RNG.
-    pub fn new_random() -> Result<Self, Error> {
+    #[cfg(test)]
+    pub(crate) fn new_random() -> Result<Self, Error> {
         PrivateKey::generate(&mut SystemRandom).map(Self)
     }
 
@@ -162,25 +163,19 @@ impl StaticPrivateKey {
     ///
     /// An error is returned if the magnitude of the value is larger than
     /// `n` (ie, the input is never reduced mod n),  or the value is zero.
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
+    pub(crate) fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
         let _entry = low::Entry::new_secret();
         PrivateKey::from_bytes(bytes).map(Self)
     }
 
-    /// Return a fixed-length encoding of this private key's value.
-    pub fn as_bytes(&self) -> [u8; Scalar::BYTES] {
-        let _entry = low::Entry::new_secret();
-        low::ct::into_public(self.secret_bytes())
-    }
-
-    /// Return [`Self::as_bytes`] without declassifying it, for use inside rind.
+    /// Return a fixed-length encoding of this private key's value, still secret.
     pub(crate) fn secret_bytes(&self) -> [u8; Scalar::BYTES] {
         self.0.scalar.as_bytes()
     }
 
     /// Derive the corresponding public key, and return it in
     /// X9.62 uncompressed encoding.
-    pub fn public_key_uncompressed(&self) -> [u8; PublicKey::BYTES] {
+    pub(crate) fn public_key_uncompressed(&self) -> [u8; PublicKey::BYTES] {
         let _entry = low::Entry::new_secret();
         uncompressed(&self.0.public_point())
     }
@@ -191,12 +186,10 @@ impl StaticPrivateKey {
     /// already checked to be on the curve.)
     ///
     /// Returns a [`SharedSecret`].  May return an error in fault conditions.
-    pub fn diffie_hellman(&self, peer: &PublicKey) -> Result<SharedSecret, Error> {
+    #[cfg(test)]
+    pub(crate) fn diffie_hellman(&self, peer: &PublicKey) -> Result<SharedSecret, Error> {
         let _entry = low::Entry::new_secret();
-        PrivateKey {
-            scalar: Scalar(self.0.scalar.0),
-        }
-        .diffie_hellman(peer)
+        self.0.diffie_hellman(peer)
     }
 
     pub(crate) fn generate(rng: &mut dyn RandomSource) -> Result<Self, Error> {
@@ -231,7 +224,7 @@ impl StaticPrivateKey {
 }
 
 /// A shared secret output from a P-256 Diffie-Hellman operation.
-pub struct SharedSecret(pub [u8; 32]);
+pub(crate) struct SharedSecret(pub(crate) [u8; 32]);
 
 impl Drop for SharedSecret {
     fn drop(&mut self) {

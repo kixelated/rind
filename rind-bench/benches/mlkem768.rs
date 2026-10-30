@@ -1,7 +1,7 @@
 mod criterion;
 use std::hint::black_box;
 
-use criterion::{Criterion, Throughput, criterion_group, criterion_main};
+use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_main};
 
 #[cfg(all(feature = "__bench_openssl", target_family = "unix"))]
 mod ossl {
@@ -137,10 +137,10 @@ fn mlkem768_keygen(c: &mut Criterion) {
     });
 
     group.bench_function("rind", |b| {
-        use rind::key_agreement::mlkem768;
+        use rind::kem::*;
 
         b.iter(|| {
-            black_box(mlkem768::DecapKey::generate().unwrap());
+            black_box(DecapsulationKey::generate(&ML_KEM_768).unwrap());
         });
     });
 }
@@ -217,16 +217,15 @@ fn mlkem768_encaps(c: &mut Criterion) {
     });
 
     group.bench_function("rind", |b| {
-        use rind::key_agreement::mlkem768;
+        use rind::kem::*;
 
-        let encaps_bytes = mlkem768::DecapKey::generate()
+        let encaps = DecapsulationKey::generate(&ML_KEM_768)
             .unwrap()
-            .encapsulation_key()
-            .as_bytes();
+            .encapsulation_key();
 
         b.iter(|| {
-            let encaps = mlkem768::EncapKey::from_bytes(&encaps_bytes).unwrap();
-            black_box(encaps.encaps().unwrap());
+            let encaps = EncapsulationKey::new(&ML_KEM_768, encaps.key_bytes()).unwrap();
+            black_box(encaps.encapsulate().unwrap());
         });
     });
 }
@@ -290,14 +289,18 @@ fn mlkem768_decaps(c: &mut Criterion) {
     });
 
     group.bench_function("rind", |b| {
-        use rind::key_agreement::mlkem768;
+        use rind::kem::*;
 
-        let decap = mlkem768::DecapKey::generate().unwrap();
-        let (_ss, ciphertext) = decap.encapsulation_key().encaps().unwrap();
-
-        b.iter(|| {
-            black_box(decap.decaps_internal(&ciphertext));
-        });
+        // Decapsulation consumes its key, so each iteration gets a fresh one.
+        b.iter_batched(
+            || {
+                let decaps = DecapsulationKey::generate(&ML_KEM_768).unwrap();
+                let (ciphertext, _secret) = decaps.encapsulation_key().encapsulate().unwrap();
+                (decaps, ciphertext)
+            },
+            |(decaps, ciphertext)| black_box(decaps.decapsulate(ciphertext).unwrap()),
+            BatchSize::SmallInput,
+        );
     });
 }
 
@@ -372,14 +375,14 @@ fn mlkem768_combined(c: &mut Criterion) {
     });
 
     group.bench_function("rind", |b| {
-        use rind::key_agreement::mlkem768;
+        use rind::kem::*;
 
         b.iter(|| {
-            let decap = mlkem768::DecapKey::generate().unwrap();
-            let encap_encoded = decap.encapsulation_key().as_bytes();
-            let encap = mlkem768::EncapKey::from_bytes(&encap_encoded).unwrap();
-            let (_ss, ciphertext) = encap.encaps().unwrap();
-            black_box(decap.decaps_internal(&ciphertext));
+            let decaps = DecapsulationKey::generate(&ML_KEM_768).unwrap();
+            let encaps_encoded = decaps.encapsulation_key();
+            let encaps = EncapsulationKey::new(&ML_KEM_768, encaps_encoded.key_bytes()).unwrap();
+            let (ciphertext, _secret) = encaps.encapsulate().unwrap();
+            black_box(decaps.decapsulate(ciphertext).unwrap());
         });
     });
 }

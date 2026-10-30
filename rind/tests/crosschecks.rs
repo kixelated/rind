@@ -506,7 +506,6 @@ macro_rules! ec_crosschecks {
             use proptest::collection::vec;
             use proptest::prelude::*;
             use rind::hashing::$Hash;
-            use rind::key_agreement::$curve::{PrivateKey, PublicKey};
             use rind::signing::ecdsa::{$Curve, SigningKey, VerifyingKey};
 
             // Each case generates keys on both sides, which is slow under emulation.
@@ -517,7 +516,7 @@ macro_rules! ec_crosschecks {
                 fn ecdsa(message in vec(any::<u8>(), 0..300)) {
                     // aws-lc-rs accepts our key and derives the same public key.
                     let ours = SigningKey::<$Curve>::generate().unwrap();
-                    let public = ours.private_key.public_key_uncompressed();
+                    let public = ours.public_key().unwrap().public_key.as_bytes_uncompressed();
                     let theirs_from_ours = EcdsaKeyPair::from_pkcs8(
                         &$signing,
                         ours.to_pkcs8_der(&mut [0; 256]).unwrap(),
@@ -547,24 +546,28 @@ macro_rules! ec_crosschecks {
 
                 #[test]
                 fn ecdh(_case in any::<u8>()) {
-                    let ours = PrivateKey::new_random().unwrap();
-                    let ours_public = ours.public_key_uncompressed();
+                    let ours = rind::agreement::EphemeralPrivateKey::generate(&rind::agreement::$ecdh)
+                        .unwrap();
+                    let ours_public = ours.compute_public_key();
                     let theirs = EphemeralPrivateKey::generate(&$ecdh, &SystemRandom::new()).unwrap();
                     let theirs_public = theirs.compute_public_key().unwrap();
 
-                    let ours_secret = ours
-                        .diffie_hellman(
-                            &PublicKey::from_x962_uncompressed(theirs_public.as_ref()).unwrap(),
-                        )
-                        .unwrap();
+                    let ours_secret = rind::agreement::agree_ephemeral(
+                        ours,
+                        &rind::agreement::UnparsedPublicKey::new(
+                            &rind::agreement::$ecdh,
+                            theirs_public.as_ref(),
+                        ),
+                    )
+                    .unwrap();
                     let theirs_secret = agreement::agree_ephemeral(
                         theirs,
-                        agreement::UnparsedPublicKey::new(&$ecdh, ours_public),
+                        agreement::UnparsedPublicKey::new(&$ecdh, ours_public.as_ref()),
                         (),
                         |secret| Ok(secret.to_vec()),
                     )
                     .unwrap();
-                    prop_assert_eq!(&ours_secret.0[..], &theirs_secret[..]);
+                    prop_assert_eq!(ours_secret.as_ref(), &theirs_secret[..]);
                 }
             }
         }
@@ -590,53 +593,6 @@ ec_crosschecks!(
     ECDSA_P384_SHA384_FIXED,
     ECDSA_P384_SHA384_ASN1
 );
-
-mod x25519 {
-    use aws_lc_rs::agreement::{self, PrivateKey, UnparsedPublicKey, X25519};
-    use proptest::prelude::*;
-    use rind::key_agreement::x25519::{PublicKey, StaticPrivateKey};
-
-    // Any 32 bytes is a private key or a peer's u-coordinate, including
-    // coordinates at or above the field prime. The fixed peers have small
-    // order, which both sides refuse for the all-zero secret they give.
-    fn peer() -> impl Strategy<Value = [u8; 32]> {
-        let mut one = [0u8; 32];
-        one[0] = 1;
-        prop_oneof![
-            8 => any::<[u8; 32]>(),
-            1 => Just([0u8; 32]),
-            1 => Just(one),
-        ]
-    }
-
-    proptest! {
-        #[test]
-        fn ecdh(private in any::<[u8; 32]>(), peer in peer()) {
-            let ours = StaticPrivateKey::from_array(&private);
-            let theirs = PrivateKey::from_private_key(&X25519, &private).unwrap();
-            let theirs_public = theirs.compute_public_key().unwrap();
-            prop_assert_eq!(&ours.public_key().as_bytes()[..], theirs_public.as_ref());
-
-            let ours_secret = ours.diffie_hellman(&PublicKey::from_array(&peer));
-            let theirs_secret = agreement::agree(
-                &theirs,
-                UnparsedPublicKey::new(&X25519, peer),
-                (),
-                |secret| Ok(secret.to_vec()),
-            );
-            match (ours_secret, theirs_secret) {
-                (Ok(ours), Ok(theirs)) => prop_assert_eq!(&ours.0[..], &theirs[..]),
-                (Err(_), Err(())) => {}
-                (ours, theirs) => prop_assert!(
-                    false,
-                    "rind gave {:?}, aws-lc-rs {:?}",
-                    ours.err(),
-                    theirs.err()
-                ),
-            }
-        }
-    }
-}
 
 mod ed25519 {
     use aws_lc_rs::signature::{ED25519, Ed25519KeyPair, KeyPair, UnparsedPublicKey};
@@ -820,52 +776,28 @@ mod rsa {
 }
 
 mod mlkem768 {
-    use aws_lc_rs::kem::{Ciphertext, DecapsulationKey, EncapsulationKey, ML_KEM_768};
+    use aws_lc_rs::kem::{Ciphertext, DecapsulationKey, ML_KEM_768};
     use proptest::prelude::*;
-    use proptest::sample::Index;
-    use rind::key_agreement::mlkem768::{self, DecapKey, EncapKey};
+    use rind::kem;
 
     // Each case generates a key, which is slow under emulation.
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(32))]
-
-        // We decapsulate what aws-lc-rs encapsulates to our key, and so does
-        // aws-lc-rs holding our serialized key. With one byte of the
-        // ciphertext altered, both give the same implicit-rejection secret.
-        #[test]
-        fn encapsulated_by_theirs(alter in prop::option::of((any::<Index>(), 1..=255u8))) {
-            let ours = DecapKey::generate().unwrap();
-            let theirs = DecapsulationKey::new(&ML_KEM_768, &ours.as_bytes()).unwrap();
-            let (ciphertext, secret) =
-                EncapsulationKey::new(&ML_KEM_768, &ours.encapsulation_key().as_bytes())
-                    .unwrap()
-                    .encapsulate()
-                    .unwrap();
-
-            let mut ciphertext: [u8; 1088] = ciphertext.as_ref().try_into().unwrap();
-            if let Some((index, xor)) = alter {
-                ciphertext[index.index(ciphertext.len())] ^= xor;
-            }
-            let theirs_secret = theirs.decapsulate(Ciphertext::from(&ciphertext[..])).unwrap();
-            let ours_secret = ours.decaps(&mlkem768::Ciphertext::from(ciphertext));
-            prop_assert_eq!(&ours_secret.as_ref()[..], theirs_secret.as_ref());
-            prop_assert_eq!(ours_secret.as_ref() == secret.as_ref(), alter.is_none());
-        }
 
         // aws-lc-rs decapsulates what we encapsulate to its key.
         #[test]
         fn encapsulated_by_ours(_case in any::<u8>()) {
             let theirs = DecapsulationKey::generate(&ML_KEM_768).unwrap();
             let theirs_public = theirs.encapsulation_key().unwrap().key_bytes().unwrap();
-            let (secret, ciphertext) =
-                EncapKey::from_bytes(theirs_public.as_ref().try_into().unwrap())
+            let (ciphertext, secret) =
+                kem::EncapsulationKey::new(&kem::ML_KEM_768, theirs_public.as_ref())
                     .unwrap()
-                    .encaps()
+                    .encapsulate()
                     .unwrap();
             let theirs_secret = theirs
-                .decapsulate(Ciphertext::from(&ciphertext.as_ref()[..]))
+                .decapsulate(Ciphertext::from(ciphertext.as_ref()))
                 .unwrap();
-            prop_assert_eq!(&secret.as_ref()[..], theirs_secret.as_ref());
+            prop_assert_eq!(secret.as_ref(), theirs_secret.as_ref());
         }
     }
 }

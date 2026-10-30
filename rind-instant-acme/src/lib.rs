@@ -41,7 +41,7 @@ impl SigningKeyProvider for P256KeyProvider {
     fn load_key(&self, pkcs8: PrivatePkcs8KeyDer<'static>) -> Result<Box<dyn SigningKey>, Error> {
         let key = ecdsa::SigningKey::<P256>::from_pkcs8_der(pkcs8.secret_pkcs8_der())
             .map_err(|_| Error::KeyRejected)?;
-        Ok(Box::new(P256Key::new(key)))
+        Ok(Box::new(P256Key::new(key)?))
     }
 
     fn generate_key(&self) -> Result<(Box<dyn SigningKey>, PrivatePkcs8KeyDer<'static>), Error> {
@@ -50,7 +50,7 @@ impl SigningKeyProvider for P256KeyProvider {
         let mut buffer = [0u8; 256];
         let pkcs8 = key.to_pkcs8_der(&mut buffer).map_err(|_| Error::Crypto)?;
         let pkcs8 = PrivatePkcs8KeyDer::from(pkcs8.to_vec());
-        Ok((Box::new(P256Key::new(key)), pkcs8))
+        Ok((Box::new(P256Key::new(key)?), pkcs8))
     }
 }
 
@@ -62,9 +62,13 @@ struct P256Key {
 }
 
 impl P256Key {
-    fn new(key: ecdsa::SigningKey<P256>) -> Self {
-        let public_key = key.private_key.public_key_uncompressed();
-        Self { key, public_key }
+    fn new(key: ecdsa::SigningKey<P256>) -> Result<Self, Error> {
+        let public_key = key
+            .public_key()
+            .map_err(|_| Error::Crypto)?
+            .public_key
+            .as_bytes_uncompressed();
+        Ok(Self { key, public_key })
     }
 }
 

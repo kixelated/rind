@@ -3,6 +3,7 @@
 
 #![deny(unsafe_code)]
 
+pub(super) mod agreement;
 pub(super) mod asn1;
 pub(super) mod curve;
 pub(super) mod ecdsa;
@@ -11,6 +12,7 @@ pub(super) mod hash;
 pub mod hkdf;
 pub mod hmac;
 pub(super) mod hmac_drbg;
+pub(super) mod kem;
 pub(super) mod pkcs1;
 pub(super) mod pkcs8;
 pub(super) mod rsa;
