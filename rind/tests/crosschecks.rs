@@ -2,7 +2,7 @@ use aws_lc_rs::rsa::KeyPair;
 use aws_lc_rs::{digest, hmac, signature::Ed25519KeyPair};
 use proptest::collection::vec;
 use proptest::prelude::*;
-use rind::hashing::{Hash, HashContext, LegacySha1, Sha256, Sha384, Sha512, hmac::Hmac};
+use rind::hashing::{LegacySha1, Sha256, Sha384, Sha512, hmac::Hmac};
 use rind::signing::eddsa::Ed25519SigningKey;
 use rind::signing::rsa::{KeySize, SigningKey};
 
@@ -70,6 +70,17 @@ fn ed25519_key_generation() {
     }
 }
 
+// rind's hash markers name no trait a helper could be generic over.
+macro_rules! check_hmac {
+    ($H:ty, $algorithm:expr, $key:expr, $message:expr) => {{
+        let mut ctx = Hmac::<$H>::new($key);
+        ctx.update($message);
+        let got = ctx.finish();
+        let wanted = hmac::sign(&hmac::Key::new($algorithm, $key), $message);
+        prop_assert_eq!(got.as_ref(), wanted.as_ref());
+    }};
+}
+
 proptest! {
     #[test]
     fn hashes_match_aws_lc_rs(
@@ -78,10 +89,18 @@ proptest! {
     ) {
         // Two updates split anywhere exercise the partial-block buffering.
         let split = split.index(message.len() + 1);
-        check_hash::<LegacySha1>(&digest::SHA1_FOR_LEGACY_USE_ONLY, &message, split)?;
-        check_hash::<Sha256>(&digest::SHA256, &message, split)?;
-        check_hash::<Sha384>(&digest::SHA384, &message, split)?;
-        check_hash::<Sha512>(&digest::SHA512, &message, split)?;
+        for (ours, theirs) in [
+            (&rind::digest::SHA1_FOR_LEGACY_USE_ONLY, &digest::SHA1_FOR_LEGACY_USE_ONLY),
+            (&rind::digest::SHA256, &digest::SHA256),
+            (&rind::digest::SHA384, &digest::SHA384),
+            (&rind::digest::SHA512, &digest::SHA512),
+        ] {
+            let mut ctx = rind::digest::Context::new(ours);
+            ctx.update(&message[..split]);
+            ctx.update(&message[split..]);
+            let (got, wanted) = (ctx.finish(), digest::digest(theirs, &message));
+            prop_assert_eq!(got.as_ref(), wanted.as_ref());
+        }
     }
 
     #[test]
@@ -89,15 +108,7 @@ proptest! {
         key in vec(any::<u8>(), 0..200),
         message in vec(any::<u8>(), 0..1024),
     ) {
-        let mut ctx = Hmac::<LegacySha1>::new(&key);
-        ctx.update(&message);
-        let got = ctx.finish();
-
-        let wanted = hmac::sign(
-            &hmac::Key::new(hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY, &key),
-            &message,
-        );
-        prop_assert_eq!(got.as_ref(), wanted.as_ref());
+        check_hmac!(LegacySha1, hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY, &key, &message);
     }
 
     #[test]
@@ -106,70 +117,9 @@ proptest! {
         key in vec(any::<u8>(), 0..300),
         message in vec(any::<u8>(), 0..1024),
     ) {
-        check_hmac::<Sha256>(hmac::HMAC_SHA256, &key, &message)?;
-        check_hmac::<Sha384>(hmac::HMAC_SHA384, &key, &message)?;
-        check_hmac::<Sha512>(hmac::HMAC_SHA512, &key, &message)?;
-    }
-}
-
-fn check_hash<H: Hash>(
-    algorithm: &'static digest::Algorithm,
-    message: &[u8],
-    split: usize,
-) -> Result<(), TestCaseError> {
-    let mut ctx = H::new();
-    ctx.update(&message[..split]);
-    ctx.update(&message[split..]);
-
-    let got = ctx.finish();
-    let wanted = digest::digest(algorithm, message);
-    prop_assert_eq!(got.as_ref(), wanted.as_ref());
-    Ok(())
-}
-
-fn check_hmac<H: Hash>(
-    algorithm: hmac::Algorithm,
-    key: &[u8],
-    message: &[u8],
-) -> Result<(), TestCaseError> {
-    let mut ctx = Hmac::<H>::new(key);
-    ctx.update(message);
-    let got = ctx.finish();
-
-    let wanted = hmac::sign(&hmac::Key::new(algorithm, key), message);
-    prop_assert_eq!(got.as_ref(), wanted.as_ref());
-    Ok(())
-}
-
-// SHA-3 is not built on armv7.
-#[cfg(not(target_arch = "arm"))]
-mod sha3 {
-    use aws_lc_rs::digest;
-    use proptest::collection::vec;
-    use proptest::prelude::*;
-    use rind::hashing::sha3::{Sha3_256Context, Sha3_512Context};
-
-    proptest! {
-        #[test]
-        fn matches_aws_lc_rs(
-            message in vec(any::<u8>(), 0..1024),
-            split in any::<prop::sample::Index>(),
-        ) {
-            // Two updates split anywhere exercise the partial-block buffering.
-            let split = split.index(message.len() + 1);
-
-            let mut ctx = Sha3_256Context::new();
-            ctx.update(&message[..split]);
-            ctx.update(&message[split..]);
-            let wanted = digest::digest(&digest::SHA3_256, &message);
-            prop_assert_eq!(&ctx.finish()[..], wanted.as_ref());
-
-            let mut ctx = Sha3_512Context::new();
-            ctx.update(&message[..split]);
-            ctx.update(&message[split..]);
-            let wanted = digest::digest(&digest::SHA3_512, &message);
-            prop_assert_eq!(&ctx.finish()[..], wanted.as_ref());
-        }
+        check_hmac!(Sha256, hmac::HMAC_SHA256, &key, &message);
+        check_hmac!(Sha384, hmac::HMAC_SHA384, &key, &message);
+        check_hmac!(Sha512, hmac::HMAC_SHA512, &key, &message);
     }
 }
 
@@ -293,7 +243,7 @@ mod hkdf {
     use proptest::prelude::*;
     use rind::Error;
     use rind::hashing::hkdf::Prk;
-    use rind::hashing::{Hash, Sha256, Sha384, Sha512};
+    use rind::hashing::{Sha256, Sha384, Sha512};
 
     struct Len(usize);
 
@@ -303,7 +253,8 @@ mod hkdf {
         }
     }
 
-    fn check<H: Hash>(
+    fn check(
+        expand: impl FnOnce(&[&[u8]], &mut [u8]) -> Result<(), Error>,
         alg: hkdf::Algorithm,
         salt: &[u8],
         ikm: &[u8],
@@ -313,7 +264,7 @@ mod hkdf {
         let info: Vec<&[u8]> = info.iter().map(Vec::as_slice).collect();
 
         let mut ours = vec![0u8; len];
-        let result = Prk::<H>::extract(salt, ikm).expand(&info, &mut ours);
+        let result = expand(&info, &mut ours);
 
         let prk = hkdf::Salt::new(alg, salt).extract(ikm);
         match prk.expand(&info, Len(len)) {
@@ -345,7 +296,8 @@ mod hkdf {
             info in vec(vec(any::<u8>(), 0..100), 0..4),
             len in out_len(32),
         ) {
-            check::<Sha256>(HKDF_SHA256, &salt, &ikm, &info, len)?;
+            let expand = |info: &[&[u8]], out: &mut [u8]| Prk::<Sha256>::extract(&salt, &ikm).expand(info, out);
+            check(expand, HKDF_SHA256, &salt, &ikm, &info, len)?;
         }
 
         #[test]
@@ -355,7 +307,8 @@ mod hkdf {
             info in vec(vec(any::<u8>(), 0..100), 0..4),
             len in out_len(48),
         ) {
-            check::<Sha384>(HKDF_SHA384, &salt, &ikm, &info, len)?;
+            let expand = |info: &[&[u8]], out: &mut [u8]| Prk::<Sha384>::extract(&salt, &ikm).expand(info, out);
+            check(expand, HKDF_SHA384, &salt, &ikm, &info, len)?;
         }
 
         #[test]
@@ -365,7 +318,8 @@ mod hkdf {
             info in vec(vec(any::<u8>(), 0..100), 0..4),
             len in out_len(64),
         ) {
-            check::<Sha512>(HKDF_SHA512, &salt, &ikm, &info, len)?;
+            let expand = |info: &[&[u8]], out: &mut [u8]| Prk::<Sha512>::extract(&salt, &ikm).expand(info, out);
+            check(expand, HKDF_SHA512, &salt, &ikm, &info, len)?;
         }
     }
 }

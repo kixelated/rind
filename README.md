@@ -51,9 +51,9 @@ but there is also a public API for general-purpose use.
   (This is most x86_64 CPUs made since around ~2014.)
 - 32-bit `arm` (tested on `armv7-unknown-linux-gnueabihf`, and built for
   `armv7-linux-androideabi`) runs [libcrux]'s verified portable Rust instead,
-  with P-384 over [fiat-crypto]'s, and needs no CPU features. It does not yet
-  offer SHA-3 or SHAKE, and an Ed25519 public key that is not a curve point is
-  refused when verifying rather than when decoding.
+  with P-384 over [fiat-crypto]'s, and needs no CPU features. An Ed25519
+  public key that is not a curve point is refused when verifying rather than
+  when decoding.
 
 Every operation panics on a CPU missing one of these. Call `rind::cpu::check()`
 at startup to get an error naming the missing feature instead.
@@ -122,7 +122,6 @@ We are grateful to:
 - [x] SHA1, for legacy protocols only (not usable for signatures)
 - [x] SHA256
 - [x] SHA384 & SHA512
-- [x] SHA3-256, SHA3-512, SHAKE128, and SHAKE256
 - [x] HMAC
 - [x] HKDF
 - [x] HMAC-DRBG

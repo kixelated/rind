@@ -136,15 +136,31 @@ pub mod signing {
 }
 
 /// Cryptographic hash functions.
-pub mod hashing {
-    pub use super::high::hash::{
-        Hash, HashContext, HashOutput, LegacySha1, Sha256, Sha384, Sha512, SignatureHash,
+///
+/// ```
+/// use rind::digest;
+///
+/// let mut ctx = digest::Context::new(&digest::SHA256);
+/// ctx.update(b"hello, ");
+/// ctx.update(b"world");
+/// assert_eq!(
+///     ctx.finish().as_ref(),
+///     digest::digest(&digest::SHA256, b"hello, world").as_ref(),
+/// );
+/// ```
+pub mod digest {
+    pub use super::high::digest::{
+        Algorithm, Context, Digest, SHA1_FOR_LEGACY_USE_ONLY, SHA256, SHA384, SHA512, digest,
     };
+}
+
+/// HMAC and HKDF, and the hash functions that parameterize them and signatures.
+///
+/// To hash a message, use [`digest`].
+pub mod hashing {
+    pub use super::high::hash::{LegacySha1, Sha256, Sha384, Sha512};
     pub use super::high::hkdf;
     pub use super::high::hmac;
-    pub use super::mid::sha2;
-    #[cfg(not(target_arch = "arm"))]
-    pub use super::mid::sha3;
 }
 
 /// Authenticated encryption.

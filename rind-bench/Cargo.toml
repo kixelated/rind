@@ -29,8 +29,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha1 = "0.11"
 sha2 = "0.11"
-sha3 = "0.12.0"
-shake = "0.1.0"
 x25519-dalek = { version = "3", features = ["getrandom"] }
 
 [target.'cfg(target_family = "unix")'.dev-dependencies]
@@ -60,10 +58,6 @@ harness = false
 
 [[bench]]
 name = "sha2"
-harness = false
-
-[[bench]]
-name = "sha3"
 harness = false
 
 [[bench]]

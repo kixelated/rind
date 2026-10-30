@@ -20,8 +20,8 @@ use instant_acme::{
     CryptoProvider, EcCurve, Error, HmacKey, HmacKeyProvider, Jwk, JwkThumbFields, Sha256,
     SigningAlgorithm, SigningKey, SigningKeyProvider,
 };
+use rind::digest;
 use rind::hashing::hmac::Hmac;
-use rind::hashing::sha2::Sha256Context;
 use rind::signing::ecdsa::{self, P256};
 use rustls_pki_types::PrivatePkcs8KeyDer;
 
@@ -106,9 +106,10 @@ struct RindSha256;
 
 impl Sha256 for RindSha256 {
     fn hash(&self, data: &[u8]) -> [u8; 32] {
-        let mut context = Sha256Context::new();
-        context.update(data);
-        context.finish()
+        digest::digest(&digest::SHA256, data)
+            .as_ref()
+            .try_into()
+            .unwrap()
     }
 }
 

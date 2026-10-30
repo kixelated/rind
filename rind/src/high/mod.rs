@@ -6,6 +6,7 @@
 pub(super) mod agreement;
 pub(super) mod asn1;
 pub(super) mod curve;
+pub(super) mod digest;
 pub(super) mod ecdsa;
 pub(super) mod ed25519;
 pub(super) mod hash;

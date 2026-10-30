@@ -41,13 +41,13 @@ fn test_rc_sha512(data: &[u8]) {
 }
 
 fn test_rind_sha256(data: &[u8]) {
-    let mut ctx = rind::hashing::sha2::Sha256Context::new();
+    let mut ctx = rind::digest::Context::new(&rind::digest::SHA256);
     ctx.update(data);
     black_box(ctx.finish());
 }
 
 fn test_rind_sha512(data: &[u8]) {
-    let mut ctx = rind::hashing::sha2::Sha512Context::new();
+    let mut ctx = rind::digest::Context::new(&rind::digest::SHA512);
     ctx.update(data);
     black_box(ctx.finish());
 }
@@ -102,5 +102,36 @@ fn sha512(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, sha256, sha512);
+// Many small updates show the cost of dispatching each one on the algorithm.
+fn sha256_updates(c: &mut Criterion) {
+    let mut group = c.benchmark_group("sha256-updates");
+    let input = vec![0u8; 4096];
+    group.throughput(Throughput::Bytes(input.len() as u64));
+    for (chunk, chunk_name) in [(1, "1B"), (16, "16B")] {
+        group.bench_with_input(
+            BenchmarkId::new("aws-lc-rs", chunk_name),
+            &input,
+            |b, input| {
+                b.iter(|| {
+                    let mut ctx = aws_lc_rs::digest::Context::new(&aws_lc_rs::digest::SHA256);
+                    for part in input.chunks(chunk) {
+                        ctx.update(part);
+                    }
+                    black_box(ctx.finish());
+                })
+            },
+        );
+        group.bench_with_input(BenchmarkId::new("rind", chunk_name), &input, |b, input| {
+            b.iter(|| {
+                let mut ctx = rind::digest::Context::new(&rind::digest::SHA256);
+                for part in input.chunks(chunk) {
+                    ctx.update(part);
+                }
+                black_box(ctx.finish());
+            })
+        });
+    }
+}
+
+criterion_group!(benches, sha256, sha512, sha256_updates);
 criterion_main!(benches);

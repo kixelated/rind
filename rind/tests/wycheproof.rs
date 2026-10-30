@@ -6,7 +6,7 @@ use rind::aead::{AesGcm, ChaCha20Poly1305, XChaCha20Poly1305};
 use rind::cipher::ChaCha20;
 use rind::hashing::hkdf::Prk;
 use rind::hashing::hmac::Hmac;
-use rind::hashing::{Hash, LegacySha1, Sha256, Sha384, Sha512};
+use rind::hashing::{LegacySha1, Sha256, Sha384, Sha512};
 use rind::signing::{ecdsa, eddsa, rsa};
 use serde::Deserialize;
 
@@ -161,7 +161,7 @@ fn hmac_sha1_tests() {
             ctx.update(test.msg);
             let result = match test.tag.len() {
                 20 => ctx.verify(&test.tag),
-                10 => ctx.finish().verify_truncated::<10>(&test.tag),
+                10 => truncated(ctx.finish().as_ref(), &test.tag),
                 _ => todo!("unhandled truncated hmac"),
             };
 
@@ -192,7 +192,7 @@ fn hmac_sha256_tests() {
             ctx.update(test.msg);
             let result = match test.tag.len() {
                 32 => ctx.verify(&test.tag),
-                16 => ctx.finish().verify_truncated::<16>(&test.tag),
+                16 => truncated(ctx.finish().as_ref(), &test.tag),
                 _ => todo!("unhandled truncated hmac"),
             };
 
@@ -223,7 +223,7 @@ fn hmac_sha384_tests() {
             ctx.update(test.msg);
             let result = match test.tag.len() {
                 48 => ctx.verify(&test.tag),
-                24 => ctx.finish().verify_truncated::<24>(&test.tag),
+                24 => truncated(ctx.finish().as_ref(), &test.tag),
                 _ => todo!("unhandled truncated hmac"),
             };
 
@@ -255,7 +255,7 @@ fn hmac_sha512_tests() {
             ctx.update(test.msg);
             let result = match test.tag.len() {
                 64 => ctx.verify(&test.tag),
-                32 => ctx.finish().verify_truncated::<32>(&test.tag),
+                32 => truncated(ctx.finish().as_ref(), &test.tag),
                 _ => todo!("unhandled truncated hmac"),
             };
 
@@ -268,9 +268,19 @@ fn hmac_sha512_tests() {
     }
 }
 
+// rind compares only whole tags; these vectors also truncate them.
+fn truncated(tag: &[u8], expected: &[u8]) -> Result<(), Error> {
+    match tag.starts_with(expected) {
+        true => Ok(()),
+        false => Err(Error::BadSignature),
+    }
+}
+
 #[test]
 fn hkdf_tests() {
-    fn check<H: Hash>(file: &str) {
+    type Expand = fn(&[u8], &[u8], &[u8], &mut [u8]) -> Result<(), Error>;
+
+    fn check(file: &str, expand: Expand) {
         let data_file = File::open(file).expect("failed to open data file");
         let reader = BufReader::new(data_file);
         let tests: TestFile = serde_json::from_reader(reader).expect("invalid test JSON");
@@ -282,8 +292,7 @@ fn hkdf_tests() {
                 summary.start(&test);
 
                 let mut okm = vec![0u8; test.size];
-                let result =
-                    Prk::<H>::extract(&test.salt, &test.ikm).expand(&[&test.info], &mut okm);
+                let result = expand(&test.salt, &test.ikm, &test.info, &mut okm);
 
                 match (test.result, result) {
                     (ExpectedResult::Valid, Ok(())) => assert_eq!(okm, test.okm),
@@ -294,10 +303,22 @@ fn hkdf_tests() {
         }
     }
 
-    check::<LegacySha1>("../thirdparty/wycheproof/testvectors_v1/hkdf_sha1_test.json");
-    check::<Sha256>("../thirdparty/wycheproof/testvectors_v1/hkdf_sha256_test.json");
-    check::<Sha384>("../thirdparty/wycheproof/testvectors_v1/hkdf_sha384_test.json");
-    check::<Sha512>("../thirdparty/wycheproof/testvectors_v1/hkdf_sha512_test.json");
+    check(
+        "../thirdparty/wycheproof/testvectors_v1/hkdf_sha1_test.json",
+        |salt, ikm, info, out| Prk::<LegacySha1>::extract(salt, ikm).expand(&[info], out),
+    );
+    check(
+        "../thirdparty/wycheproof/testvectors_v1/hkdf_sha256_test.json",
+        |salt, ikm, info, out| Prk::<Sha256>::extract(salt, ikm).expand(&[info], out),
+    );
+    check(
+        "../thirdparty/wycheproof/testvectors_v1/hkdf_sha384_test.json",
+        |salt, ikm, info, out| Prk::<Sha384>::extract(salt, ikm).expand(&[info], out),
+    );
+    check(
+        "../thirdparty/wycheproof/testvectors_v1/hkdf_sha512_test.json",
+        |salt, ikm, info, out| Prk::<Sha512>::extract(salt, ikm).expand(&[info], out),
+    );
 }
 
 #[test]
