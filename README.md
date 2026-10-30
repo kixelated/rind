@@ -260,7 +260,8 @@ rind deviates, the item's docs say why.
 - `hmac`: HMAC over those digests, keyed once and reused.
 - `hkdf`: HKDF-SHA256, whose output becomes an `aead` or `hmac` key.
 - `rand`: random bytes from the system.
-- `cpu`: the startup check for required CPU features.
+- `cpu`: the startup check for required CPU features, and whether AES runs
+  in hardware.
 
 The public modules wrap three private layers:
 
