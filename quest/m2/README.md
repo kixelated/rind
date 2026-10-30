@@ -10,3 +10,4 @@ to get there, and the speed and armv7 work that does not block it.
 - [Close measured speed gaps](/quest/m2/perf/README.md) - each speed gap the m1 PRs found is closed or shown not to matter
 - [Re-measure accepted costs](/quest/m2/remeasure.md) - ChaCha20-Poly1305 throughput and RSA key generation timing on rind's first release
 - [rind-rustls prefers ChaCha20-Poly1305 without AES](/quest/m2/rustls-armv7-chacha.md) - armv7 cores without the crypto extension pick ChaCha first
+- [Verified AES-GCM setup on aarch64](/quest/m2/aarch64-aes-key-verified.md) - the key schedule and H powers come from verified code, or the gap is recorded
