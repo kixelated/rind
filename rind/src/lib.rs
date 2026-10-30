@@ -210,9 +210,7 @@ pub mod hmac {
 /// prk.expand(&info, bytes.len()).unwrap().fill(&mut bytes).unwrap();
 /// ```
 pub mod hkdf {
-    pub use super::high::hkdf::{
-        Algorithm, HKDF_SHA256, KeyType, Okm, Prk, Salt,
-    };
+    pub use super::high::hkdf::{Algorithm, HKDF_SHA256, KeyType, Okm, Prk, Salt};
 }
 
 /// Authenticated encryption.

@@ -254,12 +254,7 @@ mod hkdf {
         }
     }
 
-    fn check(
-        salt: &[u8],
-        ikm: &[u8],
-        info: &[Vec<u8>],
-        len: usize,
-    ) -> Result<(), TestCaseError> {
+    fn check(salt: &[u8], ikm: &[u8], info: &[Vec<u8>], len: usize) -> Result<(), TestCaseError> {
         let info: Vec<&[u8]> = info.iter().map(Vec::as_slice).collect();
 
         let mut ours_out = vec![0u8; len];
