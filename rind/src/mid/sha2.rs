@@ -139,9 +139,12 @@ impl Sha384Context {
 
     /// Complete the SHA384 computation, returning the hash output.
     pub fn finish(self) -> [u8; Self::OUTPUT_SZ] {
-        let inner = self.inner.finish();
-        // SAFETY: 48 is less than 64.
-        inner[..Self::OUTPUT_SZ].try_into().unwrap()
+        let mut inner = self.inner.finish();
+        let mut r = [0u8; Self::OUTPUT_SZ];
+        r.copy_from_slice(&inner[..Self::OUTPUT_SZ]);
+        // The truncated words are the rest of the final state.
+        zeroise(&mut inner);
+        r
     }
 
     /// The output size of SHA384.
