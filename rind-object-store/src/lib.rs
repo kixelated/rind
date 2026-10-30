@@ -21,8 +21,9 @@ use object_store::client::{
     CryptoProvider, DigestAlgorithm, DigestContext, HmacContext, Signer, SigningAlgorithm,
 };
 use object_store::{Error, Result};
+use rind::digest::{self, Digest};
+use rind::hashing::Sha256;
 use rind::hashing::hmac::Hmac;
-use rind::hashing::{Hash, HashContext, HashOutput, Sha256};
 use rind::signing::rsa;
 use rustls_pki_types::PrivateKeyDer;
 use rustls_pki_types::pem::PemObject;
@@ -40,7 +41,9 @@ struct Provider;
 impl CryptoProvider for Provider {
     fn digest(&self, algorithm: DigestAlgorithm) -> Result<Box<dyn DigestContext>> {
         match algorithm {
-            DigestAlgorithm::Sha256 => Ok(Box::new(Context::new(Sha256::new()))),
+            DigestAlgorithm::Sha256 => Ok(Box::new(Context::new(digest::Context::new(
+                &digest::SHA256,
+            )))),
             other => Err(unsupported(other)),
         }
     }
@@ -63,28 +66,28 @@ impl CryptoProvider for Provider {
 /// A running digest or HMAC, plus storage for the output `finish` lends out.
 struct Context<T> {
     state: T,
-    output: HashOutput,
+    output: Option<Digest>,
 }
 
 impl<T> Context<T> {
     fn new(state: T) -> Self {
         Self {
             state,
-            output: Sha256::zeroed_output(),
+            output: None,
         }
     }
 }
 
 // object_store leaves use after `finish` to the provider. Finishing a clone
 // keeps every call defined (a running hash) without a panic path.
-impl<T: HashContext + Send> DigestContext for Context<T> {
+impl DigestContext for Context<digest::Context> {
     fn update(&mut self, data: &[u8]) {
         self.state.update(data);
     }
 
     fn finish(&mut self) -> Result<&[u8]> {
-        self.output = self.state.clone().finish();
-        Ok(self.output.as_ref())
+        let output: &Digest = self.output.insert(self.state.clone().finish());
+        Ok(output.as_ref())
     }
 }
 
@@ -94,8 +97,8 @@ impl HmacContext for Context<Hmac<Sha256>> {
     }
 
     fn finish(&mut self) -> Result<&[u8]> {
-        self.output = self.state.clone().finish();
-        Ok(self.output.as_ref())
+        let output: &Digest = self.output.insert(self.state.clone().finish());
+        Ok(output.as_ref())
     }
 }
 

@@ -2,7 +2,6 @@ mod criterion;
 use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use rind::hashing::{Hash, HashContext};
 use sha1::Digest;
 
 fn test_ring_sha1(data: &[u8]) {
@@ -24,7 +23,7 @@ fn test_rc_sha1(data: &[u8]) {
 }
 
 fn test_rind_sha1(data: &[u8]) {
-    let mut ctx = rind::hashing::LegacySha1::new();
+    let mut ctx = rind::digest::Context::new(&rind::digest::SHA1_FOR_LEGACY_USE_ONLY);
     ctx.update(data);
     black_box(ctx.finish());
 }
