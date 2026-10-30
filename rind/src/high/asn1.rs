@@ -799,7 +799,7 @@ fn encoded_length_for(len: usize) -> usize {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Error {
+pub(crate) enum Error {
     UnexpectedTag,
     UnexpectedEof,
     UnexpectedTrailingData,
