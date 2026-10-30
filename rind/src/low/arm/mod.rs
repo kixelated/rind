@@ -14,4 +14,3 @@ pub(crate) mod cpu;
 pub(crate) mod curve25519;
 pub(crate) mod poly1305;
 pub(crate) mod posint;
-pub(crate) mod sha2;

@@ -5,7 +5,7 @@ permissions:
 
 # The gate `just ci` runs locally, over what the branch changed. A push to
 # `main` runs every crate, so a combination of PRs that broke together shows.
-# The platform matrix and the deeper suites live in the other workflows.
+# The platform matrix and the deeper suites run nightly in the other workflows.
 on:
   pull_request:
   push:
@@ -30,8 +30,6 @@ jobs:
           persist-credentials: false
           # Full history so `just ci` can diff against the PR base.
           fetch-depth: 0
-          # The Wycheproof and CAVP vectors the tests read.
-          submodules: true
 
       - uses: ./.github/actions/just
 
@@ -45,6 +43,9 @@ jobs:
 
       - uses: ./.github/actions/nix
         if: steps.scope.outputs.needed == 'true'
+
+      - uses: ./.github/actions/vectors
+        if: steps.scope.outputs.rust == 'true'
 
       - name: Rust cache
         if: steps.scope.outputs.rust == 'true'

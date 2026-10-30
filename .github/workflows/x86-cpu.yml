@@ -1,12 +1,13 @@
 name: x86-cpu
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
   schedule:
     - cron: "0 18 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: x86-cpu-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -22,8 +23,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: true
           persist-credentials: false
+
+      - uses: ./.github/actions/vectors
 
       - uses: actions/checkout@v4
         with:

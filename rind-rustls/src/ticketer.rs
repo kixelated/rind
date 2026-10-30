@@ -82,12 +82,14 @@ impl ProducesTickets for XChaCha20Ticketer {
         res.extend(&nonce);
         res.extend(message);
 
-        self.key.encrypt(
-            &nonce,
-            &self.key_name,
-            &mut res[self.key_name.len() + nonce.len()..],
-            &mut tag,
-        );
+        self.key
+            .encrypt(
+                &nonce,
+                &self.key_name,
+                &mut res[self.key_name.len() + nonce.len()..],
+                &mut tag,
+            )
+            .ok()?;
         res.extend(tag);
 
         self.maximum_ciphertext_len

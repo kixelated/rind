@@ -34,9 +34,7 @@ impl ChaCha20 {
         inout: &mut [u8],
     ) -> Result<(), Error> {
         let _entry = Entry::new_secret();
-        if u64::from(counter) + inout.len().div_ceil(64) as u64 > 1 << 32 {
-            return Err(Error::WrongLength);
-        }
+        check_counter(counter, inout.len())?;
         low::ct::secret_slice(inout);
 
         let mut counter_nonce = [0u8; 16];
@@ -47,6 +45,15 @@ impl ChaCha20 {
         low::ct::public_slice(inout);
         Ok(())
     }
+}
+
+/// Fails with [`Error::WrongLength`] if `len` bytes need more blocks than
+/// remain from block `counter` before the 32-bit counter wraps.
+pub(super) fn check_counter(counter: u32, len: usize) -> Result<(), Error> {
+    if u64::from(counter) + len.div_ceil(64) as u64 > 1 << 32 {
+        return Err(Error::WrongLength);
+    }
+    Ok(())
 }
 
 impl Drop for ChaCha20 {
@@ -98,5 +105,19 @@ mod tests {
             )
             .unwrap();
         assert_eq!(hex::encode(mask), "aefefe7d03");
+    }
+
+    #[test]
+    fn counter_limits() {
+        assert_eq!(check_counter(u32::MAX, 64), Ok(()));
+        assert_eq!(check_counter(u32::MAX, 65), Err(Error::WrongLength));
+
+        // the AEADs start at block 1, after the Poly1305 key's
+        #[cfg(target_pointer_width = "64")]
+        {
+            let max_aead = ((1 << 32) - 1) * 64;
+            assert_eq!(check_counter(1, max_aead), Ok(()));
+            assert_eq!(check_counter(1, max_aead + 1), Err(Error::WrongLength));
+        }
     }
 }

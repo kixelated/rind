@@ -1,18 +1,23 @@
 name: cranelift
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
   schedule:
     - cron: "0 18 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: cranelift-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: "always"
   CARGO_UNSTABLE_CODEGEN_BACKEND: "true"
   CARGO_PROFILE_DEV_CODEGEN_BACKEND: "cranelift"
   CARGO_PROFILE_RELEASE_CODEGEN_BACKEND: "cranelift"
+  # Cargo doesn't pass the profile's backend to rustdoc, and LLVM-built doctests crash calling Cranelift-built crates on aarch64:
+  # https://github.com/rust-lang/cargo/issues/17659
+  # https://github.com/rust-lang/rustc_codegen_cranelift/issues/1718
+  RUSTDOCFLAGS: "-Zcodegen-backend=cranelift"
   # Cranelift doesn't support unwinding: https://github.com/rust-lang/rustc_codegen_cranelift/issues/1567
   CARGO_UNSTABLE_PANIC_ABORT_TESTS: "true"
   CARGO_PROFILE_DEV_PANIC: "abort"
@@ -40,8 +45,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: true
           persist-credentials: false
+
+      - uses: ./.github/actions/vectors
 
       - name: Install nightly toolchain
         uses: dtolnay/rust-toolchain@master

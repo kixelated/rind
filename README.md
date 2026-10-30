@@ -1,5 +1,5 @@
 <h1 align="center">rind</h1>
-<img width="40%" align="right" src="https://raw.githubusercontent.com/kixelated/rind/main/admin/picture.png">
+<img width="40%" align="right" src="https://raw.githubusercontent.com/moq-dev/rind/main/admin/picture.png">
 
 > **rind** is a compendium of **high quality**,
 > **fast** and **easy to build** cryptography for Rust, aimed
@@ -27,7 +27,7 @@ This project is very new, so exercise due caution.  The overriding
 goal of this crate is for use with `rustls` via [rind-rustls][],
 but there is also a public API for general-purpose use.
 
-[![Build Status](https://img.shields.io/github/actions/workflow/status/kixelated/rind/build.yml)](https://github.com/kixelated/rind/actions/workflows/build.yml?query=branch%3Amain)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/moq-dev/rind/build.yml)](https://github.com/moq-dev/rind/actions/workflows/build.yml?query=branch%3Amain)
 [![Latest release](https://img.shields.io/crates/v/rind)](https://crates.io/crates/rind)
 [![Documentation](https://img.shields.io/docsrs/rind)](https://docs.rs/rind/)
 
@@ -210,8 +210,9 @@ have some different options depending on CPU features:
 ### Symmetric cryptography
 SHA1 and SHA256 have straightforward implementations using hashing intrinsics
 (aka "SHA-NI" on x86_64, "sha" extension on aarch64) with runtime fallback
-on x86_64 to a pure Rust version if needed. 32-bit `arm` always runs that pure
-Rust SHA1, since libcrux has none.
+on x86_64 to a pure Rust version if needed. 32-bit `arm` always runs the pure
+Rust SHA1, SHA256, and SHA512: libcrux has no SHA1, and its SHA2 leaves the
+message schedule on the stack.
 
 SHA384/SHA512 on x86_64 has an AVX2 by-4 implementation, plus an AVX2 interleaved
 single block implementation.

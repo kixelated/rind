@@ -27,11 +27,13 @@ impl Algorithm {
     }
 
     fn cipher(self, key: &[u8]) -> Result<Box<dyn Cipher>, CryptoError> {
-        // Error rather than let rind panic on a key of the wrong length.
         let actual = key.len().min(u16::MAX as usize) as u16;
         let aead = match self {
+            // rind takes either AES key length, but the suite fixes one.
             Self::Aes128Gcm | Self::Aes256Gcm if key.len() == self.key_len() => {
-                Aead::AesGcm(Box::new(AesGcm::new(key)))
+                Aead::AesGcm(Box::new(
+                    AesGcm::new(key).map_err(|_| CryptoError::InvalidAesGcmKeySize { actual })?,
+                ))
             }
             Self::Aes128Gcm | Self::Aes256Gcm => {
                 return Err(CryptoError::InvalidAesGcmKeySize { actual });
@@ -90,6 +92,7 @@ impl Cipher for Aead {
             Self::AesGcm(aead) => aead.encrypt(&nonce.0, &aad, plaintext, &mut tag),
             Self::ChaCha20Poly1305(aead) => aead.encrypt(&nonce.0, &aad, plaintext, &mut tag),
         }
+        .map_err(|_| CryptoError::OperationFailed(CryptoOperation::Encrypt))?;
         plaintext.extend_from_slice(&tag);
         Ok(())
     }

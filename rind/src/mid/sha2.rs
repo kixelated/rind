@@ -6,8 +6,8 @@
 //! This is SHA256, SHA384, and SHA512.
 //! These are all described in [FIPS180](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf).
 
-use crate::low::Blockwise;
 use crate::low::cpu::verify_cpu_features;
+use crate::low::{Blockwise, Zeroable, zeroise, zeroise_value};
 
 /// A context for incremental computation of SHA256.
 #[derive(Clone)]
@@ -40,8 +40,9 @@ impl Sha256Context {
 
         let bytes = self.blockwise.add_leading(bytes);
 
-        if let Some(block) = self.blockwise.take() {
+        if let Some(mut block) = self.blockwise.take() {
             self.update_blocks(&block);
+            zeroise(&mut block);
         }
 
         let (whole_blocks, remainder) = {
@@ -95,6 +96,15 @@ impl Sha256Context {
     pub const OUTPUT_SZ: usize = 32;
 }
 
+// The state is keyed when hashing an HMAC key, and the buffer may hold secret input.
+impl Drop for Sha256Context {
+    fn drop(&mut self) {
+        zeroise_value(self);
+    }
+}
+
+impl Zeroable for Sha256Context {}
+
 /// A context for incremental computation of SHA384.
 #[derive(Clone)]
 pub struct Sha384Context {
@@ -129,9 +139,12 @@ impl Sha384Context {
 
     /// Complete the SHA384 computation, returning the hash output.
     pub fn finish(self) -> [u8; Self::OUTPUT_SZ] {
-        let inner = self.inner.finish();
-        // SAFETY: 48 is less than 64.
-        inner[..Self::OUTPUT_SZ].try_into().unwrap()
+        let mut inner = self.inner.finish();
+        let mut r = [0u8; Self::OUTPUT_SZ];
+        r.copy_from_slice(&inner[..Self::OUTPUT_SZ]);
+        // The truncated words are the rest of the final state.
+        zeroise(&mut inner);
+        r
     }
 
     /// The output size of SHA384.
@@ -175,8 +188,9 @@ impl Sha512Context {
 
         let bytes = self.blockwise.add_leading(bytes);
 
-        if let Some(block) = self.blockwise.take() {
+        if let Some(mut block) = self.blockwise.take() {
             self.update_blocks(&block);
+            zeroise(&mut block);
         }
 
         let (whole_blocks, remainder) = {
@@ -229,6 +243,15 @@ impl Sha512Context {
     /// The output size of SHA512.
     pub const OUTPUT_SZ: usize = 64;
 }
+
+// The state is keyed when hashing an HMAC key, and the buffer may hold secret input.
+impl Drop for Sha512Context {
+    fn drop(&mut self) {
+        zeroise_value(self);
+    }
+}
+
+impl Zeroable for Sha512Context {}
 
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]

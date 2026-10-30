@@ -8,6 +8,8 @@
 
 use core::arch::x86_64::*;
 
+use crate::low::zeroise;
+
 #[inline]
 fn ch(x: u64, y: u64, z: u64) -> u64 {
     (x & y) ^ (!x & z)
@@ -192,10 +194,10 @@ macro_rules! round {
     };
 }
 
+/// `w` is scratch for the four blocks' W+K schedules, interleaved.
 #[target_feature(enable = "avx,avx2,bmi2")]
-fn sha512_compress_4_blocks(state: &mut [u64; 8], block4: *const u64) {
-    let mut w = [_mm256_setzero_si256(); 80];
-    sha512_quad_message_schedule(&mut w, block4);
+fn sha512_compress_4_blocks(state: &mut [u64; 8], block4: *const u64, w: &mut [__m256i; 80]) {
+    sha512_quad_message_schedule(w, block4);
 
     // keep intermediate state in ymm registers to reduce scalar register
     // pressure
@@ -467,9 +469,15 @@ fn sha512_compress_block(state: &mut [u64; 8], block: &[u8]) {
 
 pub(crate) fn sha512_compress_blocks(state: &mut [u64; 8], blocks: &[u8]) {
     let (iter4, remainder) = blocks.as_chunks::<512>();
-    for block4 in iter4 {
-        // SAFETY: this crate requires the `avx`, `avx2` and `bmi2` cpu features
-        unsafe { sha512_compress_4_blocks(state, block4.as_ptr().cast()) };
+    if !iter4.is_empty() {
+        // W holds the hashed input, which may be a secret such as an HMAC key.
+        // SAFETY: this crate requires the `avx` cpu feature
+        let mut w = [unsafe { _mm256_setzero_si256() }; 80];
+        for block4 in iter4 {
+            // SAFETY: this crate requires the `avx`, `avx2` and `bmi2` cpu features
+            unsafe { sha512_compress_4_blocks(state, block4.as_ptr().cast(), &mut w) };
+        }
+        zeroise(&mut w);
     }
 
     let (chunks, _) = remainder.as_chunks::<128>();

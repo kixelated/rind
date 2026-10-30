@@ -183,10 +183,7 @@ fn hmac_sha1_tests() {
             ctx.update(test.msg);
             let result = match test.tag.len() {
                 20 => ctx.verify(&test.tag),
-                10 => match ctx.finish().truncated_ct_equal::<10>(&test.tag) {
-                    true => Ok(()),
-                    false => Err(Error::BadSignature),
-                },
+                10 => ctx.finish().verify_truncated::<10>(&test.tag),
                 _ => todo!("unhandled truncated hmac"),
             };
 
@@ -217,10 +214,7 @@ fn hmac_sha256_tests() {
             ctx.update(test.msg);
             let result = match test.tag.len() {
                 32 => ctx.verify(&test.tag),
-                16 => match ctx.finish().truncated_ct_equal::<16>(&test.tag) {
-                    true => Ok(()),
-                    false => Err(Error::BadSignature),
-                },
+                16 => ctx.finish().verify_truncated::<16>(&test.tag),
                 _ => todo!("unhandled truncated hmac"),
             };
 
@@ -251,10 +245,7 @@ fn hmac_sha384_tests() {
             ctx.update(test.msg);
             let result = match test.tag.len() {
                 48 => ctx.verify(&test.tag),
-                24 => match ctx.finish().truncated_ct_equal::<24>(&test.tag) {
-                    true => Ok(()),
-                    false => Err(Error::BadSignature),
-                },
+                24 => ctx.finish().verify_truncated::<24>(&test.tag),
                 _ => todo!("unhandled truncated hmac"),
             };
 
@@ -286,10 +277,7 @@ fn hmac_sha512_tests() {
             ctx.update(test.msg);
             let result = match test.tag.len() {
                 64 => ctx.verify(&test.tag),
-                32 => match ctx.finish().truncated_ct_equal::<32>(&test.tag) {
-                    true => Ok(()),
-                    false => Err(Error::BadSignature),
-                },
+                32 => ctx.finish().verify_truncated::<32>(&test.tag),
                 _ => todo!("unhandled truncated hmac"),
             };
 
@@ -571,12 +559,14 @@ fn test_aes_gcm() {
         for test in group.tests {
             summary.start(&test);
 
-            if test.key.len() == 24 {
-                summary.skipped("aes-192 not supported");
-                continue;
-            }
-
-            let ctx = AesGcm::new(&test.key);
+            let ctx = match AesGcm::new(&test.key) {
+                Ok(ctx) => ctx,
+                Err(Error::WrongLength) if test.key.len() == 24 => {
+                    summary.skipped("aes-192 not supported");
+                    continue;
+                }
+                Err(e) => panic!("key refused: {e:?}"),
+            };
             let nonce = match test.iv.len() {
                 12 => test.iv.try_into().unwrap(),
                 _ => {
@@ -601,7 +591,7 @@ fn test_aes_gcm() {
             let mut ct = test.msg.clone();
             let mut tag = [0u8; 16];
 
-            ctx.encrypt(&nonce, &test.aad, &mut ct, &mut tag);
+            ctx.encrypt(&nonce, &test.aad, &mut ct, &mut tag).unwrap();
 
             if test.result == ExpectedResult::Valid {
                 assert_eq!(ct, test.ct);
@@ -626,12 +616,14 @@ fn test_aes_gmac() {
         for test in group.tests {
             summary.start(&test);
 
-            if test.key.len() == 24 {
-                summary.skipped("aes-192 not supported");
-                continue;
-            }
-
-            let ctx = AesGcm::new(&test.key);
+            let ctx = match AesGcm::new(&test.key) {
+                Ok(ctx) => ctx,
+                Err(Error::WrongLength) if test.key.len() == 24 => {
+                    summary.skipped("aes-192 not supported");
+                    continue;
+                }
+                Err(e) => panic!("key refused: {e:?}"),
+            };
             let nonce = match test.iv.len() {
                 12 => test.iv.try_into().unwrap(),
                 _ => {
@@ -652,7 +644,7 @@ fn test_aes_gmac() {
             // and encrypt
             let mut tag = [0u8; 16];
 
-            ctx.encrypt(&nonce, &test.msg, &mut [], &mut tag);
+            ctx.encrypt(&nonce, &test.msg, &mut [], &mut tag).unwrap();
 
             if test.result == ExpectedResult::Valid {
                 assert_eq!(&tag, &test.tag[..]);
@@ -848,7 +840,7 @@ fn test_chacha20poly1305() {
             let mut ct = test.msg.clone();
             let mut tag = [0u8; 16];
 
-            ctx.encrypt(&nonce, &test.aad, &mut ct, &mut tag);
+            ctx.encrypt(&nonce, &test.aad, &mut ct, &mut tag).unwrap();
 
             if test.result == ExpectedResult::Valid {
                 assert_eq!(ct, test.ct);
@@ -934,7 +926,7 @@ fn test_xchacha20poly1305() {
             let mut ct = test.msg.clone();
             let mut tag = [0u8; 16];
 
-            ctx.encrypt(&nonce, &test.aad, &mut ct, &mut tag);
+            ctx.encrypt(&nonce, &test.aad, &mut ct, &mut tag).unwrap();
 
             if test.result == ExpectedResult::Valid {
                 assert_eq!(ct, test.ct);

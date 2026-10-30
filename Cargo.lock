@@ -2927,7 +2927,6 @@ dependencies = [
  "libcrux-ml-kem",
  "libcrux-p256",
  "libcrux-poly1305",
- "libcrux-sha2",
  "libcrux-traits",
  "proptest",
  "serde",

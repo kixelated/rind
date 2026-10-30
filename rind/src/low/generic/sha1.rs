@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 
+use crate::low::zeroise;
+
 macro_rules! CH {
     ($x:expr, $y:expr, $z:expr) => {
         $z ^ ($x & ($y ^ $z))
@@ -18,9 +20,8 @@ macro_rules! MAJ {
     };
 }
 
-fn sha1_compress_block(state: &mut [u32; 5], block: &[u8; 64]) {
-    // This is a 16-word window into the whole W array.
-    let mut w = [0u32; 16];
+/// `w` is a 16-word window into the whole W array.
+fn sha1_compress_block(state: &mut [u32; 5], block: &[u8; 64], w: &mut [u32; 16]) {
     let (words, _) = block.as_chunks::<4>();
     for (w, word) in w.iter_mut().zip(words) {
         *w = u32::from_be_bytes(*word);
@@ -102,8 +103,11 @@ fn sha1_compress_block(state: &mut [u32; 5], block: &[u8; 64]) {
 pub(crate) fn sha1_compress_blocks(state: &mut [u32; 5], blocks: &[u8]) {
     debug_assert!(blocks.len().is_multiple_of(64));
 
+    // W holds the hashed input, which may be a secret such as an HMAC key.
+    let mut w = [0u32; 16];
     let (chunks, _) = blocks.as_chunks::<64>();
     for block in chunks {
-        sha1_compress_block(state, block);
+        sha1_compress_block(state, block, &mut w);
     }
+    zeroise(&mut w);
 }

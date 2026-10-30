@@ -43,7 +43,7 @@ fn test_rc_aes256_gcm(key: &aes_gcm::Aes256Gcm, nonce: &[u8; 12], aad: &[u8], pl
 fn test_rind_aes_gcm(key: &rind::aead::AesGcm, nonce: &[u8; 12], aad: &[u8], plain: &[u8]) {
     let mut ct = plain.to_vec();
     let mut tag = [0u8; 16];
-    key.encrypt(nonce, aad, &mut ct, &mut tag);
+    key.encrypt(nonce, aad, &mut ct, &mut tag).unwrap();
 }
 
 fn aes128_gcm(c: &mut Criterion) {
@@ -82,7 +82,7 @@ fn aes128_gcm(c: &mut Criterion) {
             },
         );
         group.bench_with_input(BenchmarkId::new("rind", size_name), &input, |b, input| {
-            let key = rind::aead::AesGcm::new(&key);
+            let key = rind::aead::AesGcm::new(&key).unwrap();
             b.iter(|| test_rind_aes_gcm(&key, &nonce, &aad, input));
         });
     }
@@ -124,7 +124,7 @@ fn aes256_gcm(c: &mut Criterion) {
             },
         );
         group.bench_with_input(BenchmarkId::new("rind", size_name), &input, |b, input| {
-            let key = rind::aead::AesGcm::new(&key);
+            let key = rind::aead::AesGcm::new(&key).unwrap();
             b.iter(|| test_rind_aes_gcm(&key, &nonce, &aad, input));
         });
     }

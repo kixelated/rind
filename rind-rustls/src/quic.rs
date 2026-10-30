@@ -10,7 +10,7 @@ pub(crate) struct AesGcm(pub(crate) usize);
 impl quic::Algorithm for AesGcm {
     fn packet_key(&self, key: AeadKey, iv: Iv) -> Box<dyn quic::PacketKey> {
         Box::new(PacketKey {
-            aead: aead::AesGcm::new(key.as_ref()),
+            aead: aead::AesGcm::new(key.as_ref()).unwrap(),
             iv,
         })
     }
@@ -53,7 +53,13 @@ trait Aead: Send + Sync {
     /// RFC 9001 section 6.6
     const INTEGRITY_LIMIT: u64;
 
-    fn encrypt(&self, nonce: &[u8; 12], aad: &[u8], inout: &mut [u8], tag: &mut [u8; TAG_LEN]);
+    fn encrypt(
+        &self,
+        nonce: &[u8; 12],
+        aad: &[u8],
+        inout: &mut [u8],
+        tag: &mut [u8; TAG_LEN],
+    ) -> Result<(), rind::Error>;
     fn decrypt(
         &self,
         nonce: &[u8; 12],
@@ -67,7 +73,13 @@ impl Aead for aead::AesGcm {
     const CONFIDENTIALITY_LIMIT: u64 = 1 << 23;
     const INTEGRITY_LIMIT: u64 = 1 << 52;
 
-    fn encrypt(&self, nonce: &[u8; 12], aad: &[u8], inout: &mut [u8], tag: &mut [u8; TAG_LEN]) {
+    fn encrypt(
+        &self,
+        nonce: &[u8; 12],
+        aad: &[u8],
+        inout: &mut [u8],
+        tag: &mut [u8; TAG_LEN],
+    ) -> Result<(), rind::Error> {
         self.encrypt(nonce, aad, inout, tag)
     }
 
@@ -86,7 +98,13 @@ impl Aead for aead::ChaCha20Poly1305 {
     const CONFIDENTIALITY_LIMIT: u64 = u64::MAX;
     const INTEGRITY_LIMIT: u64 = 1 << 36;
 
-    fn encrypt(&self, nonce: &[u8; 12], aad: &[u8], inout: &mut [u8], tag: &mut [u8; TAG_LEN]) {
+    fn encrypt(
+        &self,
+        nonce: &[u8; 12],
+        aad: &[u8],
+        inout: &mut [u8],
+        tag: &mut [u8; TAG_LEN],
+    ) -> Result<(), rind::Error> {
         self.encrypt(nonce, aad, inout, tag)
     }
 
@@ -115,7 +133,9 @@ impl<A: Aead> quic::PacketKey for PacketKey<A> {
     ) -> Result<quic::Tag, Error> {
         let nonce = Nonce::new(&self.iv, packet_number);
         let mut tag = [0u8; TAG_LEN];
-        self.aead.encrypt(&nonce.0, header, payload, &mut tag);
+        self.aead
+            .encrypt(&nonce.0, header, payload, &mut tag)
+            .map_err(|_| Error::EncryptError)?;
         Ok(quic::Tag::from(&tag[..]))
     }
 

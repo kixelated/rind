@@ -40,7 +40,7 @@ fn test_rind_chacha(
 ) {
     let mut ct = plain.to_vec();
     let mut tag = [0u8; 16];
-    key.encrypt(nonce, aad, &mut ct, &mut tag);
+    key.encrypt(nonce, aad, &mut ct, &mut tag).unwrap();
 }
 
 fn bench_chacha20poly1305(c: &mut Criterion) {

@@ -122,6 +122,7 @@ impl PrivateKey {
         for _ in 0..64 {
             let mut r = [0u8; Scalar::BYTES];
             rng.fill(&mut r)?;
+            low::ct::secret_slice(&r);
             let key = Self::from_bytes(&r);
             low::zeroise(&mut r);
             if let Ok(p) = key {
@@ -173,7 +174,12 @@ impl StaticPrivateKey {
     /// Return a fixed-length encoding of this private key's value.
     pub fn as_bytes(&self) -> [u8; Scalar::BYTES] {
         let _entry = low::Entry::new_secret();
-        low::ct::into_public(self.0.scalar.as_bytes())
+        low::ct::into_public(self.secret_bytes())
+    }
+
+    /// Return [`Self::as_bytes`] without declassifying it, for use inside rind.
+    pub(crate) fn secret_bytes(&self) -> [u8; Scalar::BYTES] {
+        self.0.scalar.as_bytes()
     }
 
     /// Derive the corresponding public key, and return it in
@@ -256,10 +262,11 @@ impl Scalar {
     pub(crate) fn from_bytes_checked(bytes: &[u8]) -> Result<Self, Error> {
         let full = Self(util::big_endian_slice_any_size_to_u64x4(bytes).ok_or(Error::WrongLength)?);
         let in_range = bignum256::lt_mask(&full.0, &CURVE_ORDER) == u64::MAX;
-        if !in_range || full.is_zero() {
-            Err(Error::OutOfRange)
-        } else {
-            Ok(full)
+        // Whether a scalar is in range is public: a key or signature is refused
+        // on it, and a rejected nonce candidate says nothing of the one accepted.
+        match low::ct::into_public(in_range & !full.is_zero()) {
+            true => Ok(full),
+            false => Err(Error::OutOfRange),
         }
     }
 

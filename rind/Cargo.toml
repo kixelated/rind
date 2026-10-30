@@ -2,7 +2,7 @@
 name = "rind"
 version = "0.1.0"
 edition = "2024"
-repository = "https://github.com/kixelated/rind"
+repository = "https://github.com/moq-dev/rind"
 license = "Apache-2.0 OR ISC OR MIT-0"
 readme = "README.md"
 description = "Pure-Rust cryptography for MoQ, forked from graviola"
@@ -30,7 +30,6 @@ libcrux-macros = "0.0.4"
 libcrux-ml-kem = { version = "0.0.11", default-features = false, features = ["mlkem768"] }
 libcrux-p256 = { version = "0.0.9", features = ["expose-hacl"] }
 libcrux-poly1305 = { version = "0.0.7", features = ["expose-hacl"] }
-libcrux-sha2 = { version = "0.0.9", features = ["expose-hacl"] }
 libcrux-traits = "0.0.9"
 
 [dev-dependencies]

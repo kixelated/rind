@@ -1,12 +1,13 @@
 name: ctgrind
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
   schedule:
     - cron: "0 18 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ctgrind-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -16,18 +17,16 @@ jobs:
   build:
     strategy:
       matrix:
-        include:
-          - os: ubuntu-latest
-            build: ""
-          - os: ubuntu-latest
-            build: --release
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+        build: ["", --release]
 
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: true
           persist-credentials: false
+
+      - uses: ./.github/actions/vectors
 
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@master
@@ -41,11 +40,9 @@ jobs:
         run: admin/ctgrind ${{ matrix.build }}
 
   # The arm64 runner executes 32-bit ARM natively, so an armhf valgrind checks
-  # the armv7 build (libcrux and fiat-crypto) without emulation. Nightly only:
-  # the debug build alone runs well over an hour.
+  # the armv7 build (libcrux and fiat-crypto) without emulation.
   armv7:
     name: armv7 (${{ matrix.build || 'debug' }})
-    if: github.event_name == 'schedule'
     strategy:
       matrix:
         build: ["", --release]
@@ -54,8 +51,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: true
           persist-credentials: false
+
+      - uses: ./.github/actions/vectors
 
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@master

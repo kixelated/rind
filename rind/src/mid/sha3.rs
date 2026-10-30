@@ -8,7 +8,10 @@
 use core::ops::Range;
 
 use crate::low::cpu::verify_cpu_features;
-use crate::low::{Blockwise, sha3_keccak_f1600, sha3_keccak2of4_f1600, sha3_keccak4_f1600};
+use crate::low::{
+    Blockwise, Zeroable, sha3_keccak_f1600, sha3_keccak2of4_f1600, sha3_keccak4_f1600, zeroise,
+    zeroise_value,
+};
 
 /// A context for incremental computation of SHA3-256.
 pub struct Sha3_256Context {
@@ -29,10 +32,9 @@ impl Sha3_256Context {
     }
 
     /// Complete the SHA3-256 computation, returning the hash output.
-    pub fn finish(self) -> [u8; Self::OUTPUT_SZ] {
-        let squeezing = self.sponge.absorb_final();
+    pub fn finish(mut self) -> [u8; Self::OUTPUT_SZ] {
         let mut digest = [0u8; Self::OUTPUT_SZ];
-        squeezing.into_single_squeeze(&mut digest);
+        self.sponge.finish_single_squeeze(&mut digest);
         digest
     }
 
@@ -59,10 +61,9 @@ impl Sha3_512Context {
     }
 
     /// Complete the SHA3-512 computation, returning the hash output.
-    pub fn finish(self) -> [u8; Self::OUTPUT_SZ] {
-        let sponge = self.sponge.absorb_final();
+    pub fn finish(mut self) -> [u8; Self::OUTPUT_SZ] {
         let mut digest = [0u8; Self::OUTPUT_SZ];
-        sponge.into_single_squeeze(&mut digest);
+        self.sponge.finish_single_squeeze(&mut digest);
         digest
     }
 
@@ -100,6 +101,15 @@ impl Shake128 {
             .shake_read(output, &mut self.buffer, &mut self.buffer_offset);
     }
 }
+
+// The state and buffered output are a function of the input, which may be secret.
+impl Drop for Shake128 {
+    fn drop(&mut self) {
+        zeroise_value(self);
+    }
+}
+
+impl Zeroable for Shake128 {}
 
 pub(crate) type Shake128Sponge = Sponge<SHAKE_128_R_BYTES, SHAKE_PAD_BYTE>;
 pub(crate) type Shake128SqueezingSponge = SqueezingSponge<SHAKE_128_R_BYTES>;
@@ -139,7 +149,7 @@ impl Shake256 {
     /// Each item of `inputs` shall be 40 bytes in length, which accommodates ML-KEM's `SamplePolyCBD`
     /// requirements of 33 bytes.  The 34th byte shall be `SHAKE_PAD_BYTE` and the remainder shall be
     /// zeroes.
-    pub(crate) fn one_shot_sextet(inputs: &[&[u8; 40]; 6], outputs: &mut [[u8; 128]; 6]) {
+    pub(crate) fn one_shot_sextet(inputs: &[[u8; 40]; 6], outputs: &mut [[u8; 128]; 6]) {
         debug_assert!(inputs.iter().all(|inp| inp[33] == SHAKE_PAD_BYTE));
 
         let mut s = [0; 25];
@@ -208,6 +218,10 @@ impl Shake256 {
         squeeze(&states[0], &mut outputs[4]);
         squeeze(&states[1], &mut outputs[5]);
 
+        // ML-KEM's inputs here are its secret noise seeds.
+        zeroise(&mut s);
+        zeroise(states.as_flattened_mut());
+
         fn squeeze(states: &[u64; 25], output: &mut [u8; 128]) {
             debug_assert!(output.len() <= SHAKE_256_R_BYTES);
             for (i, ch) in output.chunks_mut(8).enumerate() {
@@ -216,6 +230,15 @@ impl Shake256 {
         }
     }
 }
+
+// The state and buffered output are a function of the input, which may be secret.
+impl Drop for Shake256 {
+    fn drop(&mut self) {
+        zeroise_value(self);
+    }
+}
+
+impl Zeroable for Shake256 {}
 
 pub(crate) struct SqueezingSponge<const R: usize> {
     s: [u64; 25],
@@ -229,12 +252,6 @@ impl<const R: usize> SqueezingSponge<R> {
             self.squeeze_current(chunk);
             sha3_keccak_f1600(&mut self.s, &RC);
         }
-    }
-
-    /// Squeeze into `output`, which must be below `R` in length.
-    fn into_single_squeeze(mut self, output: &mut [u8]) {
-        debug_assert!(output.len() < R);
-        self.squeeze_current(output);
     }
 
     fn squeeze_current(&mut self, output: &mut [u8]) {
@@ -403,15 +420,17 @@ impl<const R: usize, const PAD: u8> Sponge<R, PAD> {
         for m in message {
             s.absorb(m);
         }
-        s.absorb_final()
+        s.absorb_final();
+        SqueezingSponge { s: s.sponge.s }
     }
 
     fn absorb(&mut self, bytes: &[u8]) {
         verify_cpu_features();
         let bytes = self.buffer.add_leading(bytes);
 
-        if let Some(block) = self.buffer.take() {
+        if let Some(mut block) = self.buffer.take() {
             self.absorb_block(&block);
+            zeroise(&mut block);
         }
 
         let (blocks, remainder) = bytes.as_chunks();
@@ -422,8 +441,15 @@ impl<const R: usize, const PAD: u8> Sponge<R, PAD> {
         self.buffer.add_trailing(remainder);
     }
 
-    #[must_use]
-    fn absorb_final(mut self) -> SqueezingSponge<R> {
+    /// Pad and absorb the final block, then squeeze `output`, which must be below `R` in length.
+    fn finish_single_squeeze(&mut self, output: &mut [u8]) {
+        debug_assert!(output.len() < R);
+        self.absorb_final();
+        self.sponge.squeeze_current(output);
+    }
+
+    /// Pad and absorb the final block; nothing more may be absorbed.
+    fn absorb_final(&mut self) {
         verify_cpu_features();
         match R - self.buffer.used() {
             1 => {
@@ -438,9 +464,9 @@ impl<const R: usize, const PAD: u8> Sponge<R, PAD> {
                 self.buffer.add_leading(&[0x80]);
             }
         }
-        let padded = self.buffer.take().unwrap();
+        let mut padded = self.buffer.take().unwrap();
         self.absorb_block(&padded);
-        self.sponge
+        zeroise(&mut padded);
     }
 
     fn absorb_block(&mut self, block: &[u8; R]) {
@@ -451,6 +477,17 @@ impl<const R: usize, const PAD: u8> Sponge<R, PAD> {
         sha3_keccak_f1600(&mut self.sponge.s, &RC);
     }
 }
+
+// The state and buffer are a function of the input, which may be secret.
+// Keccak-f is invertible, so even a state that has squeezed its output gives
+// back a short message.
+impl<const R: usize, const PAD: u8> Drop for Sponge<R, PAD> {
+    fn drop(&mut self) {
+        zeroise_value(self);
+    }
+}
+
+impl<const R: usize, const PAD: u8> Zeroable for Sponge<R, PAD> {}
 
 const RC: [u64; 24] = [
     0x00000000_00000001,
@@ -590,12 +627,7 @@ mod tests {
         }
 
         let mut batched = [[0u8; 128]; 6];
-        Shake256::one_shot_sextet(
-            &[
-                &inputs[0], &inputs[1], &inputs[2], &inputs[3], &inputs[4], &inputs[5],
-            ],
-            &mut batched,
-        );
+        Shake256::one_shot_sextet(&inputs, &mut batched);
 
         for (n, inp) in inputs.iter().enumerate() {
             // the absorbed message is the 33 bytes preceding the pad byte

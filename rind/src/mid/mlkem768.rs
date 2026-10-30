@@ -56,7 +56,9 @@ impl DecapKey {
         let _entry = low::Entry::new_secret();
         let mut seed = [0u8; 64];
         SystemRandom.fill(&mut seed)?;
-        Ok(Self::keygen_internal(&seed))
+        let key = Self::keygen_internal(&seed);
+        low::zeroise(&mut seed);
+        Ok(key)
     }
 
     /// Decapsulate ciphertext `c`, yielding a [`SharedSecret`].
@@ -90,12 +92,12 @@ impl DecapKey {
     pub fn keygen_internal(seed: &[u8; 64]) -> Self {
         // Preliminaries: split seed into d and z.
         let (d, z) = seed.split_at(32);
-        let d = d.try_into().unwrap();
-        let z = z.try_into().unwrap();
+        let mut d = low::ct::into_secret(d.try_into().unwrap());
 
         // 1. (ekPKE, dkPKE) <- K-PKE.KeyGen(d)
         // 2. ek <- ekPKE
         let (ek_pke, dk_pke) = Self::kpke_keygen(&d);
+        low::zeroise(&mut d);
 
         // 3. dk <- (dkPKE || ek || H(ek) || z)
         // 4. return (ek, dk)
@@ -108,7 +110,7 @@ impl DecapKey {
             dk_pke,
             ek_pke,
             h_ek,
-            z,
+            z: low::ct::into_secret(z.try_into().unwrap()),
         }
     }
 
@@ -122,22 +124,26 @@ impl DecapKey {
         let mut g = sha3::Sha3_512Context::new();
         g.update(&m_prime.0);
         g.update(&self.h_ek);
-        let kr_prime = g.finish();
+        let mut kr_prime = g.finish();
         let (k_prime, r_prime) = kr_prime.split_at(32);
+        let mut k_prime = SharedSecret(k_prime.try_into().unwrap());
         let r_prime = KpkeRandomness(r_prime.try_into().unwrap());
+        low::zeroise(&mut kr_prime);
 
         // 7. K‾ <- J(z || c)
         let mut k_bar = SharedSecret([0u8; 32]);
         sha3::Shake256::new(&[&self.z, &c.0]).read(&mut k_bar.0);
 
         // 8. c' <- K-PKE.Encrypt(ekPKE, m', r')
-        let c_prime = self.ek_pke.kpke_encrypt(m_prime, r_prime);
+        let mut c_prime = self.ek_pke.kpke_encrypt(m_prime, r_prime);
 
         // 9. - 11. if c != c' then K' <- K‾
         // 12. return K'
-        let mut k_prime = k_prime.try_into().unwrap();
-        ct_copy(ct_equal(&c.0, &c_prime.0), &mut k_prime, &k_bar.0);
-        SharedSecret(k_prime)
+        ct_copy(ct_equal(&c.0, &c_prime.0), &mut k_prime.0, &k_bar.0);
+        // A c' that differs from c re-encrypts m', the decryption of a
+        // ciphertext the peer chose.
+        low::zeroise(&mut c_prime.0);
+        k_prime
     }
 
     /// This is Algorithm 13: K-PKE.KeyGen(d) -> (ek_PKE, dk_PKE)
@@ -146,16 +152,18 @@ impl DecapKey {
         let mut g = sha3::Sha3_512Context::new();
         g.update(d);
         g.update(&[K_BYTE]);
-        let g = g.finish();
+        let mut g = g.finish();
         let (rho, sigma) = g.split_at(32);
-        let rho: [u8; 32] = rho.try_into().unwrap();
-        let sigma = sigma.try_into().unwrap();
+        // rho seeds the public matrix, so it is public.
+        let rho: [u8; 32] = low::ct::into_public(rho.try_into().unwrap());
+        let sigma = KpkeRandomness(sigma.try_into().unwrap());
+        low::zeroise(&mut g);
 
         // 3. - 7.
         let a_hat = Coeffs::sample_poly(&rho);
 
         // 8. - 15.
-        let (s, e) = Coeffs::sample_poly_cbd_dual(sigma);
+        let (s, e) = Coeffs::sample_poly_cbd_dual(&sigma.0);
 
         // 16. ŝ <- NTT(s)
         let mut s_hat = s.ntt();
@@ -167,7 +175,7 @@ impl DecapKey {
         let t_hat = a_hat.mul_add(&s_hat, &e_hat);
 
         let encap = EncapKey {
-            t_hat: t_hat.to_bytes(),
+            t_hat: low::ct::into_public(t_hat.to_bytes()),
             rho,
             transpose_a_hat: a_hat.transpose(),
         };
@@ -200,12 +208,14 @@ impl DecapKey {
     }
 }
 
+// Wiped whole, so no byte of the key survives, padding included.
 impl Drop for DecapKey {
     fn drop(&mut self) {
-        low::zeroise(&mut self.dk_pke);
-        low::zeroise(&mut self.z);
+        low::zeroise_value(self);
     }
 }
+
+impl low::Zeroable for DecapKey {}
 
 /// An ML-KEM-768 encapsulation key.
 #[derive(Clone)]
@@ -263,6 +273,8 @@ impl EncapKey {
 
     #[doc(hidden)]
     pub fn encaps_internal(self, m: Message) -> (SharedSecret, Ciphertext) {
+        low::ct::secret_slice(&m.0);
+
         // 1. (K, r) <- G(m || H(ek))
         let mut h = sha3::Sha3_256Context::new();
         h.update(&self.t_hat);
@@ -272,14 +284,15 @@ impl EncapKey {
         let mut g = sha3::Sha3_512Context::new();
         g.update(&m.0);
         g.update(&h_ek);
-        let kr = g.finish();
+        let mut kr = g.finish();
         let (k, r) = kr.split_at(32);
-        let k = k.try_into().unwrap();
+        let k = SharedSecret(k.try_into().unwrap());
         let r = KpkeRandomness(r.try_into().unwrap());
+        low::zeroise(&mut kr);
 
         // 2. c <- K-PKE.Encrypt(ek, m, r)
         let c = self.kpke_encrypt(m, r);
-        (SharedSecret(k), c)
+        (k, Ciphertext(low::ct::into_public(c.0)))
     }
 
     fn kpke_encrypt(&self, m: Message, r: KpkeRandomness) -> Ciphertext {
@@ -299,6 +312,7 @@ impl EncapKey {
         sha3::Shake256::new(&[&r.0, &[K_BYTE * 2]]).read(&mut buf);
         let mut e_2 = Coeffs::zero();
         sample_cbd2(&buf, &mut e_2.0);
+        low::zeroise(&mut buf);
 
         // 18. y^ <- NTT(y)
         let y_hat = y.ntt();
@@ -351,8 +365,14 @@ impl Drop for Message {
     }
 }
 
-/// K-PKE randomness input.
+/// K-PKE randomness input: `sigma` for key generation, `r` for encryption.
 struct KpkeRandomness([u8; 32]);
+
+impl Drop for KpkeRandomness {
+    fn drop(&mut self) {
+        low::zeroise(&mut self.0);
+    }
+}
 
 /// An ML-KEM shared secret.
 pub struct SharedSecret([u8; 32]);
@@ -393,9 +413,21 @@ impl Domain for Ntt {}
 struct MulCache;
 impl Domain for MulCache {}
 
+/// Polynomial coefficients.
+///
+/// Arithmetic on coefficients, here and in the compression and sampling
+/// helpers, wraps: their bounds rule out overflow, and a debug build's
+/// overflow check would branch on secret values.
 #[derive(Clone, Debug)]
 #[repr(align(32))]
 struct Coeffs<const C: usize, D: Domain>([i16; C], PhantomData<D>);
+
+// Most coefficients are secret: noise, keys, and the message and its encryption.
+impl<const C: usize, D: Domain> Drop for Coeffs<C, D> {
+    fn drop(&mut self) {
+        low::zeroise(&mut self.0);
+    }
+}
 
 impl<const C: usize, D: Domain> Coeffs<C, D> {
     const fn zero() -> Self {
@@ -445,8 +477,8 @@ impl Coeffs<{ K * K * N }, Ntt> {
             low::mlkem_basemul_k3(&mut term.0, aa, &s.0, &s_precomp.0);
             low::mlkem_tomont(&mut term.0);
 
-            for (r, t) in rr.iter_mut().zip(term.0) {
-                *r += t;
+            for (r, t) in rr.iter_mut().zip(term.0.iter()) {
+                *r = r.wrapping_add(*t);
             }
         }
 
@@ -488,8 +520,8 @@ impl Coeffs<{ K * K * N }, Ntt> {
         {
             low::mlkem_basemul_k3(&mut term.0, aa, &y.0, &y_precomp.0);
 
-            for (r, t) in rr.iter_mut().zip(term.0) {
-                *r += t;
+            for (r, t) in rr.iter_mut().zip(term.0.iter()) {
+                *r = r.wrapping_add(*t);
             }
         }
 
@@ -568,11 +600,11 @@ impl<const C: usize> Coeffs<C, Ntt> {
 /// Division-free so no variable-time division instruction is emitted
 /// (cf. KyberSlash); the constant is exact over the whole input range.
 fn compress_4(x: i16) -> u8 {
-    debug_assert!((0..Q).contains(&x));
+    debug_assert!((0..Q).contains(&low::ct::into_public(x)));
     let c = x as u64;
     let c = c << 4;
-    let c = c + Q_HALF as u64;
-    let c = c * 80635;
+    let c = c.wrapping_add(Q_HALF as u64);
+    let c = c.wrapping_mul(80635);
     let c = c >> 28;
     let c = c & 0xf;
     c as u8
@@ -590,11 +622,11 @@ fn decompress_4(y: u16) -> i16 {
 
 /// `Compress_10(x) = round((2^10 / q) * x) mod 2^10`, for x in [0, Q)
 fn compress_10(x: i16) -> u16 {
-    debug_assert!((0..Q).contains(&x));
+    debug_assert!((0..Q).contains(&low::ct::into_public(x)));
     let c = x as u64;
     let c = c << 10;
-    let c = c + Q_HALF as u64;
-    let c = c * 1290167;
+    let c = c.wrapping_add(Q_HALF as u64);
+    let c = c.wrapping_mul(1290167);
     let c = c >> 32;
     let c = c & 0x3ff;
     c as u16
@@ -615,10 +647,10 @@ fn compress_1_x8(coeffs: &[i16; 8]) -> u8 {
     let mut r = 0;
 
     for (i, x) in coeffs.iter().enumerate() {
-        debug_assert!((0..Q).contains(x));
+        debug_assert!((0..Q).contains(&low::ct::into_public(*x)));
         let x = (*x as u64) << 1;
-        let x = x + Q_HALF as u64;
-        let x = x * 80635;
+        let x = x.wrapping_add(Q_HALF as u64);
+        let x = x.wrapping_mul(80635);
         let x = x >> 28;
         r |= ((x & 1) as u8) << i;
     }
@@ -636,24 +668,15 @@ impl Coeffs<{ K * N }, Normal> {
         let mut samples = [[0; 128]; 6];
 
         // Prepare 6 SHAKE256 inputs.
-        let mut buf = [0; 40];
-        buf[..32].copy_from_slice(sigma);
-        buf[33] = sha3::SHAKE_PAD_BYTE;
+        let mut bufs = [[0; 40]; 6];
+        for (n, buf) in bufs.iter_mut().enumerate() {
+            buf[..32].copy_from_slice(sigma);
+            buf[32] = n as u8;
+            buf[33] = sha3::SHAKE_PAD_BYTE;
+        }
 
-        let mut buf0 = buf;
-        let mut buf1 = buf;
-        let mut buf2 = buf;
-        let mut buf3 = buf;
-        let mut buf4 = buf;
-        let mut buf5 = buf;
-        buf0[32] = 0;
-        buf1[32] = 1;
-        buf2[32] = 2;
-        buf3[32] = 3;
-        buf4[32] = 4;
-        buf5[32] = 5;
-
-        sha3::Shake256::one_shot_sextet(&[&buf0, &buf1, &buf2, &buf3, &buf4, &buf5], &mut samples);
+        sha3::Shake256::one_shot_sextet(&bufs, &mut samples);
+        low::zeroise(bufs.as_flattened_mut());
 
         let mut a = Coeffs::zero();
         let mut b = Coeffs::zero();
@@ -666,6 +689,7 @@ impl Coeffs<{ K * N }, Normal> {
         ) {
             sample_cbd2(sample, poly);
         }
+        low::zeroise(samples.as_flattened_mut());
 
         (a, b)
     }
@@ -785,7 +809,7 @@ impl<const C: usize> Coeffs<C, Normal> {
     /// Simple addition
     fn add(mut self, term: &Self) -> Self {
         for (ss, tt) in self.0.iter_mut().zip(term.0.iter()) {
-            *ss += *tt;
+            *ss = ss.wrapping_add(*tt);
         }
         self.reduce_in_place();
         self
@@ -794,7 +818,7 @@ impl<const C: usize> Coeffs<C, Normal> {
     /// Simple subtraction
     fn sub(mut self, term: &Self) -> Self {
         for (ss, tt) in self.0.iter_mut().zip(term.0.iter()) {
-            *ss -= *tt;
+            *ss = ss.wrapping_sub(*tt);
         }
         self.reduce_in_place();
         self
@@ -806,12 +830,12 @@ fn sample_cbd2(buf: &[u8; 128], out: &mut [i16; 256]) {
     let (out_chunks, _) = out.as_chunks_mut::<8>();
     for (in_bytes, out_coeffs) in buf_chunks.iter().zip(out_chunks.iter_mut()) {
         let t = u32::from_le_bytes(*in_bytes);
-        let d = (t & 0x5555_5555) + ((t >> 1) & 0x5555_5555);
+        let d = (t & 0x5555_5555).wrapping_add((t >> 1) & 0x5555_5555);
 
         for (j, coeff) in out_coeffs.iter_mut().enumerate() {
             let a = ((d >> (4 * j)) & 0x3) as i16;
             let b = ((d >> (4 * j + 2)) & 0x3) as i16;
-            *coeff = a - b;
+            *coeff = a.wrapping_sub(b);
         }
     }
 }
@@ -839,7 +863,7 @@ mod tests {
         let d = DecapKey::generate().unwrap();
         let (ess, ct) = d.encapsulation_key().encaps().unwrap();
         let dss = d.decaps(&ct);
-        assert_eq!(ess.0, dss.0);
+        assert_eq!(low::ct::into_public(ess.0), low::ct::into_public(dss.0));
     }
 
     #[test]

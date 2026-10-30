@@ -57,10 +57,14 @@ impl<H: Hash> Hmac<H> {
     /// Complete the HMAC signing operation, consuming it.
     ///
     /// The HMAC output (sometimes called a "signature", or "tag") is returned.
-    pub fn finish(mut self) -> HashOutput {
-        let inner_output = self.inner.finish();
-        self.outer.update(inner_output.as_ref());
-        self.outer.finish()
+    pub fn finish(self) -> HashOutput {
+        // Finish copies of the states rather than moving them out, so `self`
+        // wipes the originals in place when it drops.
+        let mut inner_output = self.inner.clone().finish();
+        let mut outer = self.outer.clone();
+        outer.update(inner_output.as_ref());
+        zeroise(inner_output.as_mut());
+        outer.finish()
     }
 
     /// Complete the HMAC signing operation and compare the result against `expected_tag`.
@@ -184,9 +188,9 @@ mod tests {
 
                             match wanted.len() {
                                 20 => assert!(tag.ct_equal(&wanted)),
-                                16 => assert!(tag.truncated_ct_equal::<16>(&wanted)),
-                                12 => assert!(tag.truncated_ct_equal::<12>(&wanted)),
-                                10 => assert!(tag.truncated_ct_equal::<10>(&wanted)),
+                                16 => assert_eq!(tag.verify_truncated::<16>(&wanted), Ok(())),
+                                12 => assert_eq!(tag.verify_truncated::<12>(&wanted), Ok(())),
+                                10 => assert_eq!(tag.verify_truncated::<10>(&wanted), Ok(())),
                                 len => todo!("unhandled tag len {len}"),
                             }
                         }
@@ -199,8 +203,8 @@ mod tests {
 
                             match wanted.len() {
                                 32 => assert!(tag.ct_equal(&wanted)),
-                                24 => assert!(tag.truncated_ct_equal::<24>(&wanted)),
-                                16 => assert!(tag.truncated_ct_equal::<16>(&wanted)),
+                                24 => assert_eq!(tag.verify_truncated::<24>(&wanted), Ok(())),
+                                16 => assert_eq!(tag.verify_truncated::<16>(&wanted), Ok(())),
                                 len => todo!("unhandled tag len {len}"),
                             }
                         }
@@ -213,9 +217,9 @@ mod tests {
 
                             match wanted.len() {
                                 48 => assert!(tag.ct_equal(&wanted)),
-                                40 => assert!(tag.truncated_ct_equal::<40>(&wanted)),
-                                32 => assert!(tag.truncated_ct_equal::<32>(&wanted)),
-                                24 => assert!(tag.truncated_ct_equal::<24>(&wanted)),
+                                40 => assert_eq!(tag.verify_truncated::<40>(&wanted), Ok(())),
+                                32 => assert_eq!(tag.verify_truncated::<32>(&wanted), Ok(())),
+                                24 => assert_eq!(tag.verify_truncated::<24>(&wanted), Ok(())),
                                 len => todo!("unhandled tag len {len}"),
                             }
                         }
@@ -228,10 +232,10 @@ mod tests {
 
                             match wanted.len() {
                                 64 => assert!(tag.ct_equal(&wanted)),
-                                56 => assert!(tag.truncated_ct_equal::<56>(&wanted)),
-                                48 => assert!(tag.truncated_ct_equal::<48>(&wanted)),
-                                40 => assert!(tag.truncated_ct_equal::<40>(&wanted)),
-                                32 => assert!(tag.truncated_ct_equal::<32>(&wanted)),
+                                56 => assert_eq!(tag.verify_truncated::<56>(&wanted), Ok(())),
+                                48 => assert_eq!(tag.verify_truncated::<48>(&wanted), Ok(())),
+                                40 => assert_eq!(tag.verify_truncated::<40>(&wanted), Ok(())),
+                                32 => assert_eq!(tag.verify_truncated::<32>(&wanted), Ok(())),
                                 len => todo!("unhandled tag len {len}"),
                             }
                         }

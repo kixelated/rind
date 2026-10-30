@@ -53,13 +53,13 @@ impl SupportedAes128CmSha1_80 for RindSrtp {
 
 impl SupportedAeadAes128Gcm for RindSrtp {
     fn create_cipher(&self, key: [u8; 16], _encrypt: bool) -> Box<dyn AeadAes128GcmCipher> {
-        Box::new(Gcm(AesGcm::new(&key)))
+        Box::new(Gcm(AesGcm::new(&key).unwrap()))
     }
 }
 
 impl SupportedAeadAes256Gcm for RindSrtp {
     fn create_cipher(&self, key: [u8; 32], _encrypt: bool) -> Box<dyn AeadAes256GcmCipher> {
-        Box::new(Gcm(AesGcm::new(&key)))
+        Box::new(Gcm(AesGcm::new(&key).unwrap()))
     }
 }
 
@@ -133,8 +133,9 @@ impl Gcm {
             .ok_or_else(|| CryptoError::Other("AES-GCM output too short".into()))?;
         let (ciphertext, tag) = output.split_at_mut(input.len());
         ciphertext.copy_from_slice(input);
-        self.0.encrypt(iv, aad, ciphertext, tag.try_into().unwrap());
-        Ok(())
+        self.0
+            .encrypt(iv, aad, ciphertext, tag.try_into().unwrap())
+            .map_err(|e| CryptoError::Other(format!("AES-GCM failed: {e:?}")))
     }
 
     /// Opens `input`, the ciphertext then the tag, and returns the plaintext length.

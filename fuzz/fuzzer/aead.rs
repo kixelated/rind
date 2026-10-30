@@ -21,7 +21,7 @@ fuzz_target!(|op: Operation| {
                 let k = rind::aead::ChaCha20Poly1305::new(key);
                 let mut cipher = plain.clone();
                 let mut tag = [0u8; 16];
-                k.encrypt(&nonce, &aad, &mut cipher, &mut tag);
+                k.encrypt(&nonce, &aad, &mut cipher, &mut tag).unwrap();
 
                 let mut roundtrip = cipher.clone();
                 k.decrypt(&nonce, &aad, &mut roundtrip, &tag).unwrap();
@@ -39,10 +39,10 @@ fuzz_target!(|op: Operation| {
         } => {
             let right = baseline_encrypt(&aws_lc_rs::aead::AES_128_GCM, &key, &nonce, &aad, &plain);
             let left = {
-                let k = rind::aead::AesGcm::new(&key);
+                let k = rind::aead::AesGcm::new(&key).unwrap();
                 let mut cipher = plain.clone();
                 let mut tag = [0u8; 16];
-                k.encrypt(&nonce, &aad, &mut cipher, &mut tag);
+                k.encrypt(&nonce, &aad, &mut cipher, &mut tag).unwrap();
 
                 let mut roundtrip = cipher.clone();
                 k.decrypt(&nonce, &aad, &mut roundtrip, &tag).unwrap();
@@ -60,10 +60,10 @@ fuzz_target!(|op: Operation| {
         } => {
             let right = baseline_encrypt(&aws_lc_rs::aead::AES_256_GCM, &key, &nonce, &aad, &plain);
             let left = {
-                let k = rind::aead::AesGcm::new(&key);
+                let k = rind::aead::AesGcm::new(&key).unwrap();
                 let mut cipher = plain.clone();
                 let mut tag = [0u8; 16];
-                k.encrypt(&nonce, &aad, &mut cipher, &mut tag);
+                k.encrypt(&nonce, &aad, &mut cipher, &mut tag).unwrap();
 
                 let mut roundtrip = cipher.clone();
                 k.decrypt(&nonce, &aad, &mut roundtrip, &tag).unwrap();
