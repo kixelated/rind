@@ -477,8 +477,8 @@ impl Coeffs<{ K * K * N }, Ntt> {
             low::mlkem_basemul_k3(&mut term.0, aa, &s.0, &s_precomp.0);
             low::mlkem_tomont(&mut term.0);
 
-            for (r, t) in rr.iter_mut().zip(term.0) {
-                *r = r.wrapping_add(t);
+            for (r, t) in rr.iter_mut().zip(term.0.iter()) {
+                *r = r.wrapping_add(*t);
             }
         }
 
@@ -520,8 +520,8 @@ impl Coeffs<{ K * K * N }, Ntt> {
         {
             low::mlkem_basemul_k3(&mut term.0, aa, &y.0, &y_precomp.0);
 
-            for (r, t) in rr.iter_mut().zip(term.0) {
-                *r = r.wrapping_add(t);
+            for (r, t) in rr.iter_mut().zip(term.0.iter()) {
+                *r = r.wrapping_add(*t);
             }
         }
 
