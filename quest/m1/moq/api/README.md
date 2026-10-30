@@ -110,7 +110,6 @@ onto this shape.
 
 ## Required
 
-- [AEAD keys bound to an algorithm](/quest/m1/moq/api/aead.md) - `aead` and `cipher` keys take an algorithm constant, with `LessSafeKey` and a randomized-nonce key
 - [Reusable HMAC keys](/quest/m1/moq/api/hmac.md) - an `hmac::Key` built once, with contexts, `sign`, and `verify`
 - [Typed HKDF output](/quest/m1/moq/api/hkdf.md) - `hkdf::Salt`, `Prk`, and an `Okm` whose length matches the key it becomes
 - [Signature key pairs](/quest/m1/moq/api/signature.md) - ECDSA, RSA, and Ed25519 key pairs and verification algorithms bound to constants

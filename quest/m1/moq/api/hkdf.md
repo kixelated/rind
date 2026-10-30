@@ -53,4 +53,3 @@ moq-e2ee's credential derivation, all from aws-lc-rs's identical shape.
 ## Required
 
 - [Reusable HMAC keys](/quest/m1/moq/api/hmac.md) - `hkdf::Algorithm` wraps an `hmac::Algorithm`, and `Okm` builds an `hmac::Key`
-- [AEAD keys bound to an algorithm](/quest/m1/moq/api/aead.md) - `Okm` builds an `aead::UnboundKey`
