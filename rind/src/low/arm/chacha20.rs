@@ -167,12 +167,9 @@ pub(crate) struct XChaCha20(ChaCha20);
 
 impl XChaCha20 {
     pub(crate) fn new(key: &[u8; 32], nonce: &[u8; 24]) -> Self {
-        let mut subkey = hchacha20(key, nonce);
         let mut chacha_nonce = [0u8; 16];
         chacha_nonce[8..].copy_from_slice(&nonce[16..]);
-        let chacha = ChaCha20::new(&subkey, &chacha_nonce);
-        zeroise(&mut subkey);
-        Self(chacha)
+        Self(ChaCha20::new(&hchacha20(key, nonce), &chacha_nonce))
     }
 
     pub(crate) fn cipher(&mut self, buffer: &mut [u8]) {
@@ -196,6 +193,5 @@ fn hchacha20(key: &[u8; 32], nonce: &[u8; 24]) -> [u8; 32] {
     {
         *o = w.to_le_bytes();
     }
-    zeroise(&mut st);
     out
 }

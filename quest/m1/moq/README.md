@@ -72,7 +72,6 @@ RustCrypto dependency.
 - [instant-acme 0.9 is released](/quest/m1/moq/instant-acme-release.md) - waiting on the release with a pluggable `CryptoProvider`
 - [rind-instant-acme](/quest/m1/moq/instant-acme.md) - instant-acme 0.9's `CryptoProvider`
 - [libcrux releases its bignum constant-time fix](/quest/m1/moq/libcrux-ct-fixes.md) - waiting on libcrux's fix, then dropping its armv7 ctgrind suppression
-- [Wipe libcrux's secret stack copies on armv7](/quest/m1/moq/libcrux-stack-wipe.md) - report upstream and scrub what rind can meanwhile
 - [armv7 ctgrind on PRs](/quest/m1/moq/armv7-ctgrind-pr.md) - the release job gates PRs if it is fast enough
 - [Zeroing matches aws-lc](/quest/m1/moq/zeroing-parity.md) - owned keys wipe on drop; scratch and stack-copy wipes beyond aws-lc are reverted
 - [Verification](/quest/m1/moq/verify.md) - Wycheproof, aws-lc-rs differential tests, adapter handshakes, and benchmarks on every backend

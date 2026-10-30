@@ -42,7 +42,6 @@ impl Drop for Poly1305 {
     fn drop(&mut self) {
         let state = &mut self.0[0];
         zeroise(&mut state.block_state);
-        zeroise(&mut state.buf);
         zeroise(&mut state.p_key);
     }
 }
