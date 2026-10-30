@@ -6,13 +6,7 @@ use crate::mid::rng::{RandomSource, SystemRandom};
 use crate::{Error, low};
 
 /// An X25519 ephemeral private key.
-///
-/// This is single-use, which is usually sufficient and desirable for
-/// straightforward key exchange.
-///
-/// Use [`StaticPrivateKey`] if you need to serialize, deserialize,
-/// or do the Diffie-Hellman operation multiple times.
-pub struct PrivateKey([u64; 4]);
+pub(crate) struct PrivateKey([u64; 4]);
 
 impl PrivateKey {
     const BYTES: usize = 32;
@@ -20,7 +14,7 @@ impl PrivateKey {
     /// Generate a new key using the system random number generator.
     ///
     /// Fails only if the random source fails.
-    pub fn new_random() -> Result<Self, Error> {
+    pub(crate) fn new_random() -> Result<Self, Error> {
         let _entry = low::Entry::new_secret();
         let mut r = [0u8; Self::BYTES];
         SystemRandom.fill(&mut r)?;
@@ -29,7 +23,7 @@ impl PrivateKey {
     }
 
     /// Compute the associated public key.
-    pub fn public_key(&self) -> PublicKey {
+    pub(crate) fn public_key(&self) -> PublicKey {
         let _entry = low::Entry::new_secret();
         let mut res = [0u64; 4];
         low::curve25519_x25519base(&mut res, &self.0);
@@ -45,7 +39,7 @@ impl PrivateKey {
     /// Fails if the shared secret is zero with [`Error::NotOnCurve`]; see
     /// <https://datatracker.ietf.org/doc/html/rfc7748#section-6.1>
     /// for rationale behind this check.
-    pub fn diffie_hellman(self, peer: &PublicKey) -> Result<SharedSecret, Error> {
+    pub(crate) fn diffie_hellman(&self, peer: &PublicKey) -> Result<SharedSecret, Error> {
         let _entry = low::Entry::new_secret();
         let mut res = [0u64; 4];
         low::curve25519_x25519(&mut res, &self.0, &peer.0);
@@ -73,15 +67,18 @@ const ZERO: [u64; 4] = [0; 4];
 /// key exchange.
 ///
 /// However it is necessary for other protocols, like 3DH, HPKE, etc.
-pub struct StaticPrivateKey(PrivateKey);
+/// No consumer needs one, so only tests build it from known scalars.
+#[cfg(test)]
+pub(crate) struct StaticPrivateKey(PrivateKey);
 
+#[cfg(test)]
 impl StaticPrivateKey {
     const BYTES: usize = 32;
 
     /// Create an X25519 [`StaticPrivateKey`] from a byte slice.
     ///
     /// This must be exactly 32 bytes in length.
-    pub fn try_from_slice(b: &[u8]) -> Result<Self, Error> {
+    pub(crate) fn try_from_slice(b: &[u8]) -> Result<Self, Error> {
         let _entry = low::Entry::new_secret();
         low::ct::secret_slice(b);
         util::little_endian_slice_to_u64x4(b)
@@ -90,14 +87,14 @@ impl StaticPrivateKey {
     }
 
     /// Create an X25519 [`StaticPrivateKey`] from a byte array.
-    pub fn from_array(b: &[u8; Self::BYTES]) -> Self {
+    pub(crate) fn from_array(b: &[u8; Self::BYTES]) -> Self {
         let _entry = low::Entry::new_secret();
         low::ct::secret_slice(b);
         Self(PrivateKey(util::little_endian_to_u64x4(b)))
     }
 
     /// Extract the bytes of this private key.
-    pub fn as_bytes(&self) -> [u8; Self::BYTES] {
+    pub(crate) fn as_bytes(&self) -> [u8; Self::BYTES] {
         let _entry = low::Entry::new_secret();
         let bytes = util::u64x4_to_little_endian(&self.0.0);
         low::ct::public_slice(&bytes);
@@ -107,13 +104,13 @@ impl StaticPrivateKey {
     /// Generate a new key using the system random number generator.
     ///
     /// Fails only if the random source fails.
-    pub fn new_random() -> Result<Self, Error> {
+    pub(crate) fn new_random() -> Result<Self, Error> {
         let _entry = low::Entry::new_secret();
         PrivateKey::new_random().map(Self)
     }
 
     /// Compute the associated public key.
-    pub fn public_key(&self) -> PublicKey {
+    pub(crate) fn public_key(&self) -> PublicKey {
         let _entry = low::Entry::new_secret();
         self.0.public_key()
     }
@@ -127,14 +124,14 @@ impl StaticPrivateKey {
     /// Fails if the shared secret is zero with [`Error::NotOnCurve`]; see
     /// <https://datatracker.ietf.org/doc/html/rfc7748#section-6.1>
     /// for rationale behind this check.
-    pub fn diffie_hellman(&self, peer: &PublicKey) -> Result<SharedSecret, Error> {
+    pub(crate) fn diffie_hellman(&self, peer: &PublicKey) -> Result<SharedSecret, Error> {
         let _entry = low::Entry::new_secret();
-        PrivateKey(self.0.0).diffie_hellman(peer)
+        self.0.diffie_hellman(peer)
     }
 }
 
 /// An X25519 public key.
-pub struct PublicKey([u64; 4]);
+pub(crate) struct PublicKey([u64; 4]);
 
 impl PublicKey {
     const BYTES: usize = 32;
@@ -142,7 +139,7 @@ impl PublicKey {
     /// Create an X25519 [`PublicKey`] from a byte slice.
     ///
     /// This must be exactly 32 bytes in length.
-    pub fn try_from_slice(b: &[u8]) -> Result<Self, Error> {
+    pub(crate) fn try_from_slice(b: &[u8]) -> Result<Self, Error> {
         let _entry = low::Entry::new_public();
         util::little_endian_slice_to_u64x4(b)
             .map(Self)
@@ -150,24 +147,26 @@ impl PublicKey {
     }
 
     /// Create an X25519 [`PublicKey`] from a byte array.
-    pub fn from_array(b: &[u8; Self::BYTES]) -> Self {
+    #[cfg(test)]
+    pub(crate) fn from_array(b: &[u8; Self::BYTES]) -> Self {
         let _entry = low::Entry::new_public();
         Self(util::little_endian_to_u64x4(b))
     }
 
     /// Extract the bytes of this public key.
-    pub fn as_bytes(&self) -> [u8; Self::BYTES] {
+    pub(crate) fn as_bytes(&self) -> [u8; Self::BYTES] {
         let _entry = low::Entry::new_public();
         util::u64x4_to_little_endian(&self.0)
     }
 }
 
 /// A shared secret resulting from a X25519 Diffie-Hellman operation.
-pub struct SharedSecret(pub [u8; 32]);
+pub(crate) struct SharedSecret(pub(crate) [u8; 32]);
 
 impl SharedSecret {
     /// Extract the bytes of this shared secret.
-    pub fn as_bytes(&self) -> [u8; 32] {
+    #[cfg(test)]
+    pub(crate) fn as_bytes(&self) -> [u8; 32] {
         let bytes = self.0;
         low::ct::public_slice(&bytes);
         bytes

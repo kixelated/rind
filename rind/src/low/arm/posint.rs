@@ -161,7 +161,7 @@ mod tests {
     #[test]
     fn zero() {
         let x = PosInt::<2>::from_bytes(b"\x00\x00").unwrap();
-        assert_eq!(x.as_words(), &[]);
+        assert!(x.as_words().is_empty());
         assert_eq!(x.len_bytes(), 0);
         assert_eq!(x.len_bits(), 0);
     }

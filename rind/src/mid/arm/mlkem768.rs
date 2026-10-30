@@ -1,29 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 
 //! ML-KEM-768 as standardised by FIPS-203.
-//!
-//! ```
-//! # fn main() -> Result<(), rind::Error> {
-//! use rind::key_agreement::mlkem768::{DecapKey, EncapKey};
-//!
-//! // The recipient generates a key pair, and sends the encoded
-//! // encapsulation key to the sender.
-//! let decap_key = DecapKey::generate()?;
-//! let encap_key_bytes = decap_key.encapsulation_key().as_bytes();
-//!
-//! // The sender decodes the encapsulation key, encapsulates a fresh
-//! // shared secret, and sends the ciphertext back to the recipient.
-//! let encap_key = EncapKey::from_bytes(&encap_key_bytes)?;
-//! let (sender_secret, ciphertext) = encap_key.encaps()?;
-//!
-//! // The recipient decapsulates the ciphertext, recovering the same
-//! // shared secret.
-//! let recipient_secret = decap_key.decaps(&ciphertext);
-//!
-//! assert_eq!(sender_secret.as_ref(), recipient_secret.as_ref());
-//! # Ok(())
-//! # }
-//! ```
 
 use core::fmt;
 
@@ -34,7 +11,7 @@ use crate::mid::rng::{RandomSource, SystemRandom};
 use crate::{Error, low};
 
 /// An ML-KEM-768 decapsulation key.
-pub struct DecapKey {
+pub(crate) struct DecapKey {
     dk: MlKem768PrivateKey,
     ek: EncapKey,
 }
@@ -43,7 +20,7 @@ impl DecapKey {
     /// Generate a random [`DecapKey`] (which contains the corresponding [`EncapKey`]).
     ///
     /// This fails only if random material generation fails.
-    pub fn generate() -> Result<Self, Error> {
+    pub(crate) fn generate() -> Result<Self, Error> {
         let _entry = low::Entry::new_secret();
         let mut seed = [0u8; 64];
         SystemRandom.fill(&mut seed)?;
@@ -53,13 +30,13 @@ impl DecapKey {
     }
 
     /// Decapsulate ciphertext `c`, yielding a [`SharedSecret`].
-    pub fn decaps(self, c: &Ciphertext) -> SharedSecret {
+    pub(crate) fn decaps(self, c: &Ciphertext) -> SharedSecret {
         let _entry = low::Entry::new_secret();
         self.decaps_internal(c)
     }
 
     /// Return the corresponding [`EncapKey`].
-    pub fn encapsulation_key(&self) -> EncapKey {
+    pub(crate) fn encapsulation_key(&self) -> EncapKey {
         let _entry = low::Entry::new_public();
         self.ek.clone()
     }
@@ -67,14 +44,13 @@ impl DecapKey {
     /// Encode the key as bytes.
     ///
     /// This is used for testing.
-    #[doc(hidden)]
-    pub fn as_bytes(&self) -> [u8; 2400] {
+    #[cfg(test)]
+    pub(crate) fn as_bytes(&self) -> [u8; 2400] {
         let _entry = low::Entry::new_secret();
         *self.dk.as_slice()
     }
 
-    #[doc(hidden)]
-    pub fn keygen_internal(seed: &[u8; 64]) -> Self {
+    pub(crate) fn keygen_internal(seed: &[u8; 64]) -> Self {
         // libcrux takes `d || z`, as FIPS-203's ML-KEM.KeyGen_internal does.
         let (dk, ek) = portable::generate_key_pair(*seed).into_parts();
         // Mark the key after libcrux derives it, since its matrix sampling
@@ -88,8 +64,7 @@ impl DecapKey {
         }
     }
 
-    #[doc(hidden)]
-    pub fn decaps_internal(&self, c: &Ciphertext) -> SharedSecret {
+    fn decaps_internal(&self, c: &Ciphertext) -> SharedSecret {
         let c = MlKem768Ciphertext::from(&c.0);
         SharedSecret(portable::decapsulate(&self.dk, &c))
     }
@@ -105,11 +80,11 @@ impl Drop for DecapKey {
 
 /// An ML-KEM-768 encapsulation key.
 #[derive(Clone)]
-pub struct EncapKey(MlKem768PublicKey);
+pub(crate) struct EncapKey(MlKem768PublicKey);
 
 impl EncapKey {
     /// Create a new [`EncapKey`] from bytes.
-    pub fn from_bytes(input: &[u8; 1184]) -> Result<Self, Error> {
+    pub(crate) fn from_bytes(input: &[u8; 1184]) -> Result<Self, Error> {
         let _entry = low::Entry::new_public();
         let ek = MlKem768PublicKey::from(input);
         // FIPS-203's modulus check.
@@ -123,7 +98,7 @@ impl EncapKey {
     ///
     /// The ciphertext can be returned to the holder of the [`DecapKey`] who can then
     /// derive the same [`SharedSecret`].
-    pub fn encaps(self) -> Result<(SharedSecret, Ciphertext), Error> {
+    pub(crate) fn encaps(&self) -> Result<(SharedSecret, Ciphertext), Error> {
         let _entry = low::Entry::new_secret();
         let mut m = Message([0; 32]);
         SystemRandom.fill(&mut m.0)?;
@@ -131,13 +106,12 @@ impl EncapKey {
     }
 
     /// Encode the [`EncapKey`] as bytes.
-    pub fn as_bytes(&self) -> [u8; 1184] {
+    pub(crate) fn as_bytes(&self) -> [u8; 1184] {
         let _entry = low::Entry::new_public();
         *self.0.as_slice()
     }
 
-    #[doc(hidden)]
-    pub fn encaps_internal(self, m: Message) -> (SharedSecret, Ciphertext) {
+    pub(crate) fn encaps_internal(&self, m: Message) -> (SharedSecret, Ciphertext) {
         low::ct::secret_slice(&m.0);
         let (c, k) = portable::encapsulate(&self.0, m.0);
         (
@@ -149,7 +123,7 @@ impl EncapKey {
 
 /// An ML-KEM-768 ciphertext.
 #[derive(Debug, Clone)]
-pub struct Ciphertext([u8; 1088]);
+pub(crate) struct Ciphertext([u8; 1088]);
 
 impl From<[u8; 1088]> for Ciphertext {
     fn from(value: [u8; 1088]) -> Self {
@@ -164,8 +138,7 @@ impl AsRef<[u8; 1088]> for Ciphertext {
 }
 
 /// A K-PKE message.
-#[doc(hidden)]
-pub struct Message(pub [u8; 32]);
+pub(crate) struct Message(pub(crate) [u8; 32]);
 
 impl Drop for Message {
     fn drop(&mut self) {
@@ -174,7 +147,7 @@ impl Drop for Message {
 }
 
 /// An ML-KEM shared secret.
-pub struct SharedSecret([u8; 32]);
+pub(crate) struct SharedSecret([u8; 32]);
 
 impl AsRef<[u8; 32]> for SharedSecret {
     fn as_ref(&self) -> &[u8; 32] {
