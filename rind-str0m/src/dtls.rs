@@ -63,7 +63,7 @@ fn generate_certificate() -> Option<DtlsCert> {
     // Firefox rejects a peer reusing another certificate's issuer and serial,
     // so the serial must be unique across processes, not only within one.
     let mut serial = [0u8; 16];
-    rind::random::fill(&mut serial).ok()?;
+    rind::rand::fill(&mut serial).ok()?;
 
     let mut name = DistinguishedName::new();
     name.push(DnType::OrganizationName, "DTLS");

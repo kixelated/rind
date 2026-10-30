@@ -211,7 +211,7 @@ pub mod hmac {
 /// ```
 pub mod hkdf {
     pub use super::high::hkdf::{
-        Algorithm, HKDF_SHA256, HKDF_SHA384, HKDF_SHA512, KeyType, Okm, Prk, Salt,
+        Algorithm, HKDF_SHA256, KeyType, Okm, Prk, Salt,
     };
 }
 
@@ -242,6 +242,9 @@ pub mod aead;
 /// Unauthenticated ciphers, for protocols that specify one alongside their own integrity protection.
 ///
 /// Prefer [`aead`] unless a protocol requires one of these.
+///
+/// Unlike aws-lc-rs's `EncryptingKey` and `DecryptingKey` contexts, these are
+/// bare keys: QUIC and DTLS header protection and SRTP need nothing more.
 pub mod cipher;
 
 /// CPU support.
@@ -259,9 +262,18 @@ pub mod cpu {
     pub use crate::low::cpu::{MissingFeature, check};
 }
 
-/// Cryptographic-quality random source
-pub mod random {
-    /// Fills the entirety of `out` with cryptographic-quality random bytes.
+/// Random bytes from the system's secure random source.
+///
+/// Unlike aws-lc-rs, there is no `SecureRandom` trait or `SystemRandom`
+/// type: no rind API takes a random source, so [`rand::fill`] is all a
+/// caller needs.
+///
+/// ```
+/// let mut nonce = [0u8; 16];
+/// rind::rand::fill(&mut nonce).unwrap();
+/// ```
+pub mod rand {
+    /// Fills the entirety of `out` with random bytes.
     pub fn fill(out: &mut [u8]) -> Result<(), super::Error> {
         use crate::mid::rng::{RandomSource, SystemRandom};
         SystemRandom.fill(out)

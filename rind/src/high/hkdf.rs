@@ -14,21 +14,8 @@ use crate::{Error, aead};
 #[derive(Clone, Copy, Debug)]
 pub struct Algorithm(hmac::Algorithm);
 
-impl Algorithm {
-    /// The HMAC algorithm that extracts and expands.
-    pub fn hmac_algorithm(&self) -> hmac::Algorithm {
-        self.0
-    }
-}
-
 /// HKDF-SHA256.
 pub static HKDF_SHA256: Algorithm = Algorithm(hmac::HMAC_SHA256);
-
-/// HKDF-SHA384.
-pub static HKDF_SHA384: Algorithm = Algorithm(hmac::HMAC_SHA384);
-
-/// HKDF-SHA512.
-pub static HKDF_SHA512: Algorithm = Algorithm(hmac::HMAC_SHA512);
 
 /// A salt, keyed once and reused for every secret it extracts from.
 pub struct Salt(hmac::Key);
@@ -248,19 +235,17 @@ mod tests {
 
     #[test]
     fn lengths() {
-        for algorithm in [HKDF_SHA256, HKDF_SHA384, HKDF_SHA512] {
-            let prk = Salt::new(algorithm, b"salt").extract(b"secret");
-            let max = 255 * algorithm.hmac_algorithm().tag_len();
-            assert_eq!(prk.expand(&[], max + 1).err(), Some(Error::WrongLength));
+        let prk = Salt::new(HKDF_SHA256, b"salt").extract(b"secret");
+        let max = 255 * 32;
+        assert_eq!(prk.expand(&[], max + 1).err(), Some(Error::WrongLength));
 
-            let mut out = vec![0u8; max];
-            prk.expand(&[], max).unwrap().fill(&mut out).unwrap();
-            for len in [0, max - 1, max + 1] {
-                let mut wrong = vec![0u8; len];
-                let okm = prk.expand(&[], max).unwrap();
-                assert_eq!(okm.fill(&mut wrong), Err(Error::WrongLength));
-                assert!(wrong.iter().all(|b| *b == 0));
-            }
+        let mut out = vec![0u8; max];
+        prk.expand(&[], max).unwrap().fill(&mut out).unwrap();
+        for len in [0, max - 1, max + 1] {
+            let mut wrong = vec![0u8; len];
+            let okm = prk.expand(&[], max).unwrap();
+            assert_eq!(okm.fill(&mut wrong), Err(Error::WrongLength));
+            assert!(wrong.iter().all(|b| *b == 0));
         }
 
         // A `KeyType` that grows after `expand` checked it is refused by
@@ -335,8 +320,8 @@ mod tests {
         // key material or anything derived from it, including the keys an
         // `Okm` becomes.
         let info: [&[u8]; 1] = [b"info"];
-        let derive = |algorithm, ikm: &[u8]| {
-            let prk = Salt::new(algorithm, b"salt").extract(ikm);
+        let derive = |ikm: &[u8]| {
+            let prk = Salt::new(HKDF_SHA256, b"salt").extract(ikm);
             let mut bytes = [0u8; 100];
             prk.expand(&info, bytes.len())
                 .unwrap()
@@ -361,16 +346,14 @@ mod tests {
             )
         };
 
-        for algorithm in [HKDF_SHA256, HKDF_SHA384, HKDF_SHA512] {
-            let ikm = [0x5a; 48];
-            let wanted = derive(algorithm, &ikm);
+        let ikm = [0x5a; 48];
+        let wanted = derive(&ikm);
 
-            crate::low::ct::secret_slice(&ikm);
-            let (bytes, aead_tag, hmac_tag) = derive(algorithm, &ikm);
-            crate::low::ct::public_slice(&bytes);
-            crate::low::ct::public_slice(&aead_tag);
-            crate::low::ct::public_slice(&hmac_tag);
-            assert_eq!((bytes, aead_tag, hmac_tag), wanted);
-        }
+        crate::low::ct::secret_slice(&ikm);
+        let (bytes, aead_tag, hmac_tag) = derive(&ikm);
+        crate::low::ct::public_slice(&bytes);
+        crate::low::ct::public_slice(&aead_tag);
+        crate::low::ct::public_slice(&hmac_tag);
+        assert_eq!((bytes, aead_tag, hmac_tag), wanted);
     }
 }

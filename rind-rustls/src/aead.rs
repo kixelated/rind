@@ -370,7 +370,7 @@ mod tests {
 
     fn random_bytes<const L: usize>() -> Result<[u8; L], Error> {
         let mut bytes = [0; L];
-        rind::random::fill(&mut bytes).map_err(|_| rustls::crypto::GetRandomFailed)?;
+        rind::rand::fill(&mut bytes).map_err(|_| rustls::crypto::GetRandomFailed)?;
         Ok(bytes)
     }
 

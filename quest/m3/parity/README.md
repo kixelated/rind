@@ -17,8 +17,8 @@ adds it, or the reason rind refuses it), linked from the README.
 Decided by the maintainer on 2026-10-30:
 
 - m3: no named consumer yet beyond anyone who wants to switch.
-- rind keeps its own API, shaped after aws-lc-rs by
-  [the m1 API epic](/quest/m1/moq/api/README.md); exact name-for-name
+- rind keeps its own API, shaped after aws-lc-rs, with each deviation's
+  reason in the docs of the item that deviates; exact name-for-name
   compatibility lives only in `rind-ring`.
 - ring's algorithm set first. aws-lc-rs's extras wait for a consumer.
 - Out of reach whatever the scope: FIPS validation, and anything that

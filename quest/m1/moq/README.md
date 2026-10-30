@@ -73,5 +73,4 @@ RustCrypto dependency.
 - [armv7 ctgrind on PRs](/quest/m1/moq/armv7-ctgrind-pr.md) - the release job gates PRs if it is fast enough
 - [Publish rind-instant-acme](/quest/m1/moq/instant-acme-publish.md) - switch to the 0.9 release and publish
 - [Leave graviola's fork network](/quest/m1/moq/detach-fork.md) - waiting on the maintainer to detach the GitHub fork
-- [Learn from aws-lc-rs's API](/quest/m1/moq/api/README.md) - aws-lc-rs-shaped `aead`, `agreement`, `kem`, `signature`, `digest`, `hmac`, `hkdf`, and `rand` before the first release
 - [Release](/quest/m1/moq/release.md) - publish the rind release MoQ switches to

@@ -10,7 +10,7 @@
 //! let key = rind_rcgen::KeyPair::generate().unwrap();
 //!
 //! let mut serial = [0u8; 16];
-//! rind::random::fill(&mut serial).unwrap();
+//! rind::rand::fill(&mut serial).unwrap();
 //!
 //! let mut params = rcgen::CertificateParams::new(["localhost".to_string()]).unwrap();
 //! params.serial_number = Some(rcgen::SerialNumber::from_slice(&serial));

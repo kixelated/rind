@@ -141,6 +141,7 @@ different one, updates this table and [LICENSE] in the same PR.
 [libcrux-aes]: https://github.com/cryspen/libcrux/tree/main/crates/algorithms/aes
 [libcrux]: https://github.com/cryspen/libcrux
 [aws-lc]: https://github.com/aws/aws-lc
+[aws-lc-rs]: https://github.com/aws/aws-lc-rs
 [fiat-crypto]: https://github.com/mit-plv/fiat-crypto
 [Wycheproof]: https://github.com/C2SP/wycheproof
 [LICENSE]: https://github.com/moq-dev/rind/blob/main/LICENSE
@@ -241,11 +242,29 @@ bitsliced AES and AES-GCM.
 
 ## Architecture
 
-We have broadly three module layers:
+The public API follows [aws-lc-rs]'s module names and shapes: each algorithm module
+takes an algorithm constant, such as `aead::AES_128_GCM` or
+`signature::ECDSA_P256_SHA256_ASN1`, and has one key type per role. Where
+rind deviates, the item's docs say why.
 
-- `low`: low level primitives. private. platform-specific. unsafe allowed. minimal std and alloc.
-- `mid`: constructions, protocols and encodings. private. platform agnostic. no unsafe. minimal std and alloc.
-- `high`: high level encodings and operations. public. platform agnostic. no unsafe.
+- `aead`: AES-GCM and ChaCha20-Poly1305 keys with caller nonces, and an
+  XChaCha20-Poly1305 key that picks random nonces.
+- `cipher`: bare AES, AES-CTR, and ChaCha20, for header protection and SRTP.
+- `agreement`: ephemeral X25519 and ECDH on P-256 and P-384.
+- `kem`: ML-KEM-768.
+- `signature`: ECDSA on P-256 and P-384, RSA PKCS#1 v1.5 and PSS, and
+  Ed25519 key pairs and verification.
+- `digest`: SHA-1 (legacy only), SHA-256, SHA-384, and SHA-512.
+- `hmac`: HMAC over those digests, keyed once and reused.
+- `hkdf`: HKDF-SHA256, whose output becomes an `aead` or `hmac` key.
+- `rand`: random bytes from the system.
+- `cpu`: the startup check for required CPU features.
+
+The public modules wrap three private layers:
+
+- `low`: low level primitives. platform-specific. unsafe allowed. minimal std and alloc.
+- `mid`: constructions, protocols and encodings. platform agnostic. no unsafe. minimal std and alloc.
+- `high`: high level encodings and operations. platform agnostic. no unsafe.
 
 `low` code should not refer to `mid`, nor `mid` to `high`.
 

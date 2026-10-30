@@ -676,12 +676,6 @@ impl RsaKeyPair {
         self.key.to_pkcs8_der(output)
     }
 
-    /// Writes the private key as a PKCS#1 `RSAPrivateKey` to the start of
-    /// `output`, returning the written span.
-    pub fn to_pkcs1_der<'a>(&self, output: &'a mut [u8]) -> Result<&'a [u8], Error> {
-        self.key.to_pkcs1_der(output)
-    }
-
     /// Writes the public key as a `SubjectPublicKeyInfo` to the start of
     /// `output`, returning the written span.
     pub fn to_spki_der<'a>(&self, output: &'a mut [u8]) -> Result<&'a [u8], Error> {
@@ -780,16 +774,11 @@ impl Ed25519KeyPair {
         Ok(Self::new(Ed25519SigningKey::from_pkcs8_der(pkcs8)?))
     }
 
-    /// Loads a 32-byte seed, with no public key to check it against.
-    pub fn from_seed_unchecked(seed: &[u8]) -> Result<Self, Error> {
-        Ok(Self::new(Ed25519SigningKey::from_bytes(seed)?))
-    }
-
     /// Loads a 32-byte seed, refused unless `public_key` is its public key.
     ///
     /// This suits a JWK's `d` and `x`.
     pub fn from_seed_and_public_key(seed: &[u8], public_key: &[u8]) -> Result<Self, Error> {
-        let pair = Self::from_seed_unchecked(seed)?;
+        let pair = Self::new(Ed25519SigningKey::from_bytes(seed)?);
         match pair.public_key.as_ref() == public_key {
             true => Ok(pair),
             false => Err(KeyFormatError::MismatchedPublicKey.into()),
@@ -1096,7 +1085,7 @@ mod tests {
         }
         for seed in [&seed[..31], &[seed.as_slice(), &[0]].concat()] {
             assert_eq!(
-                rejected(Ed25519KeyPair::from_seed_unchecked(seed)),
+                rejected(Ed25519KeyPair::from_seed_and_public_key(seed, public)),
                 Error::WrongLength
             );
         }

@@ -3,7 +3,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use rind::aead::{Aad, RandomNonce, RandomizedNonceKey};
-use rind::random;
+use rind::rand;
 use rustls::crypto::GetRandomFailed;
 use rustls::server::ProducesTickets;
 use rustls::{Error, TicketRotator};
@@ -41,8 +41,8 @@ impl XChaCha20Ticketer {
         let mut key = [0u8; 32];
         let mut key_name = [0u8; 16];
 
-        random::fill(&mut key).map_err(|_| GetRandomFailed)?;
-        random::fill(&mut key_name).map_err(|_| GetRandomFailed)?;
+        rand::fill(&mut key).map_err(|_| GetRandomFailed)?;
+        rand::fill(&mut key_name).map_err(|_| GetRandomFailed)?;
 
         let key = RandomizedNonceKey::new(&key);
 
