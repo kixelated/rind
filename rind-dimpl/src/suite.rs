@@ -90,6 +90,7 @@ impl Cipher for Aead {
             Self::AesGcm(aead) => aead.encrypt(&nonce.0, &aad, plaintext, &mut tag),
             Self::ChaCha20Poly1305(aead) => aead.encrypt(&nonce.0, &aad, plaintext, &mut tag),
         }
+        .map_err(|_| CryptoError::OperationFailed(CryptoOperation::Encrypt))?;
         plaintext.extend_from_slice(&tag);
         Ok(())
     }
