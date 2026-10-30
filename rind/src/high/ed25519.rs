@@ -17,7 +17,8 @@ impl Ed25519VerifyingKey {
     /// Decode from `SubjectPublicKeyInfo` DER format.
     pub fn from_spki_der(bytes: &[u8]) -> Result<Self, Error> {
         let _entry = Entry::new_public();
-        let decoded = pkix::SubjectPublicKeyInfo::from_bytes(bytes).map_err(Error::Asn1Error)?;
+        let decoded =
+            pkix::SubjectPublicKeyInfo::from_bytes(bytes).map_err(KeyFormatError::Asn1)?;
 
         if decoded.algorithm.algorithm != asn1::oid::id_ed25519 {
             return Err(KeyFormatError::MismatchedSpkiAlgorithm.into());
@@ -113,7 +114,7 @@ impl Ed25519SigningKey {
         let p8 = pkcs8::Key::decode(bytes, &asn1::oid::id_ed25519, None)?;
 
         let key = asn1::OctetString::from_bytes(p8.private_key())
-            .map_err(Error::Asn1Error)
+            .map_err(|e| Error::from(KeyFormatError::Asn1(e)))
             .and_then(|pk| Self::from_bytes(pk.as_octets()))?;
 
         if let Some(alleged_pub_key) = p8.public_key() {
@@ -139,7 +140,7 @@ impl Ed25519SigningKey {
         let mut private_key_buf = [0u8; 34];
         let private_key_len = asn1::OctetString::new(self.0.as_seed_bytes())
             .encode(&mut asn1::Encoder::new(&mut private_key_buf))
-            .map_err(Error::Asn1Error)?;
+            .map_err(|_| Error::WrongLength)?;
         assert_eq!(private_key_len, private_key_buf.len());
 
         let public_key = self.public_key().as_bytes();
@@ -216,6 +217,10 @@ mod tests {
         let key = Ed25519SigningKey::from_pkcs8_der(bytes).unwrap();
 
         let mut buf = vec![0; bytes.len()];
+        assert_eq!(
+            key.to_pkcs8_der(&mut buf[..bytes.len() - 1]),
+            Err(Error::WrongLength)
+        );
         let buf = key.to_pkcs8_der(&mut buf).unwrap();
         assert_eq!(bytes, buf);
     }

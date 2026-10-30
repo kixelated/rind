@@ -27,7 +27,7 @@ impl<'a> Key<'a> {
         parameters: Option<asn1::Any<'_>>,
     ) -> Result<Self, Error> {
         let oak = pkix::OneAsymmetricKey::parse(&mut asn1::Parser::new(slice))
-            .map_err(Error::Asn1Error)?;
+            .map_err(KeyFormatError::Asn1)?;
 
         match (oak.version, oak.publicKey.inner()) {
             (pkix::Pkcs8Version::Pkcs8v1, None) => {}
@@ -81,7 +81,7 @@ impl<'a> Key<'a> {
         let len = self
             .0
             .encode(&mut asn1::Encoder::new(output))
-            .map_err(Error::Asn1Error)?;
+            .map_err(|_| Error::WrongLength)?;
 
         output.get(..len).ok_or(Error::WrongLength)
     }
@@ -148,7 +148,7 @@ mod tests {
         let mut bytes = include_bytes!("asn1/testdata/ed25519-p8v2.bin").to_vec();
         bytes[4] = 0x03;
         assert_eq!(
-            Some(Error::Asn1Error(asn1::Error::UnhandledEnumValue)),
+            Some(KeyFormatError::Asn1(asn1::Error::UnhandledEnumValue).into()),
             Key::decode(&bytes, &oid::id_ed25519, None).err(),
         );
     }

@@ -69,10 +69,11 @@ RustCrypto dependency.
 - [str0m releases its dimpl 0.9 provider interface](/quest/m1/moq/str0m-release.md) - waiting on the release `rind-str0m` targets
 - [rind-str0m on a str0m release](/quest/m1/moq/str0m.md) - publishable once it depends on that release
 - [instant-acme 0.9 is released](/quest/m1/moq/instant-acme-release.md) - waiting on the release with a pluggable `CryptoProvider`
-- [rind-instant-acme](/quest/m1/moq/instant-acme.md) - instant-acme's `CryptoProvider`, on its main branch until 0.9 ships
 - [libcrux releases its bignum constant-time fix](/quest/m1/moq/libcrux-ct-fixes.md) - waiting on libcrux's fix, then dropping its armv7 ctgrind suppression
 - [armv7 ctgrind on PRs](/quest/m1/moq/armv7-ctgrind-pr.md) - the release job gates PRs if it is fast enough
 - [Publish rind-instant-acme](/quest/m1/moq/instant-acme-publish.md) - switch to the 0.9 release and publish
-- [Inherited wipes match aws-lc](/quest/m1/moq/inherited-wipes.md) - graviola's wipes and the ECDH shared point follow the zeroing rule
 - [SHA-1 AVX2 rounds in Rust](/quest/m1/moq/sha1-rust.md) - no new inline assembly in the SHA-1 path
+- [Ed25519 wipes match aws-lc](/quest/m1/moq/ed25519-wipes.md) - the hashed seed, hash, and nonce are cleared as aws-lc does
+- [Vector registers match aws-lc](/quest/m1/moq/vector-clear.md) - no register clearing beyond aws-lc, unless needed for speed
+- [Learn from aws-lc-rs's API](/quest/m1/moq/api/README.md) - aws-lc-rs-shaped `aead`, `agreement`, `kem`, `signature`, `digest`, `hmac`, `hkdf`, and `rand` before the first release
 - [Release](/quest/m1/moq/release.md) - publish the rind release MoQ switches to
