@@ -6,8 +6,8 @@
 //! This is SHA256, SHA384, and SHA512.
 //! These are all described in [FIPS180](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf).
 
-use crate::low::Blockwise;
 use crate::low::cpu::verify_cpu_features;
+use crate::low::{Blockwise, Zeroable, zeroise, zeroise_value};
 
 /// A context for incremental computation of SHA256.
 #[derive(Clone)]
@@ -40,8 +40,9 @@ impl Sha256Context {
 
         let bytes = self.blockwise.add_leading(bytes);
 
-        if let Some(block) = self.blockwise.take() {
+        if let Some(mut block) = self.blockwise.take() {
             self.update_blocks(&block);
+            zeroise(&mut block);
         }
 
         let (whole_blocks, remainder) = {
@@ -94,6 +95,15 @@ impl Sha256Context {
     /// The output size of SHA256.
     pub const OUTPUT_SZ: usize = 32;
 }
+
+// The state is keyed when hashing an HMAC key, and the buffer may hold secret input.
+impl Drop for Sha256Context {
+    fn drop(&mut self) {
+        zeroise_value(self);
+    }
+}
+
+impl Zeroable for Sha256Context {}
 
 /// A context for incremental computation of SHA384.
 #[derive(Clone)]
@@ -175,8 +185,9 @@ impl Sha512Context {
 
         let bytes = self.blockwise.add_leading(bytes);
 
-        if let Some(block) = self.blockwise.take() {
+        if let Some(mut block) = self.blockwise.take() {
             self.update_blocks(&block);
+            zeroise(&mut block);
         }
 
         let (whole_blocks, remainder) = {
@@ -229,6 +240,15 @@ impl Sha512Context {
     /// The output size of SHA512.
     pub const OUTPUT_SZ: usize = 64;
 }
+
+// The state is keyed when hashing an HMAC key, and the buffer may hold secret input.
+impl Drop for Sha512Context {
+    fn drop(&mut self) {
+        zeroise_value(self);
+    }
+}
+
+impl Zeroable for Sha512Context {}
 
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]

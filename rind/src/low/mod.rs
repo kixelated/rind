@@ -47,7 +47,7 @@ pub(crate) use generic::ct_copy::{ct_copy, ct_select_i16};
 pub(crate) use generic::ct_equal::ct_equal;
 #[cfg(not(target_arch = "arm"))]
 pub(crate) use generic::poly1305;
-pub(crate) use generic::zeroise::{zeroise, zeroise_value};
+pub(crate) use generic::zeroise::{Zeroable, zeroise, zeroise_value};
 #[cfg(not(target_arch = "arm"))]
 pub(crate) use posint::{PosInt, SecretPosInt};
 
