@@ -92,7 +92,9 @@ impl MessageEncrypter for ChaChaTls13Cipher {
         let aad = make_tls13_aad(total_len);
         let mut tag = [0u8; CHACHAPOLY1305_OVERHEAD];
 
-        self.0.encrypt(&nonce.0, &aad, payload.as_mut(), &mut tag);
+        self.0
+            .encrypt(&nonce.0, &aad, payload.as_mut(), &mut tag)
+            .map_err(|_| rustls::Error::EncryptError)?;
         payload.extend_from_slice(&tag);
 
         Ok(OutboundOpaqueMessage::new(
@@ -147,7 +149,9 @@ impl MessageEncrypter for ChaChaTls12Cipher {
         let aad = make_tls12_aad(seq, m.typ, m.version, m.payload.len());
         let mut tag = [0u8; CHACHAPOLY1305_OVERHEAD];
 
-        self.0.encrypt(&nonce.0, &aad, payload.as_mut(), &mut tag);
+        self.0
+            .encrypt(&nonce.0, &aad, payload.as_mut(), &mut tag)
+            .map_err(|_| rustls::Error::EncryptError)?;
         payload.extend_from_slice(&tag);
 
         Ok(OutboundOpaqueMessage::new(m.typ, m.version, payload))
@@ -308,12 +312,14 @@ impl MessageEncrypter for GcmTls12MessageEncrypter {
         payload.extend_from_chunks(&msg.payload);
 
         let mut tag = [0u8; AESGCM_TAG];
-        self.0.encrypt(
-            &nonce.0,
-            &aad,
-            &mut payload.as_mut()[AESGCM_EXPLICIT_NONCE_LEN..],
-            &mut tag,
-        );
+        self.0
+            .encrypt(
+                &nonce.0,
+                &aad,
+                &mut payload.as_mut()[AESGCM_EXPLICIT_NONCE_LEN..],
+                &mut tag,
+            )
+            .map_err(|_| rustls::Error::EncryptError)?;
         payload.extend_from_slice(&tag);
 
         Ok(OutboundOpaqueMessage::new(msg.typ, msg.version, payload))
@@ -341,7 +347,9 @@ impl MessageEncrypter for GcmTls13Cipher {
         payload.extend_from_slice(&msg.typ.to_array());
 
         let mut tag = [0u8; AESGCM_TAG];
-        self.0.encrypt(&nonce.0, &aad, payload.as_mut(), &mut tag);
+        self.0
+            .encrypt(&nonce.0, &aad, payload.as_mut(), &mut tag)
+            .map_err(|_| rustls::Error::EncryptError)?;
         payload.extend_from_slice(&tag);
 
         Ok(OutboundOpaqueMessage::new(
