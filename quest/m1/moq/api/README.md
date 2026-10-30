@@ -66,8 +66,8 @@ Each is a deviation to document on the item:
   secret to a closure so it never escapes; rind avoids callback parameters and
   returns a `SharedSecret` that wipes itself on drop instead.
 - `rind::Error` stays a matchable enum instead of aws-lc-rs's opaque
-  `Unspecified` and `KeyRejected`; see
-  [Nameable key errors](/quest/m1/moq/api/error.md).
+  `Unspecified`; a refused key encoding is its `Error::KeyRejected`, carrying
+  an opaque `KeyRejected` as in aws-lc-rs.
 - Key encodings write into a caller's buffer, as today, instead of aws-lc-rs's
   allocated `Document`s: rind's API does not allocate.
 - ML-KEM decapsulation consumes its key, like ephemeral ECDH, where
@@ -99,7 +99,7 @@ aws-lc-rs shapes with no consumer, kept out until one appears:
 ### Consumers
 
 `rind-rustls`, `rind-dimpl`, `rind-str0m`, `rind-jsonwebtoken`,
-`rind-object-store`, `rind-rcgen`, and the planned `rind-instant-acme`. MoQ
+`rind-object-store`, `rind-rcgen`, and `rind-instant-acme`. MoQ
 (moq-dev/moq at `80cafb3`) does not call rind yet; its direct aws-lc-rs and
 RustCrypto callers are the planned ones: moq-e2ee (AES-128-GCM, HKDF, HMAC),
 moq-quic (Retry integrity and token AEADs, HKDF, HMAC), moq-auth (key
@@ -111,7 +111,6 @@ onto this shape.
 ## Required
 
 - [AEAD keys bound to an algorithm](/quest/m1/moq/api/aead.md) - `aead` and `cipher` keys take an algorithm constant, with `LessSafeKey` and a randomized-nonce key
-- [Nameable key errors](/quest/m1/moq/api/error.md) - every `rind::Error` payload is a type a caller can name
 - [Digest constants](/quest/m1/moq/api/digest.md) - `digest::SHA256` and friends replace the `Hash` trait and its duplicate contexts
 - [Reusable HMAC keys](/quest/m1/moq/api/hmac.md) - an `hmac::Key` built once, with contexts, `sign`, and `verify`
 - [Typed HKDF output](/quest/m1/moq/api/hkdf.md) - `hkdf::Salt`, `Prk`, and an `Okm` whose length matches the key it becomes

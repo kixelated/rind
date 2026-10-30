@@ -89,6 +89,8 @@
                 # admin/ scripts.
                 python3
                 quest-cli
+                # rind-instant-acme's end-to-end test issues a certificate from it.
+                pebble
               ]
               ++ pkgs.lib.optionals (!pkgs.stdenv.hostPlatform.isDarwin) [
                 # Marked broken on Darwin in nixpkgs.
