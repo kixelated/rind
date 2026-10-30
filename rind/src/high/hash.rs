@@ -28,10 +28,7 @@ impl HashOutput {
         ct::into_public(ct_equal(self.as_ref(), other))
     }
 
-    /// Constant-time equality after truncation.
-    ///
-    /// `self` is truncated to `L` bytes (a compile-time constant)
-    /// before comparison with `other`.
+    /// Verify in constant time that `other` equals `self` truncated to `L` bytes.
     ///
     /// `L` being compile-time prevents the misuse that the
     /// truncation length is attacker-controlled.  An `L` of zero would
@@ -40,14 +37,14 @@ impl HashOutput {
     /// ```compile_fail,E0080
     /// use rind::hashing::{Hash, Sha256};
     ///
-    /// let _ = Sha256::hash(b"message").truncated_ct_equal::<0>(b"");
+    /// let _ = Sha256::hash(b"message").verify_truncated::<0>(b"");
     /// ```
     ///
     /// # Errors
     ///
     /// [`Error::WrongLength`] if `L` is longer than this hash, and
     /// [`Error::BadSignature`] if the truncation differs from `other`.
-    pub fn truncated_ct_equal<const L: usize>(&self, other: &[u8]) -> Result<(), Error> {
+    pub fn verify_truncated<const L: usize>(&self, other: &[u8]) -> Result<(), Error> {
         const { assert!(L != 0, "truncation length must be non-zero") };
         let truncated = self.as_ref().get(..L).ok_or(Error::WrongLength)?;
         match ct::into_public(ct_equal(truncated, other)) {
@@ -359,31 +356,31 @@ mod tests {
     use crate::test::*;
 
     #[test]
-    fn truncated_ct_equal() {
+    fn verify_truncated() {
         // Under `admin/ctgrind`, nothing may branch on or index by the hash.
         let output = Sha256::hash(b"message");
         let full = output.as_ref().to_vec();
         ct::secret_slice(output.as_ref());
 
-        assert_eq!(output.truncated_ct_equal::<1>(&full[..1]), Ok(()));
-        assert_eq!(output.truncated_ct_equal::<32>(&full), Ok(()));
+        assert_eq!(output.verify_truncated::<1>(&full[..1]), Ok(()));
+        assert_eq!(output.verify_truncated::<32>(&full), Ok(()));
         assert_eq!(
-            output.truncated_ct_equal::<33>(&full),
+            output.verify_truncated::<33>(&full),
             Err(Error::WrongLength)
         );
         assert_eq!(
-            output.truncated_ct_equal::<16>(&full),
+            output.verify_truncated::<16>(&full),
             Err(Error::BadSignature)
         );
         assert_eq!(
-            output.truncated_ct_equal::<16>(&full[..15]),
+            output.verify_truncated::<16>(&full[..15]),
             Err(Error::BadSignature)
         );
 
         let mut flipped = full[..16].to_vec();
         flipped[15] ^= 1;
         assert_eq!(
-            output.truncated_ct_equal::<16>(&flipped),
+            output.verify_truncated::<16>(&flipped),
             Err(Error::BadSignature)
         );
     }

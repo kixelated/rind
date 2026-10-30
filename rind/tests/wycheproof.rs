@@ -183,7 +183,7 @@ fn hmac_sha1_tests() {
             ctx.update(test.msg);
             let result = match test.tag.len() {
                 20 => ctx.verify(&test.tag),
-                10 => ctx.finish().truncated_ct_equal::<10>(&test.tag),
+                10 => ctx.finish().verify_truncated::<10>(&test.tag),
                 _ => todo!("unhandled truncated hmac"),
             };
 
@@ -214,7 +214,7 @@ fn hmac_sha256_tests() {
             ctx.update(test.msg);
             let result = match test.tag.len() {
                 32 => ctx.verify(&test.tag),
-                16 => ctx.finish().truncated_ct_equal::<16>(&test.tag),
+                16 => ctx.finish().verify_truncated::<16>(&test.tag),
                 _ => todo!("unhandled truncated hmac"),
             };
 
@@ -245,7 +245,7 @@ fn hmac_sha384_tests() {
             ctx.update(test.msg);
             let result = match test.tag.len() {
                 48 => ctx.verify(&test.tag),
-                24 => ctx.finish().truncated_ct_equal::<24>(&test.tag),
+                24 => ctx.finish().verify_truncated::<24>(&test.tag),
                 _ => todo!("unhandled truncated hmac"),
             };
 
@@ -277,7 +277,7 @@ fn hmac_sha512_tests() {
             ctx.update(test.msg);
             let result = match test.tag.len() {
                 64 => ctx.verify(&test.tag),
-                32 => ctx.finish().truncated_ct_equal::<32>(&test.tag),
+                32 => ctx.finish().verify_truncated::<32>(&test.tag),
                 _ => todo!("unhandled truncated hmac"),
             };
 
