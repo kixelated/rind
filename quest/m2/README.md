@@ -11,3 +11,4 @@ to get there, and the speed and armv7 work that does not block it.
 - [Re-measure accepted costs](/quest/m2/remeasure.md) - ChaCha20-Poly1305 throughput and RSA key generation timing on rind's first release
 - [rind-rustls prefers ChaCha20-Poly1305 without AES](/quest/m2/rustls-armv7-chacha.md) - armv7 cores without the crypto extension pick ChaCha first
 - [Verified AES-GCM setup on aarch64](/quest/m2/aarch64-aes-key-verified.md) - the key schedule and H powers come from verified code, or the gap is recorded
+- [armv7 tests in the dev shell](/quest/m2/armv7-test-toolchain.md) - lint and run the armv7 tests locally, as nightly CI does
