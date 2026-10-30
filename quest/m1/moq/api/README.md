@@ -1,4 +1,4 @@
-# Learn from aws-lc-rs's API
+# [S] Learn from aws-lc-rs's API
 
 ## Goal
 
@@ -107,6 +107,3 @@ generation and import for HMAC, RSA, ECDSA, Ed25519; `rand`), moq-relay and
 moq-hls (SHA-256), moq-rtmp and moq-tokio (HMAC-SHA256), and moq-rtc
 (HMAC-SHA1). Since this lands before rind's first release, MoQ ports once,
 onto this shape.
-
-## Required
-
