@@ -238,6 +238,8 @@ fn schedule_and_rounds(
     rounds4!(e f g h a b c d, bc, wk[13][0]);
     rounds4!(a b c d e f g h, bc, wk[14][0]);
     rounds4!(e f g h a b c d, bc, wk[15][0]);
+    // The last round's a ^ b is unused.
+    let _ = bc;
 
     for (s, v) in state.iter_mut().zip([a, b, c, d, e, f, g, h]) {
         *s = s.wrapping_add(v);
