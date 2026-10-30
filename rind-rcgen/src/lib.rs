@@ -37,7 +37,7 @@ impl KeyPair {
     /// Generate a random key pair.
     pub fn generate() -> Result<Self, rind::Error> {
         let key = SigningKey::<P256>::generate()?;
-        let public_key = key.private_key.public_key_uncompressed();
+        let public_key = key.public_key()?.public_key.as_bytes_uncompressed();
         Ok(Self { key, public_key })
     }
 

@@ -1,5 +1,5 @@
 use crypto::SupportedKxGroup;
-use rind::key_agreement::{p256, p384, x25519};
+use rind::agreement;
 use rustls::crypto;
 use rustls::ffdhe_groups::FfdheGroup;
 
@@ -20,14 +20,7 @@ pub struct X25519;
 
 impl SupportedKxGroup for X25519 {
     fn start(&self) -> Result<Box<dyn crypto::ActiveKeyExchange>, rustls::Error> {
-        let priv_key = x25519::PrivateKey::new_random()
-            .map_err(|_| rustls::Error::from(crypto::GetRandomFailed))?;
-        let pub_key_bytes = priv_key.public_key().as_bytes();
-
-        Ok(Box::new(ActiveX25519 {
-            pub_key_bytes,
-            priv_key,
-        }))
+        Active::start(&agreement::X25519, self.name())
     }
 
     fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
@@ -39,32 +32,6 @@ impl SupportedKxGroup for X25519 {
     }
 }
 
-struct ActiveX25519 {
-    priv_key: x25519::PrivateKey,
-    pub_key_bytes: [u8; 32],
-}
-
-impl crypto::ActiveKeyExchange for ActiveX25519 {
-    fn complete(self: Box<Self>, peer: &[u8]) -> Result<crypto::SharedSecret, rustls::Error> {
-        let shared_secret = x25519::PublicKey::try_from_slice(peer)
-            .and_then(|their_pub| self.priv_key.diffie_hellman(&their_pub))
-            .map_err(|_| rustls::Error::from(rustls::PeerMisbehaved::InvalidKeyShare))?;
-        Ok(crypto::SharedSecret::from(&shared_secret.0[..]))
-    }
-
-    fn pub_key(&self) -> &[u8] {
-        &self.pub_key_bytes
-    }
-
-    fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
-        None
-    }
-
-    fn group(&self) -> rustls::NamedGroup {
-        X25519.name()
-    }
-}
-
 /// Key exchange using P256.
 ///
 /// Also known as secp256r1 or NISTP256.
@@ -73,14 +40,7 @@ pub struct P256;
 
 impl SupportedKxGroup for P256 {
     fn start(&self) -> Result<Box<dyn crypto::ActiveKeyExchange>, rustls::Error> {
-        let priv_key = p256::PrivateKey::new_random()
-            .map_err(|_| rustls::Error::from(crypto::GetRandomFailed))?;
-        let pub_key_bytes = priv_key.public_key_uncompressed();
-
-        Ok(Box::new(ActiveP256 {
-            pub_key_bytes,
-            priv_key,
-        }))
+        Active::start(&agreement::ECDH_P256, self.name())
     }
 
     fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
@@ -92,35 +52,6 @@ impl SupportedKxGroup for P256 {
     }
 }
 
-struct ActiveP256 {
-    priv_key: p256::PrivateKey,
-    pub_key_bytes: [u8; 65],
-}
-
-impl crypto::ActiveKeyExchange for ActiveP256 {
-    fn complete(self: Box<Self>, peer: &[u8]) -> Result<crypto::SharedSecret, rustls::Error> {
-        let their_pub = p256::PublicKey::from_x962_uncompressed(peer)
-            .map_err(|_| rustls::Error::from(rustls::PeerMisbehaved::InvalidKeyShare))?;
-        let shared_secret = self
-            .priv_key
-            .diffie_hellman(&their_pub)
-            .map_err(|_| rustls::Error::from(rustls::PeerMisbehaved::InvalidKeyShare))?;
-        Ok(crypto::SharedSecret::from(&shared_secret.0[..]))
-    }
-
-    fn pub_key(&self) -> &[u8] {
-        &self.pub_key_bytes
-    }
-
-    fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
-        None
-    }
-
-    fn group(&self) -> rustls::NamedGroup {
-        P256.name()
-    }
-}
-
 /// Key exchange using P384.
 ///
 /// Also known as secp384r1 or NISTP384.
@@ -129,14 +60,7 @@ pub struct P384;
 
 impl SupportedKxGroup for P384 {
     fn start(&self) -> Result<Box<dyn crypto::ActiveKeyExchange>, rustls::Error> {
-        let priv_key = p384::PrivateKey::new_random()
-            .map_err(|_| rustls::Error::from(crypto::GetRandomFailed))?;
-        let pub_key_bytes = priv_key.public_key_uncompressed();
-
-        Ok(Box::new(ActiveP384 {
-            pub_key_bytes,
-            priv_key,
-        }))
+        Active::start(&agreement::ECDH_P384, self.name())
     }
 
     fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
@@ -148,24 +72,40 @@ impl SupportedKxGroup for P384 {
     }
 }
 
-struct ActiveP384 {
-    priv_key: p384::PrivateKey,
-    pub_key_bytes: [u8; 97],
+struct Active {
+    algorithm: &'static agreement::Algorithm,
+    group: rustls::NamedGroup,
+    priv_key: agreement::EphemeralPrivateKey,
+    pub_key: agreement::PublicKey,
 }
 
-impl crypto::ActiveKeyExchange for ActiveP384 {
+impl Active {
+    fn start(
+        algorithm: &'static agreement::Algorithm,
+        group: rustls::NamedGroup,
+    ) -> Result<Box<dyn crypto::ActiveKeyExchange>, rustls::Error> {
+        let priv_key = agreement::EphemeralPrivateKey::generate(algorithm)
+            .map_err(|_| rustls::Error::from(crypto::GetRandomFailed))?;
+        let pub_key = priv_key.compute_public_key();
+        Ok(Box::new(Self {
+            algorithm,
+            group,
+            priv_key,
+            pub_key,
+        }))
+    }
+}
+
+impl crypto::ActiveKeyExchange for Active {
     fn complete(self: Box<Self>, peer: &[u8]) -> Result<crypto::SharedSecret, rustls::Error> {
-        let their_pub = p384::PublicKey::from_x962_uncompressed(peer)
+        let peer = agreement::UnparsedPublicKey::new(self.algorithm, peer);
+        let shared_secret = agreement::agree_ephemeral(self.priv_key, &peer)
             .map_err(|_| rustls::Error::from(rustls::PeerMisbehaved::InvalidKeyShare))?;
-        let shared_secret = self
-            .priv_key
-            .diffie_hellman(&their_pub)
-            .map_err(|_| rustls::Error::from(rustls::PeerMisbehaved::InvalidKeyShare))?;
-        Ok(crypto::SharedSecret::from(&shared_secret.0[..]))
+        Ok(crypto::SharedSecret::from(shared_secret.as_ref()))
     }
 
     fn pub_key(&self) -> &[u8] {
-        &self.pub_key_bytes
+        self.pub_key.as_ref()
     }
 
     fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
@@ -173,7 +113,7 @@ impl crypto::ActiveKeyExchange for ActiveP384 {
     }
 
     fn group(&self) -> rustls::NamedGroup {
-        P384.name()
+        self.group
     }
 }
 
@@ -213,9 +153,8 @@ mod tests {
         // A key exchange with a valid peer public key should succeed.
         let active = key.start().unwrap();
         assert_eq!(active.ffdhe_group(), None);
-        let peer = x25519::PrivateKey::new_random().unwrap();
-        let peer_public_key = peer.public_key().as_bytes();
-        assert!(active.complete(&peer_public_key).is_ok());
+        let peer = agreement::EphemeralPrivateKey::generate(&agreement::X25519).unwrap();
+        assert!(active.complete(peer.compute_public_key().as_ref()).is_ok());
     }
 
     #[test]
@@ -234,9 +173,8 @@ mod tests {
         // A key exchange with a valid peer public key should succeed.
         let active = key.start().unwrap();
         assert_eq!(active.ffdhe_group(), None);
-        let peer = p256::PrivateKey::new_random().unwrap();
-        let peer_public_key = peer.public_key_uncompressed();
-        assert!(active.complete(&peer_public_key).is_ok());
+        let peer = agreement::EphemeralPrivateKey::generate(&agreement::ECDH_P256).unwrap();
+        assert!(active.complete(peer.compute_public_key().as_ref()).is_ok());
     }
 
     #[test]
@@ -255,8 +193,7 @@ mod tests {
         // A key exchange with a valid peer public key should succeed.
         let active = key.start().unwrap();
         assert_eq!(active.ffdhe_group(), None);
-        let peer = p384::PrivateKey::new_random().unwrap();
-        let peer_public_key = peer.public_key_uncompressed();
-        assert!(active.complete(&peer_public_key).is_ok());
+        let peer = agreement::EphemeralPrivateKey::generate(&agreement::ECDH_P384).unwrap();
+        assert!(active.complete(peer.compute_public_key().as_ref()).is_ok());
     }
 }

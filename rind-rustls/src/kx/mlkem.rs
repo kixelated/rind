@@ -1,4 +1,4 @@
-use rind::key_agreement::mlkem768;
+use rind::kem;
 use rustls::crypto::{ActiveKeyExchange, CompletedKeyExchange, SharedSecret, SupportedKxGroup};
 use rustls::ffdhe_groups::FfdheGroup;
 use rustls::{Error, NamedGroup, PeerMisbehaved, ProtocolVersion};
@@ -13,9 +13,9 @@ impl MlKem768 {
 
 impl SupportedKxGroup for MlKem768 {
     fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, Error> {
-        let decaps_key =
-            mlkem768::DecapKey::generate().map_err(|_| Error::FailedToGetRandomBytes)?;
-        let encaps_key_bytes = decaps_key.encapsulation_key().as_bytes();
+        let decaps_key = kem::DecapsulationKey::generate(&kem::ML_KEM_768)
+            .map_err(|_| Error::FailedToGetRandomBytes)?;
+        let encaps_key_bytes = decaps_key.encapsulation_key().key_bytes().to_vec();
 
         Ok(Box::new(Active {
             decaps_key,
@@ -24,19 +24,17 @@ impl SupportedKxGroup for MlKem768 {
     }
 
     fn start_and_complete(&self, client_share: &[u8]) -> Result<CompletedKeyExchange, Error> {
-        let client_share_array = client_share.try_into().map_err(|_| INVALID_KEY_SHARE)?;
+        let encaps_key = kem::EncapsulationKey::new(&kem::ML_KEM_768, client_share)
+            .map_err(|_| INVALID_KEY_SHARE)?;
 
-        let encaps_key =
-            mlkem768::EncapKey::from_bytes(client_share_array).map_err(|_| INVALID_KEY_SHARE)?;
-
-        let (shared_secret, ciphertext) = encaps_key
-            .encaps()
+        let (ciphertext, shared_secret) = encaps_key
+            .encapsulate()
             .map_err(|_| Error::FailedToGetRandomBytes)?;
 
         Ok(CompletedKeyExchange {
             group: self.name(),
             pub_key: Vec::from(ciphertext.as_ref()),
-            secret: SharedSecret::from(shared_secret.as_ref().as_slice()),
+            secret: SharedSecret::from(shared_secret.as_ref()),
         })
     }
 
@@ -54,18 +52,18 @@ impl SupportedKxGroup for MlKem768 {
 }
 
 struct Active {
-    decaps_key: mlkem768::DecapKey,
-    encaps_key_bytes: [u8; 1184],
+    decaps_key: kem::DecapsulationKey,
+    encaps_key_bytes: Vec<u8>,
 }
 
 impl ActiveKeyExchange for Active {
     fn complete(self: Box<Self>, peer_pub_key: &[u8]) -> Result<SharedSecret, Error> {
-        let peer_pub_key_array: [u8; 1088] =
-            peer_pub_key.try_into().map_err(|_| INVALID_KEY_SHARE)?;
-        let ciphertext = mlkem768::Ciphertext::from(peer_pub_key_array);
-        let shared_secret = self.decaps_key.decaps(&ciphertext);
+        let shared_secret = self
+            .decaps_key
+            .decapsulate(kem::Ciphertext::from(peer_pub_key))
+            .map_err(|_| INVALID_KEY_SHARE)?;
 
-        Ok(SharedSecret::from(shared_secret.as_ref().as_slice()))
+        Ok(SharedSecret::from(shared_secret.as_ref()))
     }
 
     fn pub_key(&self) -> &[u8] {
