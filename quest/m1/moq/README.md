@@ -74,4 +74,5 @@ RustCrypto dependency.
 - [ctgrind on armv7](/quest/m1/moq/armv7-ctgrind.md) - the constant-time check runs on the armv7 build
 - [Inherited wipes match aws-lc](/quest/m1/moq/inherited-wipes.md) - graviola's wipes and the ECDH shared point follow the zeroing rule
 - [SHA-1 AVX2 rounds in Rust](/quest/m1/moq/sha1-rust.md) - no new inline assembly in the SHA-1 path
+- [Learn from aws-lc-rs's API](/quest/m1/moq/api/README.md) - aws-lc-rs-shaped `aead`, `agreement`, `kem`, `signature`, `digest`, `hmac`, `hkdf`, and `rand` before the first release
 - [Release](/quest/m1/moq/release.md) - publish the rind release MoQ switches to
