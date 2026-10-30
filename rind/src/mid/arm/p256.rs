@@ -123,9 +123,7 @@ impl PrivateKey {
             let mut r = [0u8; Scalar::BYTES];
             rng.fill(&mut r)?;
             low::ct::secret_slice(&r);
-            let key = Self::from_bytes(&r);
-            low::zeroise(&mut r);
-            if let Ok(p) = key {
+            if let Ok(p) = Self::from_bytes(&r) {
                 return Ok(p);
             }
         }

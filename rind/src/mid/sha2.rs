@@ -7,7 +7,7 @@
 //! These are all described in [FIPS180](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf).
 
 use crate::low::cpu::verify_cpu_features;
-use crate::low::{Blockwise, Zeroable, zeroise, zeroise_value};
+use crate::low::{Blockwise, Zeroable, zeroise_value};
 
 /// A context for incremental computation of SHA256.
 #[derive(Clone)]
@@ -40,9 +40,8 @@ impl Sha256Context {
 
         let bytes = self.blockwise.add_leading(bytes);
 
-        if let Some(mut block) = self.blockwise.take() {
+        if let Some(block) = self.blockwise.take() {
             self.update_blocks(&block);
-            zeroise(&mut block);
         }
 
         let (whole_blocks, remainder) = {
@@ -139,12 +138,9 @@ impl Sha384Context {
 
     /// Complete the SHA384 computation, returning the hash output.
     pub fn finish(self) -> [u8; Self::OUTPUT_SZ] {
-        let mut inner = self.inner.finish();
-        let mut r = [0u8; Self::OUTPUT_SZ];
-        r.copy_from_slice(&inner[..Self::OUTPUT_SZ]);
-        // The truncated words are the rest of the final state.
-        zeroise(&mut inner);
-        r
+        let inner = self.inner.finish();
+        // SAFETY: 48 is less than 64.
+        inner[..Self::OUTPUT_SZ].try_into().unwrap()
     }
 
     /// The output size of SHA384.
@@ -188,9 +184,8 @@ impl Sha512Context {
 
         let bytes = self.blockwise.add_leading(bytes);
 
-        if let Some(mut block) = self.blockwise.take() {
+        if let Some(block) = self.blockwise.take() {
             self.update_blocks(&block);
-            zeroise(&mut block);
         }
 
         let (whole_blocks, remainder) = {

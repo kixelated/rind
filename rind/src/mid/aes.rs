@@ -116,9 +116,7 @@ pub(super) fn expand_key(key: &[u8]) -> Result<AesKey, Error> {
     let copy_key = &mut copy[..key.len()];
     copy_key.copy_from_slice(key);
     low::ct::secret_slice(copy_key);
-    let expanded = AesKey::new(copy_key);
-    zeroise(&mut copy);
-    Ok(expanded)
+    Ok(AesKey::new(copy_key))
 }
 
 #[cfg(test)]
