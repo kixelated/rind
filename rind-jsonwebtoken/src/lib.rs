@@ -26,11 +26,10 @@ use rind::hashing::{Sha256, Sha384, Sha512};
 use rind::signature::{
     ECDSA_P256_SHA256_FIXED, ECDSA_P256_SHA256_FIXED_SIGNING, ECDSA_P384_SHA384_FIXED,
     ECDSA_P384_SHA384_FIXED_SIGNING, ED25519, EcdsaKeyPair, EcdsaSigningAlgorithm, Ed25519KeyPair,
-    KeyPair as _, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_2048_8192_SHA384,
+    KeyPair as _, ParsedPublicKey, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_2048_8192_SHA384,
     RSA_PKCS1_2048_8192_SHA512, RSA_PKCS1_SHA256, RSA_PKCS1_SHA384, RSA_PKCS1_SHA512,
     RSA_PSS_2048_8192_SHA256, RSA_PSS_2048_8192_SHA384, RSA_PSS_2048_8192_SHA512, RSA_PSS_SHA256,
-    RSA_PSS_SHA384, RSA_PSS_SHA512, RsaKeyPair, RsaSignatureEncoding, UnparsedPublicKey,
-    VerificationAlgorithm,
+    RSA_PSS_SHA384, RSA_PSS_SHA512, RsaKeyPair, RsaSignatureEncoding, VerificationAlgorithm,
 };
 
 /// A jsonwebtoken [`CryptoProvider`] that signs and verifies every algorithm with rind.
@@ -114,15 +113,21 @@ fn new_verifier(algorithm: &Algorithm, key: &DecodingKey) -> Result<Box<dyn JwtV
         return Err(ErrorKind::InvalidKeyFormat.into());
     }
 
-    // As with jsonwebtoken's aws-lc-rs provider, a public key is parsed when
-    // it verifies, so a malformed one fails verification.
+    // Parsing here refuses a malformed key before any token arrives.
     let algorithm = *algorithm;
-    let public =
-        |verification: &'static dyn VerificationAlgorithm, der: Vec<u8>| -> Box<dyn JwtVerifier> {
-            verifier(algorithm, UnparsedPublicKey::new(verification, der))
-        };
-    let bytes = |verification: &'static dyn VerificationAlgorithm| -> Result<Box<dyn JwtVerifier>> {
-        Ok(public(verification, key.try_get_as_bytes()?.to_vec()))
+    let parse = |verification: &'static dyn VerificationAlgorithm,
+                 der: &[u8],
+                 invalid: ErrorKind|
+     -> Result<Box<dyn JwtVerifier>> {
+        let key = ParsedPublicKey::new(verification, der).map_err(|_| invalid)?;
+        Ok(verifier(algorithm, key))
+    };
+    let ecdsa = |verification: &'static dyn VerificationAlgorithm| {
+        parse(
+            verification,
+            key.try_get_as_bytes()?,
+            ErrorKind::InvalidEcdsaKey,
+        )
     };
     let rsa = |verification: &'static dyn VerificationAlgorithm| -> Result<Box<dyn JwtVerifier>> {
         let der = match key.kind() {
@@ -134,16 +139,21 @@ fn new_verifier(algorithm: &Algorithm, key: &DecodingKey) -> Result<Box<dyn JwtV
             .to_der()
             .map_err(invalid_rsa)?,
         };
-        Ok(public(verification, der))
+        let key = ParsedPublicKey::new(verification, der).map_err(invalid_rsa)?;
+        Ok(verifier(algorithm, key))
     };
 
     Ok(match algorithm {
         Algorithm::HS256 => verifier(algorithm, Hmac::<Sha256>::new(key.try_get_as_bytes()?)),
         Algorithm::HS384 => verifier(algorithm, Hmac::<Sha384>::new(key.try_get_as_bytes()?)),
         Algorithm::HS512 => verifier(algorithm, Hmac::<Sha512>::new(key.try_get_as_bytes()?)),
-        Algorithm::ES256 => bytes(&ECDSA_P256_SHA256_FIXED)?,
-        Algorithm::ES384 => bytes(&ECDSA_P384_SHA384_FIXED)?,
-        Algorithm::EdDSA => bytes(&ED25519)?,
+        Algorithm::ES256 => ecdsa(&ECDSA_P256_SHA256_FIXED)?,
+        Algorithm::ES384 => ecdsa(&ECDSA_P384_SHA384_FIXED)?,
+        Algorithm::EdDSA => parse(
+            &ED25519,
+            key.try_get_as_bytes()?,
+            ErrorKind::InvalidEddsaKey,
+        )?,
         Algorithm::RS256 => rsa(&RSA_PKCS1_2048_8192_SHA256)?,
         Algorithm::RS384 => rsa(&RSA_PKCS1_2048_8192_SHA384)?,
         Algorithm::RS512 => rsa(&RSA_PKCS1_2048_8192_SHA512)?,
@@ -199,7 +209,7 @@ impl Sign for (RsaKeyPair, &'static RsaSignatureEncoding) {
     }
 }
 
-impl Verify for UnparsedPublicKey<Vec<u8>> {
+impl Verify for ParsedPublicKey {
     fn verify_message(&self, message: &[u8], signature: &[u8]) -> RindResult<()> {
         self.verify(message, signature)
     }
@@ -246,9 +256,9 @@ fn rsa_pub_components_from_private_key(der: &[u8]) -> Result<(Vec<u8>, Vec<u8>)>
     rsa_pub_components_from_public_key(key.public_key().as_ref())
 }
 
-// Only splits the key: like the other public keys here, rind validates it
-// when it verifies.
 fn rsa_pub_components_from_public_key(der: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
+    // Any RSA algorithm refuses the keys rind cannot verify with.
+    ParsedPublicKey::new(&RSA_PKCS1_2048_8192_SHA256, der).map_err(invalid_rsa)?;
     let key = pkcs1::RsaPublicKey::from_der(der).map_err(invalid_rsa)?;
     Ok((
         key.modulus.as_bytes().to_vec(),

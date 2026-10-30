@@ -47,16 +47,14 @@ mod sealed {
     use crate::Error;
 
     pub trait Sealed {
-        fn verify_sig(
-            &self,
-            public_key: &[u8],
-            message: &[u8],
-            signature: &[u8],
-        ) -> Result<(), Error>;
+        fn parse(&self, public_key: &[u8]) -> Result<Key, Error>;
     }
+
+    /// A parsed key, opaque so the sealed trait names no crate-private type.
+    pub struct Key(pub(super) super::Parsed);
 }
 
-/// A signature verification algorithm, for [`UnparsedPublicKey`].
+/// A signature verification algorithm, for [`UnparsedPublicKey`] and [`ParsedPublicKey`].
 pub trait VerificationAlgorithm: fmt::Debug + Sync + sealed::Sealed {}
 
 /// A peer's public key, parsed for `algorithm` only at verification.
@@ -70,15 +68,64 @@ impl<B: AsRef<[u8]>> UnparsedPublicKey<B> {
     /// Wraps a peer's encoded public key for `algorithm`.
     ///
     /// ECDSA keys are X9.62 uncompressed points, RSA keys are PKCS#1
-    /// `RSAPublicKey` DER, and Ed25519 keys are their 32 bytes.
+    /// `RSAPublicKey` DER, and Ed25519 keys are their 32 bytes. Unlike
+    /// aws-lc-rs, a compressed ECDSA point is refused: no consumer sends one.
     pub fn new(algorithm: &'static dyn VerificationAlgorithm, bytes: B) -> Self {
         Self { algorithm, bytes }
     }
 
     /// Verifies `signature` over `message`, refusing a malformed key or signature.
     pub fn verify(&self, message: &[u8], signature: &[u8]) -> Result<(), Error> {
-        self.algorithm
-            .verify_sig(self.bytes.as_ref(), message, signature)
+        ParsedPublicKey::new(self.algorithm, self.bytes.as_ref())?.verify(message, signature)
+    }
+}
+
+/// A peer's public key, parsed for `algorithm` once, so a malformed key is
+/// refused before any signature arrives.
+pub struct ParsedPublicKey {
+    algorithm: &'static dyn VerificationAlgorithm,
+    key: Parsed,
+}
+
+#[allow(clippy::large_enum_variant)]
+enum Parsed {
+    EcdsaP256(ecdsa::VerifyingKey<P256>, Ecdsa),
+    EcdsaP384(ecdsa::VerifyingKey<P384>, Ecdsa),
+    Rsa(rsa::VerifyingKey, RsaScheme),
+    Ed25519(Ed25519VerifyingKey),
+}
+
+impl ParsedPublicKey {
+    /// Parses a peer's encoded public key, as [`UnparsedPublicKey::new`] takes it, for `algorithm`.
+    pub fn new(
+        algorithm: &'static dyn VerificationAlgorithm,
+        bytes: impl AsRef<[u8]>,
+    ) -> Result<Self, Error> {
+        Ok(Self {
+            algorithm,
+            key: algorithm.parse(bytes.as_ref())?.0,
+        })
+    }
+
+    /// Verifies `signature` over `message`, refusing a malformed signature.
+    ///
+    /// aws-lc-rs names this `verify_sig`; it matches
+    /// [`UnparsedPublicKey::verify`] here.
+    pub fn verify(&self, message: &[u8], signature: &[u8]) -> Result<(), Error> {
+        match &self.key {
+            Parsed::EcdsaP256(key, algorithm) => algorithm.verify(key, message, signature),
+            Parsed::EcdsaP384(key, algorithm) => algorithm.verify(key, message, signature),
+            Parsed::Rsa(key, scheme) => scheme.verify(key, message, signature),
+            Parsed::Ed25519(key) => key.verify(signature, message),
+        }
+    }
+}
+
+impl fmt::Debug for ParsedPublicKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ParsedPublicKey")
+            .field("algorithm", &self.algorithm)
+            .finish_non_exhaustive()
     }
 }
 
@@ -138,22 +185,21 @@ enum EcdsaEncoding {
     Fixed,
 }
 
-/// An ECDSA verification algorithm: a curve, a hash, and a signature encoding.
+/// A curve, a hash, and a signature encoding.
 #[derive(Clone, Copy, Debug)]
-pub struct EcdsaVerificationAlgorithm {
+struct Ecdsa {
     curve: CurveId,
     hash: HashId,
     encoding: EcdsaEncoding,
 }
 
-impl EcdsaVerificationAlgorithm {
-    fn verify_on<C: Curve>(
-        &self,
-        public_key: &[u8],
+impl Ecdsa {
+    fn verify<C: Curve>(
+        self,
+        key: &ecdsa::VerifyingKey<C>,
         message: &[u8],
         signature: &[u8],
     ) -> Result<(), Error> {
-        let key = ecdsa::VerifyingKey::<C>::from_x962_uncompressed(public_key)?;
         with_hash!(self.hash, |H| match self.encoding {
             EcdsaEncoding::Asn1 => key.verify_asn1::<H>(message, signature),
             EcdsaEncoding::Fixed => key.verify::<H>(message, signature),
@@ -161,12 +207,22 @@ impl EcdsaVerificationAlgorithm {
     }
 }
 
+/// An ECDSA verification algorithm: a curve, a hash, and a signature encoding.
+#[derive(Debug)]
+pub struct EcdsaVerificationAlgorithm(Ecdsa);
+
 impl sealed::Sealed for EcdsaVerificationAlgorithm {
-    fn verify_sig(&self, public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<(), Error> {
-        match self.curve {
-            CurveId::P256 => self.verify_on::<P256>(public_key, message, signature),
-            CurveId::P384 => self.verify_on::<P384>(public_key, message, signature),
-        }
+    fn parse(&self, public_key: &[u8]) -> Result<sealed::Key, Error> {
+        Ok(sealed::Key(match self.0.curve {
+            CurveId::P256 => Parsed::EcdsaP256(
+                ecdsa::VerifyingKey::from_x962_uncompressed(public_key)?,
+                self.0,
+            ),
+            CurveId::P384 => Parsed::EcdsaP384(
+                ecdsa::VerifyingKey::from_x962_uncompressed(public_key)?,
+                self.0,
+            ),
+        }))
     }
 }
 
@@ -209,37 +265,37 @@ const fn ecdsa_algorithm(
     hash: HashId,
     encoding: EcdsaEncoding,
 ) -> EcdsaVerificationAlgorithm {
-    EcdsaVerificationAlgorithm {
+    EcdsaVerificationAlgorithm(Ecdsa {
         curve,
         hash,
         encoding,
-    }
+    })
 }
 
 /// An ECDSA signing algorithm, which an [`EcdsaKeyPair`] is bound to.
-#[derive(Clone, Copy, Debug)]
-pub struct EcdsaSigningAlgorithm(EcdsaVerificationAlgorithm);
+#[derive(Debug)]
+pub struct EcdsaSigningAlgorithm(Ecdsa);
 
 /// Signs as [`ECDSA_P256_SHA256_ASN1`] verifies.
 pub static ECDSA_P256_SHA256_ASN1_SIGNING: EcdsaSigningAlgorithm =
-    EcdsaSigningAlgorithm(ECDSA_P256_SHA256_ASN1);
+    EcdsaSigningAlgorithm(ECDSA_P256_SHA256_ASN1.0);
 
 /// Signs as [`ECDSA_P384_SHA384_ASN1`] verifies.
 pub static ECDSA_P384_SHA384_ASN1_SIGNING: EcdsaSigningAlgorithm =
-    EcdsaSigningAlgorithm(ECDSA_P384_SHA384_ASN1);
+    EcdsaSigningAlgorithm(ECDSA_P384_SHA384_ASN1.0);
 
 /// Signs as [`ECDSA_P256_SHA256_FIXED`] verifies.
 pub static ECDSA_P256_SHA256_FIXED_SIGNING: EcdsaSigningAlgorithm =
-    EcdsaSigningAlgorithm(ECDSA_P256_SHA256_FIXED);
+    EcdsaSigningAlgorithm(ECDSA_P256_SHA256_FIXED.0);
 
 /// Signs as [`ECDSA_P384_SHA384_FIXED`] verifies.
 pub static ECDSA_P384_SHA384_FIXED_SIGNING: EcdsaSigningAlgorithm =
-    EcdsaSigningAlgorithm(ECDSA_P384_SHA384_FIXED);
+    EcdsaSigningAlgorithm(ECDSA_P384_SHA384_FIXED.0);
 
 /// An ECDSA private key and its public key, bound to one signing algorithm.
 pub struct EcdsaKeyPair {
     key: EcdsaKey,
-    algorithm: EcdsaVerificationAlgorithm,
+    algorithm: Ecdsa,
     public_key: EcdsaPublicKey,
 }
 
@@ -476,9 +532,9 @@ impl RsaScheme {
 pub struct RsaParameters(RsaScheme);
 
 impl sealed::Sealed for RsaParameters {
-    fn verify_sig(&self, public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<(), Error> {
+    fn parse(&self, public_key: &[u8]) -> Result<sealed::Key, Error> {
         let key = rsa::VerifyingKey::from_pkcs1_der(public_key)?;
-        self.0.verify(&key, message, signature)
+        Ok(sealed::Key(Parsed::Rsa(key, self.0)))
     }
 }
 
@@ -686,8 +742,9 @@ impl fmt::Debug for RsaSubjectPublicKey {
 pub struct EdDSAParameters;
 
 impl sealed::Sealed for EdDSAParameters {
-    fn verify_sig(&self, public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<(), Error> {
-        Ed25519VerifyingKey::from_bytes(public_key)?.verify(signature, message)
+    fn parse(&self, public_key: &[u8]) -> Result<sealed::Key, Error> {
+        let key = Ed25519VerifyingKey::from_bytes(public_key)?;
+        Ok(sealed::Key(Parsed::Ed25519(key)))
     }
 }
 
@@ -847,9 +904,35 @@ mod tests {
                 assert_eq!(result.is_ok(), i == j, "{signing:?} {algorithm:?}");
             }
             assert_eq!(
-                UnparsedPublicKey::new(&signing.0, pair.public_key())
+                UnparsedPublicKey::new(verification[i], pair.public_key())
                     .verify(b"other", signature.as_ref()),
                 Err(Error::BadSignature)
+            );
+        }
+    }
+
+    #[test]
+    fn parsed_public_key_refuses_malformed_keys() {
+        let pair = EcdsaKeyPair::generate(&ECDSA_P256_SHA256_ASN1_SIGNING).unwrap();
+        let point = pair.public_key().as_ref();
+        let signature = pair.sign(b"message").unwrap();
+        let key = ParsedPublicKey::new(&ECDSA_P256_SHA256_ASN1, point).unwrap();
+        key.verify(b"message", signature.as_ref()).unwrap();
+        assert_eq!(
+            key.verify(b"other", signature.as_ref()),
+            Err(Error::BadSignature)
+        );
+
+        let malformed: [(&'static dyn VerificationAlgorithm, &[u8]); 4] = [
+            (&ECDSA_P256_SHA256_ASN1, &point[1..]),
+            (&ECDSA_P384_SHA384_ASN1, point),
+            (&ED25519, &point[..31]),
+            (&RSA_PKCS1_2048_8192_SHA256, point),
+        ];
+        for (algorithm, bytes) in malformed {
+            assert!(
+                ParsedPublicKey::new(algorithm, bytes).is_err(),
+                "{algorithm:?}"
             );
         }
     }
