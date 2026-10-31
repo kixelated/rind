@@ -54,6 +54,9 @@ declare -A scope=(
     # Advisories, licenses, and sources move with any manifest or the policy.
     [deny]='(^|/)Cargo\.(toml|lock)$|^deny\.toml$'
     [license]='^(rind/src/|admin/scan-license$)'
+    # s2n-bignum's proofs assume separate input and output, so the kernels
+    # rind runs in place are walked, after planting faults in each.
+    [inplace]='^(rind/src/low/|admin/parse-asm/)'
     # Quest documents form one graph, so any change validates the whole tree,
     # as does a bump of the flake-pinned validator.
     [quest]='^(quest/|flake\.lock$)'
@@ -72,6 +75,7 @@ declare -A tools=(
     [rs]='cargo jq'
     [deny]='cargo-deny'
     [license]='find grep'
+    [inplace]='python3'
     [quest]='quest'
     [gh]='actionlint yq jq'
     [hooks]='shellcheck'
@@ -83,7 +87,7 @@ verb=$action
 [[ "$verb" != ci ]] || verb=check
 
 case "$verb" in
-    check) modules=(rs deny license quest gh hooks shell nix) ;;
+    check) modules=(rs deny license inplace quest gh hooks shell nix) ;;
     fix) modules=(rs nix) ;;
 esac
 
@@ -159,6 +163,8 @@ for module in "${selected[@]}"; do
         check:deny) cargo deny --locked check ;;
         check:quest) quest check ;;
         check:license) bash admin/scan-license ;;
+        # It finds the generated kernels relative to its own directory.
+        check:inplace) (cd admin/parse-asm && python3 inplace.py) ;;
         check:gh)
             actionlint
             sh/alert.sh check
