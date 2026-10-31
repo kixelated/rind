@@ -3,7 +3,7 @@
 //! GHASH with the AArch32 crypto extension's PMULL, using aws-lc's
 //! `ghashv8-armx` routines.
 //!
-//! The assembly is aws-lc's, imported by `admin/import-aws-lc-arm`. It is not
+//! The assembly is aws-lc's, imported by `admin/import-aws-lc`. It is not
 //! formally verified: its correctness rests on its use and testing in OpenSSL,
 //! BoringSSL, and aws-lc, and on rind's tests of it against the portable code,
 //! Wycheproof, and aws-lc-rs.

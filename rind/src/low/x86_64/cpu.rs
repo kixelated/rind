@@ -210,6 +210,34 @@ impl HaveSha256 {
     }
 }
 
+/// Whether the CPU is Intel's, for code that is fastest on one vendor's cores.
+///
+/// Reads the vendor once, then answers from the cached result: `cpuid` is
+/// slow, and traps to the hypervisor in a VM.
+pub(crate) fn is_intel() -> bool {
+    const UNKNOWN: u8 = 0;
+    const OTHER: u8 = 1;
+    const INTEL: u8 = 2;
+    static VENDOR: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(UNKNOWN);
+
+    let vendor = match VENDOR.load(core::sync::atomic::Ordering::Relaxed) {
+        UNKNOWN => {
+            // "GenuineIntel", spread over ebx, edx, and ecx.
+            let id = __cpuid(0);
+            let intel = (id.ebx, id.edx, id.ecx) == (0x756e_6547, 0x4965_6e69, 0x6c65_746e);
+            let vendor = if test_toggle("intel", intel) {
+                INTEL
+            } else {
+                OTHER
+            };
+            VENDOR.store(vendor, core::sync::atomic::Ordering::Relaxed);
+            vendor
+        }
+        vendor => vendor,
+    };
+    vendor == INTEL
+}
+
 #[cfg(not(debug_assertions))]
 pub(crate) fn test_toggle(_id: &str, detected: bool) -> bool {
     detected
@@ -253,7 +281,7 @@ pub(crate) fn missing_cpu_feature() -> Option<&'static str> {
     if !have_cpu_feature!("avx2") {
         return Some("avx2");
     }
-    // s2n-bignum non _alt versions: mulx, and sha512's rorx
+    // s2n-bignum non _alt versions: mulx
     if !have_cpu_feature!("bmi2") {
         return Some("bmi2");
     }

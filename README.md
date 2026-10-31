@@ -54,9 +54,8 @@ but there is also a public API for general-purpose use.
   the CPU has the ARMv8 crypto extension, as most 32-bit Android devices do,
   AES, GHASH, SHA1, and SHA256 run [aws-lc]'s assembly for it instead.
   Without it, `rind::cpu::has_aes_hardware()` is false, and rind-rustls and
-  rind-dimpl prefer ChaCha20-Poly1305, which is faster there. An
-  Ed25519 public key that is not a curve point is refused when verifying
-  rather than when decoding.
+  rind-dimpl prefer ChaCha20-Poly1305, which is faster there. SHA-384 and
+  SHA-512 always run aws-lc's assembly, with NEON where the CPU has it.
 
 Every operation panics on a CPU missing one of these. Call `rind::cpu::check()`
 at startup to get an error naming the missing feature instead.
@@ -103,11 +102,12 @@ or a [quest](quest/m2/fastest/README.md) covers it. The table describes
 | ChaCha20 (header protection) | Graviola; [HACL\*]'s block function measured level for one block, so it isn't worth a libcrux dependency here | Graviola; as x86_64 | [HACL\*] block function ✓ (copied), rind keystream |
 | ChaCha20-Poly1305, XChaCha20-Poly1305 | Graviola ⚡ | Graviola ⚡ | [HACL\*] ChaCha20 block function and Poly1305 ✓; Graviola AEAD; rind HChaCha20 |
 | SHA-1 (legacy only) | rind | rind | crypto extension: [aws-lc] (copied); otherwise: rind |
-| SHA-256, SHA-384, SHA-512 | Graviola SHA-256 ⚡, SHA-384, and SHA-512 | Graviola SHA-256 ⚡, SHA-384, and SHA-512 | crypto extension: [aws-lc] SHA-256 (copied) ⚡; otherwise: Graviola SHA-256 ⚡; Graviola SHA-384 and SHA-512 |
+| SHA-256 | Graviola ⚡ | Graviola ⚡ | crypto extension: [aws-lc] (copied) ⚡; otherwise: Graviola ⚡ |
+| SHA-384, SHA-512 | Intel: [aws-lc] AVX (copied) ✓; otherwise: [aws-lc] scalar (copied) ⚡ | SHA-512 instructions: [aws-lc] (copied) ✓; otherwise: [aws-lc] scalar (copied) ✓ | NEON: [aws-lc] (copied) ⚡; otherwise: [aws-lc] scalar (copied) ⚡ |
 | HMAC | Graviola ⚡ | Graviola ⚡ | Graviola ⚡ |
 | HKDF | rind ⚡ | rind ⚡ | rind ⚡ |
-| X25519 | [s2n-bignum] ✓ | [s2n-bignum] ✓ | [HACL\*] ✓ |
-| Ed25519 | [s2n-bignum] point and scalar arithmetic ✓; Graviola EdDSA ⚡ and SHA-512 | [s2n-bignum] point and scalar arithmetic ✓; Graviola EdDSA ⚡ and SHA-512 | [HACL\*] ✓ |
+| X25519 | [s2n-bignum] ✓ | [s2n-bignum] ✓ | [curve25519-dalek] ⚡ |
+| Ed25519 | [s2n-bignum] point and scalar arithmetic ✓; Graviola EdDSA ⚡; SHA-512 as in its row | [s2n-bignum] point and scalar arithmetic ✓; Graviola EdDSA ⚡; [aws-lc] SHA-512 ✓ | [curve25519-dalek] point and scalar arithmetic ⚡; rind EdDSA ⚡; SHA-512 as in its row |
 | P-256 ECDH, ECDSA | [s2n-bignum] field and point arithmetic, and secret scalar multiplication ✓; Graviola verification's scalar multiplication ⚡ and ECDSA ⚡ | [s2n-bignum] field and point arithmetic, and secret scalar multiplication ✓; Graviola verification's scalar multiplication ⚡ and ECDSA ⚡ | [HACL\*] ✓; Graviola ECDSA nonce |
 | P-384 ECDH, ECDSA | [s2n-bignum] field and point arithmetic, and other secret scalar multiplication ✓; rind comb multiplication of the generator ⚡; Graviola verification's other scalar multiplication ⚡, and ECDSA | [s2n-bignum] field and point arithmetic, and other secret scalar multiplication ✓; rind comb multiplication of the generator ⚡; Graviola verification's other scalar multiplication ⚡, and ECDSA | [fiat-crypto] field and scalar arithmetic ✓; scalar multiplication over it ⚡, from rind point formulas, inversion, table lookup, and comb multiplication of the generator, and Graviola other scalar multiplication; Graviola ECDSA |
 | ML-KEM-768 | [s2n-bignum] polynomial arithmetic and Keccak-f ✓; Graviola FIPS 203 and AVX-512 sampling ⚡ | [s2n-bignum] polynomial arithmetic and Keccak-f ✓; Graviola FIPS 203 ⚡ | [libcrux-ml-kem] ✓, except its SHA-3 |
@@ -122,10 +122,11 @@ The tests use [Wycheproof]'s vectors.
 | [Graviola] | copied: rind began as a copy of it, and rind-rustls of its rustls-graviola; its aarch64 ChaCha20 and its Poly1305 began as [cifra], CC0-1.0 | Apache-2.0 OR ISC OR MIT-0 | nothing |
 | rind | its own code | Apache-2.0 OR ISC OR MIT-0 | nothing |
 | [s2n-bignum] | copied: its assembly, transliterated into Rust `asm!` by `admin/parse-asm` | Apache-2.0 OR ISC OR MIT-0; its ML-KEM and aarch64 Keccak-f routines (from mlkem-native) Apache-2.0 OR ISC OR MIT; its x86_64 Keccak-f (from OpenSSL) Apache-2.0 | HOL Light proofs ([x86_64](https://github.com/awslabs/s2n-bignum/tree/main/x86/proofs), [aarch64](https://github.com/awslabs/s2n-bignum/tree/main/arm/proofs)) that each routine's object code computes its specified result for all inputs. They check s2n-bignum's own build, not rind's transliteration, and do not cover memory safety. |
-| [HACL\*] | dependency, through libcrux-hacl-rs, libcrux-p256, libcrux-ed25519, and libcrux-poly1305; copied: the ChaCha20 block function, from libcrux-chacha20poly1305 | Apache-2.0 | [F\* proofs](https://github.com/hacl-star/hacl-star) of memory safety, functional correctness, and secret independence of the F\* source. libcrux's Rust is compiled mechanically from HACL\*'s verified C, and that step is not itself verified. |
+| [HACL\*] | dependency, through libcrux-hacl-rs, libcrux-p256, and libcrux-poly1305; copied: the ChaCha20 block function, from libcrux-chacha20poly1305 | Apache-2.0 | [F\* proofs](https://github.com/hacl-star/hacl-star) of memory safety, functional correctness, and secret independence of the F\* source. libcrux's Rust is compiled mechanically from HACL\*'s verified C, and that step is not itself verified. |
 | [libcrux-ml-kem] | dependency | Apache-2.0 | [hax and F\* proofs](https://github.com/cryspen/libcrux/blob/main/libcrux-ml-kem/proofs/verification_status.md) of panic freedom and functional correctness for its portable arithmetic, NTT, serialization, and high-level code. Its SHA-3, from libcrux-sha3, is unverified. |
 | [libcrux-aes] | dependency for AES-GCM; copied: the block cipher | Apache-2.0 | nothing: libcrux marks it pre-verification |
-| [aws-lc] | copied: its 32-bit ARM assembly for the ARMv8 crypto extension (AES, GHASH, SHA-1, SHA-256), which aws-lc takes from OpenSSL, imported into Rust `global_asm!` by `admin/import-aws-lc-arm` | Apache-2.0 | nothing: aws-lc's proofs cover its x86_64 and aarch64 code, not this |
+| [aws-lc] | copied, by `admin/import-aws-lc`: its SHA-384/512 assembly for x86_64 and aarch64, as Rust naked functions; its 32-bit ARM assembly for SHA-384/512 and for the ARMv8 crypto extension (AES, GHASH, SHA-1, SHA-256), in Rust `global_asm!`. aws-lc takes all of it from OpenSSL | Apache-2.0 | [SAW and NSym proofs](https://github.com/awslabs/aws-lc-verification) that its x86_64 AVX and aarch64 (with and without the SHA-512 instructions) SHA-384/512 routines compute their specified result for all inputs. They check aws-lc's own build, not rind's copy, and do not cover its 32-bit ARM code. |
+| [curve25519-dalek] | dependency, with its serial 32-bit backend | BSD-3-Clause | nothing: that backend's field arithmetic is hand-written. Its `fiat` backend would run [fiat-crypto]'s verified field arithmetic instead, but only a `--cfg` flag for the whole build selects it, so rind refuses it rather than let the build pick. |
 | [fiat-crypto] | dependency | MIT OR Apache-2.0 OR BSD-1-Clause | [Coq proofs](https://github.com/mit-plv/fiat-crypto) that each generated field operation is correct. rind's point formulas, inversion, and table lookup over them are not covered. |
 
 rind's own code is licensed under Apache-2.0 OR ISC OR MIT-0. Copied code
@@ -150,6 +151,7 @@ different one, updates this table and [LICENSE] in the same PR.
 [aws-lc]: https://github.com/aws/aws-lc
 [aws-lc-rs]: https://github.com/aws/aws-lc-rs
 [fiat-crypto]: https://github.com/mit-plv/fiat-crypto
+[curve25519-dalek]: https://github.com/dalek-cryptography/curve25519-dalek
 [Wycheproof]: https://github.com/C2SP/wycheproof
 [LICENSE]: https://github.com/moq-dev/rind/blob/main/LICENSE
 [performance]: https://jbp.io/rind/
@@ -227,10 +229,14 @@ selects at runtime an AVX2 message schedule with scalar rounds for SHA1 and
 SHA256, as aws-lc does. 32-bit `arm` runs aws-lc's SHA1 and SHA256 assembly
 where the CPU has the crypto extension, and the pure Rust SHA1 and SHA256
 otherwise: libcrux has no SHA1, and the pure Rust SHA256 is faster than
-libcrux's. Its SHA512 is always the pure Rust one.
+libcrux's.
 
-SHA384/SHA512 on x86_64 has an AVX2 by-4 implementation, plus an AVX2 interleaved
-single block implementation.
+SHA384/SHA512 run aws-lc's assembly everywhere. On x86_64, its AVX routine on
+Intel and its scalar routine on other CPUs, as aws-lc picks: the AVX routine is
+1.1x faster than the scalar one on Intel, and 1.5x slower on AMD's Zen. On
+aarch64, its routine for the SHA-512 instructions where the CPU has them, and
+its scalar routine otherwise; on 32-bit `arm`, its NEON routine where the CPU
+has NEON, and its scalar routine otherwise.
 
 On x86_64 and aarch64, AES and GHASH always use the CPU's AES and carry-less multiply
 instructions (there are no fallbacks).
@@ -243,6 +249,9 @@ On aarch64, AES-GCM runs s2n-bignum's kernels, which interleave a by-4 AES-CTR
 and GHASH over whole blocks. An AES-256 key made on a core with SHA3 runs their
 by-8 kernels instead, which use its three-way XOR. They run in place, outside
 their proofs, which assume separate input and output buffers.
+`admin/parse-asm/inplace.py` walks them at every length to 64 blocks, checking
+that each block is loaded before it is stored and that their branches and
+addresses depend only on the length.
 
 32-bit `arm` decides once per process from `AT_HWCAP2`: with the crypto
 extension, AES and AES-GCM keys use aws-lc's `aesv8-armx` and `ghashv8-armx`
