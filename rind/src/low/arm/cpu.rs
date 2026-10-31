@@ -177,10 +177,14 @@ pub(in crate::low) unsafe fn ct_compare_bytes(a: *const u8, b: *const u8, len: u
 mod tests {
     use super::*;
 
-    // CI runs the armv7 suite on a CPU model with the extension and one
-    // without, and names which, so neither run silently tests only one path.
+    // CI runs the armv7 suite on a CPU model with NEON and the extension and
+    // one without either, and names which, so neither run silently tests only
+    // one path. Valgrind sees NEON but hides the extension.
     #[test]
     fn detects_the_expected_cpu() {
+        if let Some(expected) = std::env::var_os("RIND_TEST_ARM_NEON") {
+            assert_eq!(HaveNeon::check().is_some(), expected == "1");
+        }
         if let Some(expected) = std::env::var_os("RIND_TEST_ARM_CRYPTO_EXT") {
             assert_eq!(HaveCryptoExt::check().is_some(), expected == "1");
         }
