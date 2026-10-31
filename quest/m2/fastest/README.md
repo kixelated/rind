@@ -22,4 +22,4 @@ with the code.
 - [P-256 and P-384 scalar multiplication](/quest/m2/fastest/ec-scalar-mul.md) - s2n-bignum's verified routines are as fast as Graviola's on x86_64 and aarch64
 - [x86_64 AES-GCM](/quest/m2/fastest/x86-aes-gcm.md) - aws-lc's is 1.3-1.5x faster without VAES
 - [aarch64 AES-256-GCM alt kernels](/quest/m2/fastest/aarch64-aes256-alt.md) - s2n-bignum's SHA3 kernels in place, 7-11% faster on cores with SHA3
-- [armv7 X25519 and Ed25519](/quest/m2/fastest/armv7-curve25519.md) - dalek is 1.3x faster than HACL* at X25519 and 3.4x at Ed25519 signing
+- [armv7 X25519 ladder on NEON](/quest/m2/fastest/armv7-curve25519.md) - BoringSSL's NEON assembly beat curve25519-dalek's X25519 by 13% (161.4 / 185.9 µs per key exchange)
