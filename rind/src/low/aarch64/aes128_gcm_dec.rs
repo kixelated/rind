@@ -80,15 +80,14 @@ use crate::low::macros::*;
 /// tests/ref_aes_gcm.c (ref_gcm_init_htable) constructs the full table
 /// independently.
 #[target_feature(enable = "aes")]
-pub(crate) fn aes128_gcm_dec(
-    input: &[[u8; 16]],
-    output: &mut [[u8; 16]],
+pub(crate) unsafe fn aes128_gcm_dec(
+    inout: *mut [u8; 16],
+    blocks: usize,
     tag: &mut [u8; 16],
     ivec: &mut [u8; 16],
     key: &[core::arch::aarch64::uint8x16_t; 11],
     htable: &[core::arch::aarch64::uint64x2_t; 6],
 ) {
-    debug_assert!(input.len() == output.len());
     // SAFETY: inline assembly. see [crate::low::inline_assembly_safety] for safety info.
     unsafe {
         core::arch::asm!(
@@ -856,9 +855,9 @@ pub(crate) fn aes128_gcm_dec(
 
         Q!(Label!("Laes128_gcm_dec_postamble_end", 12) ":"),
         Q!("    add             " "sp, sp, #0xe0"),
-        inout("x0") input.as_ptr() => _,
-        inout("x1") input.len() * 128 => _,
-        inout("x2") output.as_mut_ptr() => _,
+        inout("x0") inout => _,
+        inout("x1") blocks * 128 => _,
+        inout("x2") inout => _,
         inout("x3") tag.as_mut_ptr() => _,
         inout("x4") ivec.as_mut_ptr() => _,
         inout("x5") key.as_ptr() => _,
