@@ -161,18 +161,17 @@ impl ChaCha20 {
             self.ctx[12] = self.ctx[12].wrapping_add(buffer.len().div_ceil(64) as u32);
             return;
         }
-        if buffer.is_empty() {
-            return;
-        }
         let mut keystream = [0u32; 16];
-        chacha20_core(&mut keystream, &self.ctx, 0);
-        for (b, k) in buffer
-            .iter_mut()
-            .zip(keystream.iter().flat_map(|w| w.to_le_bytes()))
-        {
-            *b ^= k;
+        for block in buffer.chunks_mut(64) {
+            chacha20_core(&mut keystream, &self.ctx, 0);
+            for (b, k) in block
+                .iter_mut()
+                .zip(keystream.iter().flat_map(|w| w.to_le_bytes()))
+            {
+                *b ^= k;
+            }
+            self.ctx[12] = self.ctx[12].wrapping_add(1);
         }
-        self.ctx[12] = self.ctx[12].wrapping_add(1);
     }
 }
 
