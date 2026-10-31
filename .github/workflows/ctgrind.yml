@@ -41,8 +41,8 @@ jobs:
 
   # The arm64 runner executes 32-bit ARM natively, so an armhf valgrind checks
   # the armv7 build without emulation. Its core has the crypto extension, but
-  # valgrind hides `AT_HWCAP2` from the program, so only the portable code is
-  # checked here (see `admin/ctgrind`).
+  # valgrind hides `AT_HWCAP2` from the program, so only the NEON and portable
+  # code is checked here (see `admin/ctgrind`).
   #
   # Release only: constant time matters in the code that ships, and a debug
   # build can only add findings in code that does not. Valgrind runs every
@@ -82,3 +82,4 @@ jobs:
           CC_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-gcc
           CXX_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-g++
           RIND_TEST_ARM_CRYPTO_EXT: 0
+          RIND_TEST_ARM_NEON: 1

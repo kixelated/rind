@@ -184,5 +184,8 @@ mod tests {
         if let Some(expected) = std::env::var_os("RIND_TEST_ARM_CRYPTO_EXT") {
             assert_eq!(HaveCryptoExt::check().is_some(), expected == "1");
         }
+        if let Some(expected) = std::env::var_os("RIND_TEST_ARM_NEON") {
+            assert_eq!(HaveNeon::check().is_some(), expected == "1");
+        }
     }
 }
