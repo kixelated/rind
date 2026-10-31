@@ -102,9 +102,12 @@ def reg(tok):
 
 
 def imm(tok):
-    if not tok.startswith("#"):
-        raise Unmodelled
-    return int(tok[1:], 0)
+    if tok.startswith("#"):
+        try:
+            return int(tok[1:], 0)
+        except ValueError:
+            pass
+    raise Unmodelled
 
 
 def width(v, bits):
@@ -312,11 +315,14 @@ class Walk:
         return width(self.get(r), 32 if tok[0] == "w" else 64)
 
     def shifted(self, ops):
-        # The second source of add/sub/cmp, with an optional shift.
+        # The last source of add/sub/cmp/tst, with an optional shift. Any
+        # other operand form is unmodelled, never dropped.
+        if len(ops) not in (1, 2):
+            raise Unmodelled
         v = self.operand(ops[0])
         if len(ops) == 1:
             return v
-        kind, amount = ops[1].split()
+        kind, _, amount = ops[1].partition(" ")
         if not isinstance(v, int) or kind not in ("lsl", "lsr"):
             raise Unmodelled
         return v << imm(amount) if kind == "lsl" else v >> imm(amount)
@@ -443,10 +449,10 @@ class Walk:
                     self.operand(ops[0]), self.shifted(ops[1:]), bits
                 )
             elif op == "tst":
-                a, b = self.operand(ops[0]), self.operand(ops[1])
+                a, b = self.operand(ops[0]), self.shifted(ops[1:])
                 if not (isinstance(a, int) and isinstance(b, int)):
                     raise Unmodelled
-                self.flags = ("tst", a & b, 0)
+                self.flags = ("tst", width(a & b, bits), 0)
             elif op == "subs" and d:
                 a, b = self.operand(ops[1]), self.shifted(ops[2:])
                 self.flags = self.compare(a, b, bits)
@@ -536,6 +542,7 @@ def planted(kernel, text):
     # which runs before any store to it, when both pointers are at its start.
     _, homes, regs = kernel.layout()
     other = next(r for r, (arg, _) in sorted(regs.items()) if arg is not None)
+    count, scale = next((r, k) for r, (arg, k) in sorted(regs.items()) if arg is None)
     lines = text.split("\n")
     loads = [
         i
@@ -568,8 +575,10 @@ def planted(kernel, text):
             args += ' Label!("planted", %d, After)' % target
         return '        Q!("    %-16s"%s),' % (op, args)
 
-    def insert(*new):
-        return "\n".join(lines[:first] + list(new) + lines[first:])
+    def insert(*new, at=first):
+        return "\n".join(lines[:at] + list(new) + lines[at:])
+
+    entry = next(i for i, line in enumerate(lines) if line.lstrip().startswith("Q!("))
 
     # Dropping the first store keeps any pointer step it made.
     dropped = [q("add", "%s, %s, %s" % (dst, dst, step.group(0)))] if step else []
@@ -596,6 +605,19 @@ def planted(kernel, text):
             "branch",
             insert(
                 q("ldr", "%s, [%s]" % (tmp, other)), q("cbz", tmp + ", ", 99), label
+            ),
+        ),
+        # A load past one block, skipped unless the length's scale bit is
+        # set, which only a shifted operand modelled correctly shows.
+        (
+            "bounds",
+            insert(
+                q("mov", "%s, #%d" % (tmp, 2 * scale)),
+                q("tst", "%s, %s, lsr #1" % (count, tmp)),
+                q("b.eq", "", 99),
+                q("ldr", "q0, [%s, #16]" % src),
+                label,
+                at=entry,
             ),
         ),
         # A reachable instruction no length runs.
