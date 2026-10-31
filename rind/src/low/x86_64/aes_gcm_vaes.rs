@@ -9,11 +9,11 @@
 
 use super::aes::AesKey;
 use super::cpu::{HaveAvx512ForAesGcm, HaveVaesAvx2ForAesGcm};
-use super::ghash::{Ghash, GhashTableAvx};
+use super::ghash::Ghash;
 
 /// Which kernel runs, decided once from the CPU's features.
 #[derive(Clone, Copy)]
-enum Kernel {
+enum Width {
     /// 256-bit vectors, for VAES cores without AVX-512.
     Avx2(HaveVaesAvx2ForAesGcm),
     /// 512-bit vectors.
@@ -25,42 +25,35 @@ enum Kernel {
 #[repr(C, align(64))]
 struct Htable([[u64; 2]; 16]);
 
-/// A GHASH key for one of the VAES kernels.
-pub(crate) struct GhashTableVaes {
+/// A BoringSSL AES-GCM kernel, with the GHASH key it was made for.
+pub(crate) struct VaesKernel {
     htable: Htable,
-    kernel: Kernel,
-    /// The AVX path's powers, for inputs too short to fill the kernel's
-    /// vectors: the AAD, the lengths block, and short messages.
-    avx: GhashTableAvx,
+    width: Width,
 }
 
-impl GhashTableVaes {
-    /// Precomputes for the GHASH key `h` if the CPU has VAES, or returns `None`.
-    pub(crate) fn new(h: u128) -> Option<Self> {
-        let kernel = match HaveAvx512ForAesGcm::check() {
-            Some(token) => Kernel::Avx512(token),
-            None => Kernel::Avx2(HaveVaesAvx2ForAesGcm::check()?),
-        };
-        let words = [(h >> 64) as u64, h as u64];
-        let mut htable = Htable([[0; 2]; 16]);
-        // SAFETY: `htable` is an `Htable` and `h` two words. The token proves
-        // the CPU has the kernel's features.
-        unsafe {
-            match kernel {
-                Kernel::Avx2(_) => gcm_init_vpclmulqdq_avx2(&mut htable, &words),
-                Kernel::Avx512(_) => gcm_init_vpclmulqdq_avx512(&mut htable, &words),
-            }
-        }
-        Some(Self {
-            htable,
-            kernel,
-            avx: GhashTableAvx::new(h),
-        })
+impl VaesKernel {
+    /// The 256-bit kernel, for the GHASH key `h`.
+    pub(crate) fn avx2(h: u128, token: HaveVaesAvx2ForAesGcm) -> Self {
+        Self::new(h, Width::Avx2(token))
     }
 
-    /// The AVX path's powers of the same key.
-    pub(crate) fn avx(&self) -> &GhashTableAvx {
-        &self.avx
+    /// The 512-bit kernel, for the GHASH key `h`.
+    pub(crate) fn avx512(h: u128, token: HaveAvx512ForAesGcm) -> Self {
+        Self::new(h, Width::Avx512(token))
+    }
+
+    fn new(h: u128, width: Width) -> Self {
+        let words = [(h >> 64) as u64, h as u64];
+        let mut htable = Htable([[0; 2]; 16]);
+        // SAFETY: `htable` is an `Htable` and `words` two words. The token
+        // proves the CPU has the kernel's features.
+        unsafe {
+            match width {
+                Width::Avx2(_) => gcm_init_vpclmulqdq_avx2(&mut htable, &words),
+                Width::Avx512(_) => gcm_init_vpclmulqdq_avx512(&mut htable, &words),
+            }
+        }
+        Self { htable, width }
     }
 
     /// Encrypts (if `ENC`) or decrypts `inout` in place, from the counter
@@ -77,9 +70,9 @@ impl GhashTableVaes {
 
         // The AVX2 kernel takes only whole blocks, so a partial last one is
         // done here; the AVX-512 kernel masks it.
-        let bulk = match self.kernel {
-            Kernel::Avx2(_) => inout.len() & !15,
-            Kernel::Avx512(_) => inout.len(),
+        let bulk = match self.width {
+            Width::Avx2(_) => inout.len() & !15,
+            Width::Avx512(_) => inout.len(),
         };
         let (bulk, partial) = inout.split_at_mut(bulk);
 
@@ -97,17 +90,17 @@ impl GhashTableVaes {
             // proves the CPU has the kernel's features. `len` is a multiple of
             // 16 for the AVX2 kernel.
             unsafe {
-                match (self.kernel, ENC) {
-                    (Kernel::Avx2(_), true) => aes_gcm_enc_update_vaes_avx2(
+                match (self.width, ENC) {
+                    (Width::Avx2(_), true) => aes_gcm_enc_update_vaes_avx2(
                         inout, inout, len, key, &counter, htable, xi_ptr,
                     ),
-                    (Kernel::Avx2(_), false) => aes_gcm_dec_update_vaes_avx2(
+                    (Width::Avx2(_), false) => aes_gcm_dec_update_vaes_avx2(
                         inout, inout, len, key, &counter, htable, xi_ptr,
                     ),
-                    (Kernel::Avx512(_), true) => aes_gcm_enc_update_vaes_avx512(
+                    (Width::Avx512(_), true) => aes_gcm_enc_update_vaes_avx512(
                         inout, inout, len, key, &counter, htable, xi_ptr,
                     ),
-                    (Kernel::Avx512(_), false) => aes_gcm_dec_update_vaes_avx512(
+                    (Width::Avx512(_), false) => aes_gcm_dec_update_vaes_avx512(
                         inout, inout, len, key, &counter, htable, xi_ptr,
                     ),
                 }

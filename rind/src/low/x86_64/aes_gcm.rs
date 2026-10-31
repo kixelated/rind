@@ -7,7 +7,9 @@ use core::arch::x86_64::*;
 use core::mem;
 
 use super::aes::AesKey;
-use super::ghash::{self, Ghash, GhashTable, GhashTableAvx};
+use super::cpu::HaveAvx512ForAesGcm;
+use super::ghash::{self, Ghash};
+use crate::low::ghash::{GhashTable, GhashTableAvx512};
 
 pub(crate) fn encrypt(
     key: &AesKey,
@@ -29,8 +31,8 @@ pub(crate) fn decrypt(
     cipher::<false>(key, ghash, initial_counter, aad, cipher_inout)
 }
 
-// AES-GCM encrypt (if `ENC` is `true`) or decrypt, on the kernel the GHASH
-// key was made for.
+// AES-GCM encrypt (if `ENC` is `true`) or decrypt, on the fastest path for
+// the CPU the GHASH key was made on and the message's length.
 fn cipher<const ENC: bool>(
     key: &AesKey,
     ghash: &mut Ghash<'_>,
@@ -38,31 +40,43 @@ fn cipher<const ENC: bool>(
     aad: &[u8],
     cipher_inout: &mut [u8],
 ) {
-    ghash.add(aad);
+    let len = cipher_inout.len();
     match ghash.table {
-        GhashTable::Vaes(table) if cipher_inout.len() >= VAES_MINIMUM_CIPHER_LEN => {
-            table.cipher::<ENC>(key, initial_counter, ghash, cipher_inout)
+        GhashTable::Avx512(GhashTableAvx512 { vaes, .. })
+            if len >= AVX512_KERNEL_MINIMUM_CIPHER_LEN =>
+        {
+            ghash.add(aad);
+            vaes.cipher::<ENC>(key, initial_counter, ghash, cipher_inout);
+        }
+        GhashTable::Avx512(GhashTableAvx512 { token, .. }) if len >= AVX512_MINIMUM_CIPHER_LEN => {
+            // SAFETY: this crate requires the `aes`, `sse3`, `ssse3`, `pclmulqdq`, `avx` and `avx2` cpu features;
+            // `token` proves the remaining features were dynamically checked
+            unsafe { _cipher_avx512::<ENC>(key, ghash, initial_counter, aad, cipher_inout, *token) }
+        }
+        GhashTable::VaesAvx2(_, vaes) if len >= VAES_AVX2_MINIMUM_CIPHER_LEN => {
+            ghash.add(aad);
+            vaes.cipher::<ENC>(key, initial_counter, ghash, cipher_inout);
         }
         // SAFETY: this crate requires the `aes`, `ssse3`, `pclmulqdq` and `avx` cpu features
-        table => unsafe { _cipher::<ENC>(key, ghash, table.avx(), initial_counter, cipher_inout) },
+        _ => unsafe { _cipher::<ENC>(key, ghash, initial_counter, aad, cipher_inout) },
     }
 }
-
-/// How many message bytes a VAES kernel needs to beat the AVX path.
-const VAES_MINIMUM_CIPHER_LEN: usize = 1;
 
 #[target_feature(enable = "aes,ssse3,pclmulqdq,avx")]
 fn _cipher<const ENC: bool>(
     key: &AesKey,
     ghash: &mut Ghash<'_>,
-    avx_ghash_table: &GhashTableAvx,
     initial_counter: &[u8; 16],
+    aad: &[u8],
     cipher_inout: &mut [u8],
 ) {
+    ghash.add(aad);
+
     let (rk_first, rks, rk_last) = key.round_keys();
 
     let mut counter = Counter::new(initial_counter);
     let (by8_iter, remainder) = cipher_inout.as_chunks_mut::<128>();
+    let avx_ghash_table = ghash.table.avx();
 
     for blocks in by8_iter {
         // prefetch to avoid any stall later
@@ -221,6 +235,182 @@ fn _cipher<const ENC: bool>(
     }
 }
 
+#[target_feature(
+    enable = "aes,avx,avx2,avx512bw,avx512f,avx512vl,sse3,ssse3,pclmulqdq,vaes,vpclmulqdq"
+)]
+fn _cipher_avx512<const ENC: bool>(
+    key: &AesKey,
+    ghash: &mut Ghash<'_>,
+    initial_counter: &[u8; 16],
+    aad: &[u8],
+    cipher_inout: &mut [u8],
+    _feature_token: HaveAvx512ForAesGcm,
+) {
+    ghash.add(aad);
+
+    let round_keys = key.round_keys_512();
+    let (rk_first, rks, rk_last) = round_keys.split();
+
+    let mut counter = Counter512::new(initial_counter);
+    let (by16_iter, remainder) = cipher_inout.as_chunks_mut::<AVX512_MINIMUM_CIPHER_LEN>();
+
+    let ghash_avx512 = match ghash.table {
+        GhashTable::Avx512(ghash_avx512) => ghash_avx512,
+        _ => panic!("unexpected ghash table variant"),
+    };
+
+    for blocks in by16_iter {
+        // prefetch to avoid any stall later
+        super::cpu::prefetch(blocks, 256);
+
+        let c0123 = counter.next4();
+        let c4567 = counter.next4();
+        let c89ab = counter.next4();
+        let ccdef = counter.next4();
+
+        let mut c0123 = _mm512_xor_epi32(c0123, rk_first);
+        let mut c4567 = _mm512_xor_epi32(c4567, rk_first);
+        let mut c89ab = _mm512_xor_epi32(c89ab, rk_first);
+        let mut ccdef = _mm512_xor_epi32(ccdef, rk_first);
+
+        for rk in rks {
+            c0123 = _mm512_aesenc_epi128(c0123, *rk);
+            c4567 = _mm512_aesenc_epi128(c4567, *rk);
+            c89ab = _mm512_aesenc_epi128(c89ab, *rk);
+            ccdef = _mm512_aesenc_epi128(ccdef, *rk);
+        }
+
+        let c0123 = _mm512_aesenclast_epi128(c0123, rk_last);
+        let c4567 = _mm512_aesenclast_epi128(c4567, rk_last);
+        let c89ab = _mm512_aesenclast_epi128(c89ab, rk_last);
+        let ccdef = _mm512_aesenclast_epi128(ccdef, rk_last);
+
+        // SAFETY: `blocks` is 256 bytes due to `as_chunks_mut`
+        let (p0123, p4567, p89ab, pcdef) = unsafe {
+            (
+                _mm512_loadu_si512(blocks.as_ptr().add(0).cast()),
+                _mm512_loadu_si512(blocks.as_ptr().add(64).cast()),
+                _mm512_loadu_si512(blocks.as_ptr().add(128).cast()),
+                _mm512_loadu_si512(blocks.as_ptr().add(192).cast()),
+            )
+        };
+
+        let c0123 = _mm512_xor_epi32(c0123, p0123);
+        let c4567 = _mm512_xor_epi32(c4567, p4567);
+        let c89ab = _mm512_xor_epi32(c89ab, p89ab);
+        let ccdef = _mm512_xor_epi32(ccdef, pcdef);
+
+        // SAFETY: `blocks` is 256 bytes and writable due to `as_chunks_mut`
+        unsafe {
+            _mm512_storeu_si512(blocks.as_mut_ptr().add(0).cast(), c0123);
+            _mm512_storeu_si512(blocks.as_mut_ptr().add(64).cast(), c4567);
+            _mm512_storeu_si512(blocks.as_mut_ptr().add(128).cast(), c89ab);
+            _mm512_storeu_si512(blocks.as_mut_ptr().add(192).cast(), ccdef);
+        }
+
+        let (a0123, a4567, a89ab, acdef) = if ENC {
+            (c0123, c4567, c89ab, ccdef)
+        } else {
+            (p0123, p4567, p89ab, pcdef)
+        };
+
+        let a0123 = _mm512_shuffle_epi8(a0123, BYTESWAP_512);
+        let a4567 = _mm512_shuffle_epi8(a4567, BYTESWAP_512);
+        let a89ab = _mm512_shuffle_epi8(a89ab, BYTESWAP_512);
+        let acdef = _mm512_shuffle_epi8(acdef, BYTESWAP_512);
+
+        let c0___ = _mm512_inserti32x4::<0>(_mm512_setzero_si512(), ghash.current);
+        let a0123 = _mm512_xor_epi64(a0123, c0___);
+
+        ghash.current = ghash::_mul16(ghash_avx512, a0123, a4567, a89ab, acdef);
+    }
+
+    if remainder.is_empty() {
+        return;
+    }
+
+    // The tail, under 256 bytes, in one pass of four vectors masked to its
+    // length. AES is latency-bound here, so the unused vectors cost little.
+    let mut ks = [
+        counter.next4(),
+        counter.next4(),
+        counter.next4(),
+        counter.next4(),
+    ];
+    for k in &mut ks {
+        *k = _mm512_xor_epi32(*k, rk_first);
+    }
+    for rk in rks {
+        for k in &mut ks {
+            *k = _mm512_aesenc_epi128(*k, *rk);
+        }
+    }
+
+    let mut tail = [_mm512_setzero_si512(); 4];
+    for ((t, k), chunk) in tail.iter_mut().zip(ks).zip(remainder.chunks_mut(64)) {
+        // The first `chunk.len()` bytes, at least one.
+        let mask = u64::MAX >> (64 - chunk.len());
+        // SAFETY: the mask covers `chunk`, and masked-off bytes are not read
+        let p = unsafe { _mm512_maskz_loadu_epi8(mask, chunk.as_ptr().cast()) };
+        let c = _mm512_xor_epi32(
+            _mm512_maskz_mov_epi8(mask, _mm512_aesenclast_epi128(k, rk_last)),
+            p,
+        );
+        // SAFETY: the mask covers `chunk`, and masked-off bytes are not written
+        unsafe { _mm512_mask_storeu_epi8(chunk.as_mut_ptr().cast(), mask, c) };
+        *t = _mm512_shuffle_epi8(if ENC { c } else { p }, BYTESWAP_512);
+    }
+    ghash.current = ghash::_mul_tail(ghash_avx512, ghash.current, tail, remainder.len());
+}
+
+/// How many message bytes needed to benefit from the AVX512 by-16 impl
+///
+/// `cipher_avx512` _works_ for shorter lengths, but is not worth it.
+const AVX512_MINIMUM_CIPHER_LEN: usize = 16 * 16;
+
+/// How many message bytes BoringSSL's 512-bit kernel needs to beat the AVX512
+/// by-16 impl: its interleaved AES and GHASH win on long messages, but its
+/// setup costs more on short ones.
+const AVX512_KERNEL_MINIMUM_CIPHER_LEN: usize = 4096;
+
+/// How many message bytes BoringSSL's 256-bit kernel needs to beat the AVX
+/// path, whose single blocks are quicker for short messages.
+const VAES_AVX2_MINIMUM_CIPHER_LEN: usize = 16 * 16;
+
+/// This stores the current four counter values, in big endian.
+#[derive(Debug)]
+struct Counter512(__m512i);
+
+impl Counter512 {
+    #[inline]
+    #[target_feature(enable = "sse3,ssse3,avx,avx2,avx512f")]
+    fn new(bytes: &[u8; 16]) -> Self {
+        // SAFETY: `bytes` is a 128-bits and can be loaded from
+        Self(unsafe {
+            let mut cnt = Counter::new(bytes);
+            let a = cnt.next();
+            let b = cnt.next();
+            let c = cnt.next();
+            let d = cnt.next();
+
+            let r: __m512i = mem::transmute(_mm512_undefined());
+            let r = _mm512_inserti32x4::<0>(r, _mm_shuffle_epi8(a, BYTESWAP_EPI64));
+            let r = _mm512_inserti32x4::<1>(r, _mm_shuffle_epi8(b, BYTESWAP_EPI64));
+            let r = _mm512_inserti32x4::<2>(r, _mm_shuffle_epi8(c, BYTESWAP_EPI64));
+            _mm512_inserti32x4::<3>(r, _mm_shuffle_epi8(d, BYTESWAP_EPI64))
+        })
+    }
+
+    #[target_feature(enable = "sse3,ssse3,avx,avx2,avx512f,avx512bw")]
+    #[must_use]
+    #[inline]
+    fn next4(&mut self) -> __m512i {
+        let r = _mm512_shuffle_epi8(self.0, BYTESWAP_512_EPI64);
+        self.0 = _mm512_add_epi64(self.0, COUNTER_512_4);
+        r
+    }
+}
+
 /// This stores the current counter value, in big endian.
 #[derive(Clone, Copy, Debug)]
 struct Counter(__m128i);
@@ -250,9 +440,39 @@ impl Counter {
 // SAFETY: both u128 and __m128i have the same size and all bits mean the same thing
 const COUNTER_1: __m128i = unsafe { mem::transmute(1u128 << 64) };
 
+// SAFETY: [u8; 64] and __m512i have the same size
+const COUNTER_512_4: __m512i = unsafe {
+    mem::transmute([
+        0u8, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, //
+        0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, //
+        0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, //
+        0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, //
+    ])
+};
+
 // SAFETY: both u128 and __m128i have the same size and all bits mean the same thing
 const BYTESWAP: __m128i = unsafe { mem::transmute(0x00010203_04050607_08090a0b_0c0d0e0fu128) };
 
 // SAFETY: both u128 and __m128i have the same size and all bits mean the same thing
 const BYTESWAP_EPI64: __m128i =
     unsafe { mem::transmute(0x08090a0b_0c0d0e0f_00010203_04050607u128) };
+
+// SAFETY: [u8; 64] and __m512i have the same size
+const BYTESWAP_512: __m512i = unsafe {
+    mem::transmute([
+        15u8, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, //
+        31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, //
+        47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, //
+        63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, //
+    ])
+};
+
+// SAFETY: [u8; 64] and __m512i have the same size
+const BYTESWAP_512_EPI64: __m512i = unsafe {
+    mem::transmute([
+        7, 6, 5, 4, 3, 2, 1, 0, 15u8, 14, 13, 12, 11, 10, 9, 8, //
+        23, 22, 21, 20, 19, 18, 17, 16, 31, 30, 29, 28, 27, 26, 25, 24, //
+        39, 38, 37, 36, 35, 34, 33, 32, 47, 46, 45, 44, 43, 42, 41, 40, //
+        55, 54, 53, 52, 51, 50, 49, 48, 63, 62, 61, 60, 59, 58, 57, 56,
+    ])
+};
