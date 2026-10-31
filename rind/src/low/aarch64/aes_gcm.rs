@@ -55,7 +55,8 @@ fn cipher<const ENC: bool>(
         // blocks. The kernels' proofs assume the input and output do not
         // overlap, but every path through them loads each input block before
         // storing its output block and never reads an output back, so in
-        // place they compute the same.
+        // place they compute the same, as `admin/parse-asm/inplace.py`
+        // checks.
         unsafe {
             match (key, ENC, ghash.table.eight_way) {
                 (AesKey::Aes128(k), true, _) => {

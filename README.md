@@ -249,6 +249,9 @@ On aarch64, AES-GCM runs s2n-bignum's kernels, which interleave a by-4 AES-CTR
 and GHASH over whole blocks. An AES-256 key made on a core with SHA3 runs their
 by-8 kernels instead, which use its three-way XOR. They run in place, outside
 their proofs, which assume separate input and output buffers.
+`admin/parse-asm/inplace.py` walks them at every length to 64 blocks, checking
+that each block is loaded before it is stored and that their branches and
+addresses depend only on the length.
 
 32-bit `arm` decides once per process from `AT_HWCAP2`: with the crypto
 extension, AES and AES-GCM keys use aws-lc's `aesv8-armx` and `ghashv8-armx`
