@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 
-//! The ChaCha20 keystream past one block, using aws-lc's `chacha-armv4`
-//! routines: NEON from 192 bytes where the CPU has it, as aws-lc chooses, and
-//! the integer routine otherwise.
+//! The ChaCha20 keystream, using aws-lc's `chacha-armv4` routines: NEON from
+//! 192 bytes where the CPU has it, as aws-lc chooses, and the integer
+//! routine otherwise.
 //!
 //! The assembly is aws-lc's, imported by `admin/import-aws-lc-arm`. It is not
 //! formally verified: its correctness rests on its use and testing in OpenSSL,

@@ -5,12 +5,15 @@
 On x86_64 and aarch64, `rind::cipher::ChaCha20` either runs HACL*'s verified
 block function for the one-block masks it is used for (QUIC header protection,
 DTLS record numbers), or this quest records why the cost is not worth it and
-is deleted. armv7 already runs that block function.
+is deleted. armv7 runs aws-lc's `chacha-armv4` instead, which measured 4%
+faster than HACL*'s block function for one block in the same binary (110.9
+against 115.8 ns, Neoverse-N2, bench-tmp run 41161662499); apply the same
+decision there.
 
 ## Plan
 
 Five bytes of keystream, rind (Graviola's SIMD ChaCha20) against HACL*'s
-block function as rind copies it for armv7 (`low/arm/chacha20.rs`), criterion
+block function as libcrux-chacha20poly1305 0.0.10 ships it, criterion
 medians, bench-tmp run 41147916836 and a local run:
 
 | host | rind | HACL\* ✓ |
