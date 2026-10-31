@@ -268,7 +268,11 @@ mod tests {
             (y_two, false, false),
         ] {
             let result = Ed25519VerifyingKey::from_bytes(&encode(y, negative));
-            assert_eq!(result.err(), (!ok).then_some(Error::NotOnCurve), "{y:x?} {negative}");
+            assert_eq!(
+                result.err(),
+                (!ok).then_some(Error::NotOnCurve),
+                "{y:x?} {negative}"
+            );
         }
 
         assert_eq!(
