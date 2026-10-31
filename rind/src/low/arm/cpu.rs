@@ -19,20 +19,36 @@ pub(crate) struct HaveCryptoExt(());
 impl HaveCryptoExt {
     /// Detects the extension once, then answers from the cached result.
     pub(crate) fn check() -> Option<Self> {
-        const UNKNOWN: u8 = 0;
-        const ABSENT: u8 = 1;
-        const PRESENT: u8 = 2;
-        static DETECTED: AtomicU8 = AtomicU8::new(UNKNOWN);
+        (features() & CRYPTO_EXT != 0).then_some(Self(()))
+    }
+}
 
-        let detected = match DETECTED.load(Ordering::Relaxed) {
-            UNKNOWN => {
-                let detected = if detect() { PRESENT } else { ABSENT };
-                DETECTED.store(detected, Ordering::Relaxed);
-                detected
-            }
-            detected => detected,
-        };
-        (detected == PRESENT).then_some(Self(()))
+/// Proof that the CPU has NEON, which ARMv7 cores without the crypto
+/// extension often have too.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct HaveNeon(());
+
+impl HaveNeon {
+    /// Detects NEON once, then answers from the cached result.
+    pub(crate) fn check() -> Option<Self> {
+        (features() & NEON != 0).then_some(Self(()))
+    }
+}
+
+const NEON: u8 = 1 << 0;
+const CRYPTO_EXT: u8 = 1 << 1;
+const DETECTED: u8 = 1 << 7;
+
+fn features() -> u8 {
+    static FEATURES: AtomicU8 = AtomicU8::new(0);
+
+    match FEATURES.load(Ordering::Relaxed) {
+        0 => {
+            let features = detect() | DETECTED;
+            FEATURES.store(features, Ordering::Relaxed);
+            features
+        }
+        features => features,
     }
 }
 
@@ -41,7 +57,7 @@ impl HaveCryptoExt {
 /// `AT_HWCAP2` gets the portable code: aws-lc parses `/proc/cpuinfo` for those
 /// early ARMv8 Android kernels instead, which rind does not.
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn detect() -> bool {
+fn detect() -> u8 {
     // Bits from the kernel's arch/arm/include/uapi/asm/hwcap.h.
     const HWCAP_NEON: libc::c_ulong = 1 << 12;
     const HWCAP2_AES: libc::c_ulong = 1 << 0;
@@ -57,18 +73,20 @@ fn detect() -> bool {
             libc::getauxval(libc::AT_HWCAP2),
         )
     };
-    test_toggle("neon", hwcap & HWCAP_NEON != 0)
+    let neon = test_toggle("neon", hwcap & HWCAP_NEON != 0);
+    let crypto_ext = neon
         && test_toggle("aes", hwcap2 & HWCAP2_AES != 0)
         && test_toggle("pmull", hwcap2 & HWCAP2_PMULL != 0)
         && test_toggle("sha1", hwcap2 & HWCAP2_SHA1 != 0)
-        && test_toggle("sha2", hwcap2 & HWCAP2_SHA2 != 0)
+        && test_toggle("sha2", hwcap2 & HWCAP2_SHA2 != 0);
+    (if neon { NEON } else { 0 }) | (if crypto_ext { CRYPTO_EXT } else { 0 })
 }
 
-/// Other operating systems report the extension differently, so they get the
+/// Other operating systems report the features differently, so they get the
 /// portable code.
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-fn detect() -> bool {
-    false
+fn detect() -> u8 {
+    0
 }
 
 #[cfg(all(not(debug_assertions), any(target_os = "linux", target_os = "android")))]
