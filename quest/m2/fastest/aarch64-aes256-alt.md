@@ -1,4 +1,4 @@
-# [S] aarch64 AES-256-GCM on s2n-bignum's `_alt` kernels
+# [S] aarch64 AES-256-GCM on s2n-bignum's alt kernels
 
 ## Goal
 
