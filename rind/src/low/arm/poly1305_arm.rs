@@ -3,7 +3,7 @@
 //
 // Poly1305 with NEON: aws-lc's `crypto/poly1305/poly1305_arm.c` at commit
 // 91c93a8eb860e51482a871a8772cb9b1b310baea, in Rust, around the assembly
-// `admin/import-aws-lc-arm` imports beside it. Both come from the public
+// `admin/import-aws-lc` imports beside it. Both come from the public
 // domain neon2 version in SUPERCOP by D. J. Bernstein and Peter Schwabe,
 // which computes two interleaved Poly1305 lanes in 26-bit limbs.
 //

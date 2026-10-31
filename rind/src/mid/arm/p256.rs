@@ -57,6 +57,10 @@ impl PublicKey {
     }
 }
 
+/// A P-256 public key for ECDSA verification: libcrux precomputes nothing
+/// from the point, so this is the [`PublicKey`] itself.
+pub(crate) type VerifyingKey = PublicKey;
+
 /// A P-256 ephemeral private key.
 ///
 /// `agreement::EphemeralPrivateKey` uses one for a single Diffie-Hellman

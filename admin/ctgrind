@@ -1,6 +1,9 @@
 #!/bin/sh
 set -e
 
+# Usage: admin/ctgrind [unit|wycheproof|adapters] [cargo test args...]
+# Runs every suite unless one is named, so CI can run them in parallel.
+#
 # Pass `--target armv7-unknown-linux-gnueabihf` on a host that executes
 # 32-bit ARM natively, such as an arm64 one, with an armhf valgrind.
 # Valgrind passes `AT_HWCAP2` only to ppc64 programs (3.22 through 3.28), so
@@ -9,19 +12,48 @@ set -e
 #
 # Release builds keep line tables so memcheck names inlined frames, which
 # the suppressions match.
-supp="$(cd "$(dirname "$0")" && pwd)/ctgrind.supp"
-valgrind="valgrind --track-origins=yes --error-exitcode=99 --suppressions=$supp"
+self="$(cd "$(dirname "$0")" && pwd)/ctgrind"
+valgrind="valgrind --error-exitcode=99 --suppressions=$(dirname "$self")/ctgrind.supp"
+
+# Cargo runs each test binary through this script. `--track-origins=yes`
+# roughly doubles memcheck's cost, so only a binary memcheck failed reruns
+# with it, to name where each secret came from.
+if [ "$1" = --run ]; then
+    shift
+    status=0
+    $valgrind "$@" || status=$?
+    if [ "$status" -eq 99 ]; then
+        echo "ctgrind: memcheck failed; rerunning with --track-origins=yes" >&2
+        $valgrind --track-origins=yes "$@" || true
+    fi
+    exit "$status"
+fi
+
+suite=all
+case "$1" in
+    unit | wycheproof | adapters)
+        suite=$1
+        shift
+        ;;
+esac
+
 export VALGRIND_BUG_494162=1
 export CARGO_PROFILE_RELEASE_DEBUG=line-tables-only
-export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="$valgrind"
-export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUNNER="$valgrind"
-export CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_RUNNER="$valgrind"
+export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER="$self --run"
+export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUNNER="$self --run"
+export CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_RUNNER="$self --run"
 
 # rind's unit tests mark its secrets through the `__ctgrind` hooks. Wycheproof
 # runs without them, since its harness compares secret outputs directly.
-cargo test -p rind --lib --features __ctgrind "$@"
-cargo test -p rind --test wycheproof "$@"
+if [ "$suite" = all ] || [ "$suite" = unit ]; then
+    cargo test -p rind --lib --features __ctgrind "$@"
+fi
+if [ "$suite" = all ] || [ "$suite" = wycheproof ]; then
+    cargo test -p rind --test wycheproof "$@"
+fi
 
 # Each adapter's ctgrind test marks the secrets it hands rind, while rind's
 # hooks mark the keys rind generates or parses.
-cargo test --workspace --exclude rind --lib --test ctgrind --features rind/__ctgrind "$@"
+if [ "$suite" = all ] || [ "$suite" = adapters ]; then
+    cargo test --workspace --exclude rind --lib --test ctgrind --features rind/__ctgrind "$@"
+fi

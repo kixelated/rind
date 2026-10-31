@@ -4,7 +4,7 @@
 //! 192 bytes where the CPU has it, as aws-lc chooses, and the integer
 //! routine otherwise.
 //!
-//! The assembly is aws-lc's, imported by `admin/import-aws-lc-arm`. It is not
+//! The assembly is aws-lc's, imported by `admin/import-aws-lc`. It is not
 //! formally verified: its correctness rests on its use and testing in OpenSSL,
 //! BoringSSL, and aws-lc, and on rind's tests of it against RFC 8439,
 //! Wycheproof, and aws-lc-rs.

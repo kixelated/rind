@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 
 //! 32-bit ARM, backed by libcrux's portable Rust, and by aws-lc's assembly for
-//! ChaCha20, for Poly1305 where the CPU has NEON, and for the ARMv8 crypto
-//! extension where the CPU has it.
+//! ChaCha20 and SHA-512, for Poly1305 where the CPU has NEON, and for the ARMv8
+//! crypto extension where the CPU has it.
 //!
 //! libcrux exposes only a few operations at this layer's granularity.  The
 //! rest are swapped in `mid`, where libcrux's whole operations fit, except

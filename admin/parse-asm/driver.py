@@ -443,6 +443,7 @@ class FunctionState:
         self.hoist = None
         self.hoisting = False
         self.past_hoist_end_marker = False
+        self.several_exits = False
 
     def output(self):
         return self.spool
@@ -496,6 +497,7 @@ class RustDriver:
         allow_inline=True,
         func_attrs="",
         hoist=None,
+        several_exits=False,
     ):
         self.macro_pass.emit_rust_function(name, rust_decl)
         self.formatter.emit_rust_function(
@@ -508,6 +510,7 @@ class RustDriver:
             allow_inline=allow_inline,
             func_attrs=func_attrs,
             hoist=hoist,
+            several_exits=several_exits,
         )
 
     def add_const_symbol(self, sym):
@@ -589,7 +592,11 @@ class RustFormatter(Dispatcher):
         allow_inline=True,
         func_attrs="",
         hoist=None,
+        several_exits=False,
     ):
+        # A function with several exits runs to the end of its input: each
+        # `ret` branches to one label there, where rustc's epilogue follows.
+        assert not (several_exits and hoist)
         self.expected_functions[name] = (
             parameter_map,
             return_map,
@@ -599,6 +606,7 @@ class RustFormatter(Dispatcher):
             hoist,
             assertions,
             func_attrs,
+            several_exits,
         )
 
     def set_att_syntax(self, att_syntax):
@@ -799,6 +807,7 @@ use crate::low::macros::*;
                     hoist,
                     assertions,
                     func_attrs,
+                    several_exits,
                 ) = defn
                 self.function_state.parameter_map = parameter_map
                 self.function_state.return_map = return_map
@@ -806,6 +815,7 @@ use crate::low::macros::*;
                 self.function_state.func_attrs = func_attrs
                 self.function_state.return_value = return_value
                 self.function_state.hoist = hoist
+                self.function_state.several_exits = several_exits
 
             if not self.function_state.skip:
                 locals = ""
@@ -908,6 +918,10 @@ use crate::low::macros::*;
         if "WINDOWS_ABI" in contexts:
             # No need for these as we leave function entry/return to rustc
             return
+
+        if opcode in ("ret", "retl") and self.function_state and self.function_state.several_exits:
+            self.expected_labels.add("exit")
+            return self.on_asm(contexts, self.arch.unconditional_jump, "exit")
 
         if opcode in ("ret", "retl") and (
             (self.function_state and not self.function_state.emit_ret())
@@ -1075,6 +1089,9 @@ use crate::low::macros::*;
         self.function_state = None
 
     def on_eof(self):
+        if self.function_state and self.function_state.several_exits:
+            self.on_label([], "exit")
+            self.finish_function()
         self.finish_constant_array()
 
 

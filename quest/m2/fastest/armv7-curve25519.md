@@ -1,30 +1,26 @@
-# [M] armv7 X25519 and Ed25519 from the fastest source
+# [M] armv7 X25519 ladder on NEON
 
 ## Goal
 
-armv7 X25519 and Ed25519 run the fastest source available, or this quest
-records that the saving does not matter and is deleted. Today both run
-HACL*'s verified Curve25519_51 and Ed25519, which keep 64-bit limbs on a
-32-bit core.
+On an armv7 CPU with NEON, X25519's variable-base multiplication runs
+BoringSSL's NEON assembly, or this quest records that the saving does not
+matter and is deleted. Today armv7 X25519 runs curve25519-dalek's serial
+32-bit backend for both the public key and the shared secret.
 
 ## Plan
 
-On the bench runner (Neoverse-N2 running the armv7 build, bench-tmp run
-41151132431), criterion medians:
+On the bench runner (Neoverse-N2 running the armv7 build, run
+[41162858124](https://github.com/moq-dev/rind/actions/runs/41162858124)),
+x25519-ecdh (key generation plus agreement) took 185.9 µs on dalek and
+161.4 µs on ring, which runs BoringSSL's `x25519-asm-arm.S` (SUPERCOP's
+`neon2`, unverified) for both multiplications. aws-lc dropped that file, so
+`admin/import-aws-lc` has nothing to import; take it from BoringSSL or
+ring instead, and add the source to README and LICENSE.
 
-| | rind (HACL\* ✓) | curve25519-dalek / ed25519-dalek | aws-lc-rs |
-|---|---|---|---|
-| x25519-ecdh | 245.3 µs | 185.8 µs | 259.9 µs |
-| ed25519-keygen | 84.5 µs | 48.2 µs | 68.2 µs |
-| ed25519-sign | 167.1 µs | 49.3 µs | 69.2 µs |
-| ed25519-verify | 191.6 µs | 130.6 µs | 222.0 µs |
-
-dalek is pure Rust and unverified with its default 32-bit backend, so taking
-it would mark these cells ⚡. Its `fiat` backend puts fiat-crypto's verified
-32-bit field arithmetic under dalek's curve code: measure that too, since it
-would keep the field arithmetic ✓. Ed25519 signing's gap is mostly the
-fixed-base multiplication, where dalek uses a precomputed table.
-
-Weigh it against [moq-dev/rind#99](https://github.com/moq-dev/rind/pull/99),
-which judged 0.24 ms per handshake not to matter: X25519 saves about 60 µs
-per handshake, and Ed25519 signing about 0.12 ms per signature.
+- Keep dalek's precomputed-table multiplication for the public key if it
+  beats the NEON ladder there, and measure the split: dalek's Ed25519 key
+  generation, mostly the same base multiplication, took 48.1 µs.
+- Decide NEON once per process, as SHA-512 already does,
+  with dalek as the path for CPUs without it.
+- The ladder handles a secret scalar: cover it with a ctgrind test and the
+  existing Wycheproof and aws-lc-rs X25519 tests on both paths.

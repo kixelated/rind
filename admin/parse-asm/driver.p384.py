@@ -175,6 +175,23 @@ if __name__ == "__main__":
         )
         parse_file(input, d)
 
+    with (
+        open("../../thirdparty/s2n-bignum/x86/p384/p384_montjscalarmul.S") as input,
+        open("../../rind/src/low/x86_64/p384_montjscalarmul.rs", "w") as output,
+    ):
+        d = RustDriver(output, Architecture_amd64)
+        d.emit_rust_function(
+            "p384_montjscalarmul",
+            parameter_map=[
+                ("inout", "res.as_mut_ptr() => _"),
+                ("inout", "scalar.as_ptr() => _"),
+                ("inout", "point.as_ptr() => _"),
+            ],
+            hoist=["proc", "Lp384_montjscalarmul_p384_montjdouble", "ret"],
+            rust_decl="fn p384_montjscalarmul(res: &mut [u64; 18], scalar: &[u64; 6], point: &[u64; 18])",
+        )
+        parse_file(input, d)
+
     # aarch64
     with (
         open("../../thirdparty/s2n-bignum/arm/p384/bignum_montsqr_p384.S") as input,
@@ -342,5 +359,22 @@ if __name__ == "__main__":
                 ("inout", "p1.as_ptr() => _"),
             ],
             rust_decl="fn p384_montjdouble(p3: &mut [u64; 18], p1: &[u64; 18])",
+        )
+        parse_file(input, d)
+
+    with (
+        open("../../thirdparty/s2n-bignum/arm/p384/p384_montjscalarmul_alt.S") as input,
+        open("../../rind/src/low/aarch64/p384_montjscalarmul.rs", "w") as output,
+    ):
+        d = RustDriver(output, Architecture_aarch64)
+        d.emit_rust_function(
+            "p384_montjscalarmul_alt",
+            parameter_map=[
+                ("inout", "res.as_mut_ptr() => _"),
+                ("inout", "scalar.as_ptr() => _"),
+                ("inout", "point.as_ptr() => _"),
+            ],
+            hoist=["proc", "Lp384_montjscalarmul_alt_p384_montjdouble", "ret"],
+            rust_decl="fn p384_montjscalarmul(res: &mut [u64; 18], scalar: &[u64; 6], point: &[u64; 18])",
         )
         parse_file(input, d)
