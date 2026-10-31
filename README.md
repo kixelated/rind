@@ -56,7 +56,8 @@ but there is also a public API for general-purpose use.
   Without it, `rind::cpu::has_aes_hardware()` is false, and rind-rustls and
   rind-dimpl prefer ChaCha20-Poly1305, which is faster there: ChaCha20 runs
   aws-lc's assembly, and so does Poly1305 where the CPU has NEON. SHA-384 and
-  SHA-512 always run aws-lc's assembly, with NEON where the CPU has it.
+  SHA-512 always run aws-lc's assembly, with NEON where the CPU has it, and
+  with NEON, X25519's shared secret runs [BoringSSL]'s assembly.
 
 Every operation panics on a CPU missing one of these. Call `rind::cpu::check()`
 at startup to get an error naming the missing feature instead.
@@ -93,7 +94,7 @@ Each cell names whose code runs for that algorithm on that backend: the
 intrinsics. A ✓ marks code its source formally verifies, to the extent
 [Sources](#sources) states. A ⚡ marks unverified code chosen because it
 measured faster than a verified alternative; other unverified code has none,
-or a [quest](quest/m2/fastest/README.md) covers it. The table describes
+or a [quest](quest/README.md) covers it. The table describes
 `main`, and changes alongside the code it describes.
 
 | Algorithm | x86_64 | aarch64 | armv7 |
@@ -107,7 +108,7 @@ or a [quest](quest/m2/fastest/README.md) covers it. The table describes
 | SHA-384, SHA-512 | Intel: [aws-lc] AVX (copied) ✓; otherwise: [aws-lc] scalar (copied) ⚡ | SHA-512 instructions: [aws-lc] (copied) ✓; otherwise: [aws-lc] scalar (copied) ✓ | NEON: [aws-lc] (copied) ⚡; otherwise: [aws-lc] scalar (copied) ⚡ |
 | HMAC | Graviola ⚡ | Graviola ⚡ | Graviola ⚡ |
 | HKDF | rind ⚡ | rind ⚡ | rind ⚡ |
-| X25519 | [s2n-bignum] ✓ | [s2n-bignum] ✓ | [curve25519-dalek] ⚡ |
+| X25519 | [s2n-bignum] ✓ | [s2n-bignum] ✓ | NEON: [BoringSSL] shared secret (copied) ⚡, [curve25519-dalek] public key ⚡; otherwise: [curve25519-dalek] ⚡ |
 | Ed25519 | [s2n-bignum] point and scalar arithmetic ✓; Graviola EdDSA ⚡; SHA-512 as in its row | [s2n-bignum] point and scalar arithmetic ✓; Graviola EdDSA ⚡; [aws-lc] SHA-512 ✓ | [curve25519-dalek] point and scalar arithmetic ⚡; rind EdDSA ⚡; SHA-512 as in its row |
 | P-256 ECDH, ECDSA | [s2n-bignum] field and point arithmetic, and secret scalar multiplication ✓; Graviola verification's scalar multiplication ⚡ and ECDSA ⚡ | [s2n-bignum] field and point arithmetic, and secret scalar multiplication ✓; Graviola verification's scalar multiplication ⚡ and ECDSA ⚡ | [HACL\*] ✓; Graviola ECDSA nonce |
 | P-384 ECDH, ECDSA | [s2n-bignum] field and point arithmetic, and other secret scalar multiplication ✓; rind comb multiplication of the generator ⚡; Graviola verification's other scalar multiplication ⚡, and ECDSA | [s2n-bignum] field and point arithmetic, and other secret scalar multiplication ✓; rind comb multiplication of the generator ⚡; Graviola verification's other scalar multiplication ⚡, and ECDSA | [fiat-crypto] field and scalar arithmetic ✓; scalar multiplication over it ⚡, from rind point formulas, inversion, table lookup, and comb multiplication of the generator, and Graviola other scalar multiplication; Graviola ECDSA |
@@ -127,7 +128,7 @@ The tests use [Wycheproof]'s vectors.
 | [libcrux-ml-kem] | dependency | Apache-2.0 | [hax and F\* proofs](https://github.com/cryspen/libcrux/blob/main/libcrux-ml-kem/proofs/verification_status.md) of panic freedom and functional correctness for its portable arithmetic, NTT, serialization, and high-level code. Its SHA-3, from libcrux-sha3, is unverified. |
 | [libcrux-aes] | dependency for AES-GCM; copied: the block cipher | Apache-2.0 | nothing: libcrux marks it pre-verification |
 | [aws-lc] | copied, by `admin/import-aws-lc`: its SHA-384/512 assembly for x86_64 and aarch64, as Rust naked functions; its 32-bit ARM assembly for ChaCha20, SHA-384/512, the ARMv8 crypto extension (AES, GHASH, SHA-1, SHA-256), and NEON Poly1305, in Rust `global_asm!`, and the C that drives that Poly1305, ported to Rust. aws-lc takes its Poly1305 from BoringSSL and the rest from OpenSSL | Apache-2.0; Poly1305 ISC | [SAW and NSym proofs](https://github.com/awslabs/aws-lc-verification) that its x86_64 AVX and aarch64 (with and without the SHA-512 instructions) SHA-384/512 routines compute their specified result for all inputs. They check aws-lc's own build, not rind's copy, and do not cover its 32-bit ARM code. |
-| [BoringSSL] | copied, by `admin/import-boringssl`: its x86_64 VAES AES-GCM assembly, `aes-gcm-avx2-x86_64` and `aes-gcm-avx512-x86_64`, as Rust naked functions | Apache-2.0 | nothing |
+| [BoringSSL] | copied, by `admin/import-boringssl`: its x86_64 VAES AES-GCM assembly, `aes-gcm-avx2-x86_64` and `aes-gcm-avx512-x86_64`, as Rust naked functions; its 32-bit ARM NEON X25519 assembly, in Rust `global_asm!`, which BoringSSL takes from [SUPERCOP]'s `neon2`, public domain | Apache-2.0 | nothing |
 | [curve25519-dalek] | dependency, with its serial 32-bit backend | BSD-3-Clause | nothing: that backend's field arithmetic is hand-written. Its `fiat` backend would run [fiat-crypto]'s verified field arithmetic instead, but only a `--cfg` flag for the whole build selects it, so rind refuses it rather than let the build pick. |
 | [fiat-crypto] | dependency | MIT OR Apache-2.0 OR BSD-1-Clause | [Coq proofs](https://github.com/mit-plv/fiat-crypto) that each generated field operation is correct. rind's point formulas, inversion, and table lookup over them are not covered. |
 
@@ -154,6 +155,7 @@ different one, updates this table and [LICENSE] in the same PR.
 [aws-lc-rs]: https://github.com/aws/aws-lc-rs
 [fiat-crypto]: https://github.com/mit-plv/fiat-crypto
 [BoringSSL]: https://boringssl.googlesource.com/boringssl
+[SUPERCOP]: https://bench.cr.yp.to/supercop.html
 [curve25519-dalek]: https://github.com/dalek-cryptography/curve25519-dalek
 [Wycheproof]: https://github.com/C2SP/wycheproof
 [LICENSE]: https://github.com/moq-dev/rind/blob/main/LICENSE
@@ -205,7 +207,7 @@ The code is structured such that we pass the RFC6979 test vectors.
 The code which selects a term from a table of points is non-verified,
 and is written in AVX2/Neon intrinsics.
 
-X25519 directly uses the s2n-bignum implementation.
+On x86_64 and aarch64, X25519 directly uses the s2n-bignum implementation.
 
 ### ML-KEM-768
 On x86_64 and aarch64, the core polynomial arithmetic -- the NTT, inverse NTT, base multiplication

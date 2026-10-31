@@ -96,5 +96,47 @@ fn x25519(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, x25519);
+// Generate a key and its public key: the fixed-base multiplication alone,
+// where `x25519-ecdh` adds the variable-base one.
+fn keygen(c: &mut Criterion) {
+    let mut group = c.benchmark_group("x25519-keygen");
+    group.throughput(Throughput::Elements(1));
+
+    group.bench_function("ring", |b| {
+        use ring::{agreement, rand};
+        let rng = rand::SystemRandom::new();
+
+        b.iter(|| {
+            let key = agreement::EphemeralPrivateKey::generate(&agreement::X25519, &rng).unwrap();
+            black_box(key.compute_public_key().unwrap());
+        })
+    });
+
+    group.bench_function("aws-lc-rs", |b| {
+        use aws_lc_rs::{agreement, rand};
+        let rng = rand::SystemRandom::new();
+
+        b.iter(|| {
+            let key = agreement::EphemeralPrivateKey::generate(&agreement::X25519, &rng).unwrap();
+            black_box(key.compute_public_key().unwrap());
+        })
+    });
+
+    group.bench_function("dalek", |b| {
+        b.iter(|| {
+            let key = x25519_dalek::EphemeralSecret::random();
+            black_box(x25519_dalek::PublicKey::from(&key));
+        });
+    });
+
+    group.bench_function("rind", |b| {
+        b.iter(|| {
+            use rind::agreement::*;
+            let key = EphemeralPrivateKey::generate(&X25519).unwrap();
+            black_box(key.compute_public_key());
+        })
+    });
+}
+
+criterion_group!(benches, x25519, keygen);
 criterion_main!(benches);
