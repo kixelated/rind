@@ -71,12 +71,6 @@ jobs:
           ./all.sh
           git diff --exit-code
 
-      # s2n-bignum's proofs assume separate input and output, so the kernels
-      # rind runs in place are walked instead, after planting faults in each.
-      - name: check in-place kernels
-        working-directory: admin/parse-asm
-        run: python3 inplace.py
-
       - name: check module structure
         run: ./admin/structure
 

@@ -79,10 +79,10 @@ jobs:
           # test the AES-256-GCM and Keccak-f kernels for cores without SHA3
           env RIND_CPU_DISABLE_sha3=1 cargo test
 
-  # 32-bit ARM runs libcrux, or aws-lc's assembly for the crypto extension.
-  # The recipe builds and lints Android and Linux gnueabihf, then runs the
-  # gnueabihf tests under qemu on both of rind's armv7 paths, as a local run
-  # does.
+  # 32-bit ARM runs libcrux, or aws-lc's assembly for ChaCha20, NEON, and the
+  # crypto extension. The recipe builds and lints Android and Linux gnueabihf,
+  # then runs the gnueabihf tests under qemu on both of rind's armv7 paths, as
+  # a local run does.
   armv7:
     runs-on: ubuntu-latest
     steps:
