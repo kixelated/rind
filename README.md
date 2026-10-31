@@ -109,7 +109,7 @@ or a [quest](quest/m2/fastest/README.md) covers it. The table describes
 | HMAC | Graviola ⚡ | Graviola ⚡ | Graviola ⚡ |
 | HKDF | rind ⚡ | rind ⚡ | rind ⚡ |
 | X25519 | [s2n-bignum] ✓ | [s2n-bignum] ✓ | [HACL\*] ✓ |
-| Ed25519 | [s2n-bignum] point and scalar arithmetic ✓; Graviola EdDSA ⚡; [aws-lc] SHA-512 ✓ | [s2n-bignum] point and scalar arithmetic ✓; Graviola EdDSA ⚡; [aws-lc] SHA-512 ✓ | [HACL\*] ✓ |
+| Ed25519 | [s2n-bignum] point and scalar arithmetic ✓; Graviola EdDSA ⚡; SHA-512 as in its row | [s2n-bignum] point and scalar arithmetic ✓; Graviola EdDSA ⚡; [aws-lc] SHA-512 ✓ | [HACL\*] ✓ |
 | P-256 ECDH, ECDSA | [s2n-bignum] field and point arithmetic ✓; Graviola scalar multiplication and table lookup; Graviola ECDSA ⚡ | [s2n-bignum] field and point arithmetic ✓; Graviola scalar multiplication and table lookup; Graviola ECDSA ⚡ | [HACL\*] ✓; Graviola ECDSA nonce |
 | P-384 ECDH, ECDSA | [s2n-bignum] field and point arithmetic ✓; rind comb multiplication of the generator ⚡; Graviola other scalar multiplication, table lookup, and ECDSA | [s2n-bignum] field and point arithmetic ✓; rind comb multiplication of the generator ⚡; Graviola other scalar multiplication, table lookup, and ECDSA | [fiat-crypto] field and scalar arithmetic ✓; scalar multiplication over it ⚡, from rind point formulas, inversion, table lookup, and comb multiplication of the generator, and Graviola other scalar multiplication; Graviola ECDSA |
 | ML-KEM-768 | [s2n-bignum] polynomial arithmetic and Keccak-f ✓; Graviola FIPS 203 and AVX-512 sampling ⚡ | [s2n-bignum] polynomial arithmetic and Keccak-f ✓; Graviola FIPS 203 ⚡ | [libcrux-ml-kem] ✓, except its SHA-3 |
