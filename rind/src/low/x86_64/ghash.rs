@@ -12,7 +12,8 @@
 use core::arch::x86_64::*;
 use core::mem;
 
-use super::cpu::HaveAvx512ForAesGcm;
+use super::aes_gcm_vaes::VaesKernel;
+use super::cpu::{HaveAvx512ForAesGcm, HaveVaesAvx2ForAesGcm};
 use crate::low;
 
 macro_rules! mul {
@@ -52,6 +53,9 @@ macro_rules! reduce {
 #[expect(clippy::large_enum_variant)]
 pub(crate) enum GhashTable {
     Avx(GhashTableAvx),
+    /// VAES without AVX-512: the AVX path for short messages, and
+    /// BoringSSL's 256-bit kernel for long ones.
+    VaesAvx2(GhashTableAvx, VaesKernel),
     Avx512(GhashTableAvx512),
 }
 
@@ -60,13 +64,16 @@ impl GhashTable {
         if let Some(token) = HaveAvx512ForAesGcm::check() {
             return Self::Avx512(GhashTableAvx512::new(h, token));
         }
+        if let Some(token) = HaveVaesAvx2ForAesGcm::check() {
+            return Self::VaesAvx2(GhashTableAvx::new(h), VaesKernel::avx2(h, token));
+        }
 
         Self::Avx(GhashTableAvx::new(h))
     }
 
     pub(crate) fn avx(&self) -> &GhashTableAvx {
         match self {
-            Self::Avx(table) => table,
+            Self::Avx(table) | Self::VaesAvx2(table, _) => table,
             Self::Avx512(table) => &table.avx,
         }
     }
@@ -187,6 +194,8 @@ pub(crate) struct GhashTableAvx512 {
     /// by the last `n`
     powers: [__m512i; 4],
     avx: GhashTableAvx,
+    /// BoringSSL's 512-bit kernel, for long messages.
+    pub(crate) vaes: VaesKernel,
     pub(crate) token: HaveAvx512ForAesGcm,
 }
 
@@ -215,7 +224,12 @@ impl GhashTableAvx512 {
             ]
         };
 
-        Self { powers, avx, token }
+        Self {
+            powers,
+            avx,
+            vaes: VaesKernel::avx512(h, token),
+            token,
+        }
     }
 
     #[target_feature(enable = "vpclmulqdq,avx512bw,avx512f,avx512vl")]
@@ -269,25 +283,32 @@ impl<'a> Ghash<'a> {
     /// `bytes` is zero-padded, if required.
     pub(crate) fn add(&mut self, bytes: &[u8]) {
         self.current = match self.table {
-            GhashTable::Avx(avx) => avx.add(bytes, self.current),
+            GhashTable::Avx(avx) | GhashTable::VaesAvx2(avx, _) => avx.add(bytes, self.current),
             // SAFETY: avx512.token proves features were dynamically checked
             GhashTable::Avx512(avx512) => unsafe { avx512.add(bytes, self.current) },
         };
     }
 
     pub(crate) fn into_bytes(self) -> [u8; 16] {
-        // SAFETY: this crate requires the `sse2` and `ssse3` cpu features
-        unsafe { self._into_bytes() }
+        self.xi()
     }
 
-    #[target_feature(enable = "sse2,ssse3")]
-    fn _into_bytes(self) -> [u8; 16] {
-        let mut out: i128 = 0;
-        let reverse = _mm_shuffle_epi8(self.current, BYTESWAP);
-        // SAFETY: `out` is 128 bits, and a suitable target for a 128-bit aligned store
-        unsafe { _mm_store_si128((&mut out as *mut i128).cast(), reverse) };
-        out.to_le_bytes()
+    /// The state in GCM's byte order, as BoringSSL's `Xi`.
+    pub(crate) fn xi(&self) -> [u8; 16] {
+        // SAFETY: this crate requires the `ssse3` cpu feature
+        m128i_to_u128(unsafe { byteswap(self.current) }).to_le_bytes()
     }
+
+    /// Sets the state from GCM's byte order, as BoringSSL's `Xi`.
+    pub(crate) fn set_xi(&mut self, xi: [u8; 16]) {
+        // SAFETY: this crate requires the `ssse3` cpu feature
+        self.current = unsafe { byteswap(u128_to_m128i(u128::from_le_bytes(xi))) };
+    }
+}
+
+#[target_feature(enable = "ssse3")]
+fn byteswap(x: __m128i) -> __m128i {
+    _mm_shuffle_epi8(x, BYTESWAP)
 }
 
 #[inline]
@@ -479,6 +500,12 @@ fn join512(a: __m128i, b: __m128i, c: __m128i, d: __m128i) -> __m512i {
 
 #[inline]
 fn u128_to_m128i(v: u128) -> __m128i {
+    // SAFETY: sizeof(u128) == sizeof(__m128i), all bits have same meaning
+    unsafe { mem::transmute(v) }
+}
+
+#[inline]
+fn m128i_to_u128(v: __m128i) -> u128 {
     // SAFETY: sizeof(u128) == sizeof(__m128i), all bits have same meaning
     unsafe { mem::transmute(v) }
 }

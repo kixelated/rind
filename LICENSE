@@ -107,6 +107,16 @@ aws-lc <https://github.com/aws/aws-lc>, from OpenSSL and BoringSSL
     AWS-LC
     Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
+BoringSSL <https://boringssl.googlesource.com/boringssl>
+
+  What: the files under rind/src/low/x86_64/boringssl (AES-GCM on VAES),
+  which admin/import-boringssl takes from BoringSSL's pregenerated
+  gen/bcm/aes-gcm-avx2-x86_64 and aes-gcm-avx512-x86_64 at commit
+  ed9209cff8b5a2fbc6c10050f29b3355048bda85. The AVX-512 one is based
+  on aes-gcm-avx10-x86_64.S from Linux.
+  Copyright 2024 The BoringSSL Authors
+  License: Apache-2.0. BoringSSL has no NOTICE file.
+
 --
 
 SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0

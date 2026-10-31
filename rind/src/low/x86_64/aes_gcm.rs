@@ -18,17 +18,7 @@ pub(crate) fn encrypt(
     aad: &[u8],
     cipher_inout: &mut [u8],
 ) {
-    if let (true, GhashTable::Avx512(GhashTableAvx512 { token, .. })) =
-        (cipher_inout.len() >= AVX512_MINIMUM_CIPHER_LEN, ghash.table)
-    {
-        // SAFETY: this crate requires the `aes`, `sse3`, `ssse3`, `pclmulqdq`, `avx` and `avx2` cpu features;
-        // `token` proves the remaining features were dynamically checked
-        unsafe { _cipher_avx512::<true>(key, ghash, initial_counter, aad, cipher_inout, *token) };
-        return;
-    }
-
-    // SAFETY: this crate requires the `aes`, `ssse3`, `pclmulqdq` and `avx` cpu features
-    unsafe { _cipher::<true>(key, ghash, initial_counter, aad, cipher_inout) }
+    cipher::<true>(key, ghash, initial_counter, aad, cipher_inout)
 }
 
 pub(crate) fn decrypt(
@@ -38,16 +28,38 @@ pub(crate) fn decrypt(
     aad: &[u8],
     cipher_inout: &mut [u8],
 ) {
-    if let (true, GhashTable::Avx512(GhashTableAvx512 { token, .. })) =
-        (cipher_inout.len() >= AVX512_MINIMUM_CIPHER_LEN, ghash.table)
-    {
-        // SAFETY: this crate requires the `aes`, `sse3`, `ssse3`, `pclmulqdq`, `avx` and `avx2` cpu features;
-        // `token` proves the remaining features were dynamically checked
-        unsafe { _cipher_avx512::<false>(key, ghash, initial_counter, aad, cipher_inout, *token) };
-        return;
+    cipher::<false>(key, ghash, initial_counter, aad, cipher_inout)
+}
+
+// AES-GCM encrypt (if `ENC` is `true`) or decrypt, on the fastest path for
+// the CPU the GHASH key was made on and the message's length.
+fn cipher<const ENC: bool>(
+    key: &AesKey,
+    ghash: &mut Ghash<'_>,
+    initial_counter: &[u8; 16],
+    aad: &[u8],
+    cipher_inout: &mut [u8],
+) {
+    let len = cipher_inout.len();
+    match ghash.table {
+        GhashTable::Avx512(GhashTableAvx512 { vaes, .. })
+            if len >= AVX512_KERNEL_MINIMUM_CIPHER_LEN =>
+        {
+            ghash.add(aad);
+            vaes.cipher::<ENC>(key, initial_counter, ghash, cipher_inout);
+        }
+        GhashTable::Avx512(GhashTableAvx512 { token, .. }) if len >= AVX512_MINIMUM_CIPHER_LEN => {
+            // SAFETY: this crate requires the `aes`, `sse3`, `ssse3`, `pclmulqdq`, `avx` and `avx2` cpu features;
+            // `token` proves the remaining features were dynamically checked
+            unsafe { _cipher_avx512::<ENC>(key, ghash, initial_counter, aad, cipher_inout, *token) }
+        }
+        GhashTable::VaesAvx2(_, vaes) if len >= VAES_AVX2_MINIMUM_CIPHER_LEN => {
+            ghash.add(aad);
+            vaes.cipher::<ENC>(key, initial_counter, ghash, cipher_inout);
+        }
+        // SAFETY: this crate requires the `aes`, `ssse3`, `pclmulqdq` and `avx` cpu features
+        _ => unsafe { _cipher::<ENC>(key, ghash, initial_counter, aad, cipher_inout) },
     }
-    // SAFETY: this crate requires the `aes`, `ssse3`, `pclmulqdq` and `avx` cpu features
-    unsafe { _cipher::<false>(key, ghash, initial_counter, aad, cipher_inout) }
 }
 
 #[target_feature(enable = "aes,ssse3,pclmulqdq,avx")]
@@ -355,6 +367,15 @@ fn _cipher_avx512<const ENC: bool>(
 ///
 /// `cipher_avx512` _works_ for shorter lengths, but is not worth it.
 const AVX512_MINIMUM_CIPHER_LEN: usize = 16 * 16;
+
+/// How many message bytes BoringSSL's 512-bit kernel needs to beat the AVX512
+/// by-16 impl: its interleaved AES and GHASH win on long messages, but its
+/// setup costs more on short ones.
+const AVX512_KERNEL_MINIMUM_CIPHER_LEN: usize = 2048;
+
+/// How many message bytes BoringSSL's 256-bit kernel needs to beat the AVX
+/// path, whose single blocks are quicker for short messages.
+const VAES_AVX2_MINIMUM_CIPHER_LEN: usize = 16 * 16;
 
 /// This stores the current four counter values, in big endian.
 #[derive(Debug)]
