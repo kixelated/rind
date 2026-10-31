@@ -3,10 +3,11 @@
 // Copyright 2023 Cryspen Sarl
 // SPDX-License-Identifier: Apache-2.0
 //
-// ChaCha20, from HACL*'s verified `Hacl_Chacha20` as libcrux-chacha20poly1305
-// 0.0.10 ships it (`src/hacl/chacha20.rs`): the state setup and block function,
-// less the module paths, since libcrux does not export them. HChaCha20, for
-// XChaCha20, runs the same rounds as draft-irtf-cfrg-xchacha-03 specifies.
+// HChaCha20, for XChaCha20, over HACL*'s verified `Hacl_Chacha20` as
+// libcrux-chacha20poly1305 0.0.10 ships it (`src/hacl/chacha20.rs`): the state
+// setup and rounds, less the module paths, since libcrux does not export them.
+// HChaCha20 runs the rounds as draft-irtf-cfrg-xchacha-03 specifies. The
+// keystream itself is aws-lc's, in `chacha_armv4`.
 
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
@@ -16,6 +17,8 @@
 
 use libcrux_hacl_rs::prelude::*;
 use libcrux_macros as krml;
+
+pub(crate) use super::chacha_armv4::ChaCha20;
 
 pub(crate) const chacha20_constants: [u32; 4] =
     [0x61707865u32, 0x3320646eu32, 0x79622d32u32, 0x6b206574u32];
@@ -82,20 +85,6 @@ pub(crate) fn rounds(st: &mut [u32]) {
     double_round(st)
 }
 
-#[inline]
-fn chacha20_core(k: &mut [u32], ctx: &[u32], ctr: u32) {
-    (k[0usize..16usize]).copy_from_slice(&ctx[0usize..16usize]);
-    let ctr_u32: u32 = ctr;
-    k[12usize] = (k[12usize]).wrapping_add(ctr_u32);
-    rounds(k);
-    krml::unroll_for!(16, "i", 0u32, 1u32, {
-        let x: u32 = (k[i as usize]).wrapping_add(ctx[i as usize]);
-        let os: (&mut [u32], &mut [u32]) = k.split_at_mut(0usize);
-        os.1[i as usize] = x
-    });
-    k[12usize] = (k[12usize]).wrapping_add(ctr_u32)
-}
-
 fn chacha20_init(ctx: &mut [u32], k: &[u8], n: &[u8], ctr: u32) {
     krml::unroll_for!(4, "i", 0u32, 1u32, {
         let x: u32 = (&chacha20_constants)[i as usize];
@@ -121,39 +110,6 @@ fn chacha20_init(ctx: &mut [u32], k: &[u8], n: &[u8], ctr: u32) {
         let os: (&mut [u32], &mut [u32]) = uu____1.1.split_at_mut(0usize);
         os.1[i as usize] = x
     })
-}
-
-pub(crate) struct ChaCha20 {
-    ctx: [u32; 16],
-}
-
-impl ChaCha20 {
-    /// `nonce` is the little-endian block counter followed by the 96-bit nonce.
-    pub(crate) fn new(key: &[u8; 32], nonce: &[u8; 16]) -> Self {
-        let mut ctx = [0u32; 16];
-        let (counter, nonce) = nonce.split_at(4);
-        chacha20_init(
-            &mut ctx,
-            key,
-            nonce,
-            u32::from_le_bytes(counter.try_into().unwrap()),
-        );
-        Self { ctx }
-    }
-
-    pub(crate) fn cipher(&mut self, buffer: &mut [u8]) {
-        let mut keystream = [0u32; 16];
-        for block in buffer.chunks_mut(64) {
-            chacha20_core(&mut keystream, &self.ctx, 0);
-            for (b, k) in block
-                .iter_mut()
-                .zip(keystream.iter().flat_map(|w| w.to_le_bytes()))
-            {
-                *b ^= k;
-            }
-            self.ctx[12] = self.ctx[12].wrapping_add(1);
-        }
-    }
 }
 
 pub(crate) struct XChaCha20(ChaCha20);

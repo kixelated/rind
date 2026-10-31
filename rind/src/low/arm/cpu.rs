@@ -8,6 +8,17 @@ pub(crate) fn missing_cpu_feature() -> Option<&'static str> {
     None
 }
 
+/// Proof that the CPU has NEON (Advanced SIMD), which ARMv7 cores may omit.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct HaveNeon(());
+
+impl HaveNeon {
+    /// Answers from the features detected once per process.
+    pub(crate) fn check() -> Option<Self> {
+        (detected() & NEON != 0).then_some(Self(()))
+    }
+}
+
 /// Proof that the CPU has the ARMv8 Crypto Extension in AArch32: NEON, AES,
 /// PMULL, SHA-1, and SHA-256.
 ///
@@ -17,31 +28,37 @@ pub(crate) fn missing_cpu_feature() -> Option<&'static str> {
 pub(crate) struct HaveCryptoExt(());
 
 impl HaveCryptoExt {
-    /// Detects the extension once, then answers from the cached result.
+    /// Answers from the features detected once per process.
     pub(crate) fn check() -> Option<Self> {
-        const UNKNOWN: u8 = 0;
-        const ABSENT: u8 = 1;
-        const PRESENT: u8 = 2;
-        static DETECTED: AtomicU8 = AtomicU8::new(UNKNOWN);
+        (detected() & CRYPTO_EXT != 0).then_some(Self(()))
+    }
+}
 
-        let detected = match DETECTED.load(Ordering::Relaxed) {
-            UNKNOWN => {
-                let detected = if detect() { PRESENT } else { ABSENT };
-                DETECTED.store(detected, Ordering::Relaxed);
-                detected
-            }
-            detected => detected,
-        };
-        (detected == PRESENT).then_some(Self(()))
+const NEON: u8 = 1 << 0;
+const CRYPTO_EXT: u8 = 1 << 1;
+const DETECTED: u8 = 1 << 7;
+
+/// The `NEON` and `CRYPTO_EXT` bits, detected on first use and then cached.
+fn detected() -> u8 {
+    static FEATURES: AtomicU8 = AtomicU8::new(0);
+
+    match FEATURES.load(Ordering::Relaxed) {
+        0 => {
+            let features = detect() | DETECTED;
+            FEATURES.store(features, Ordering::Relaxed);
+            features
+        }
+        features => features,
     }
 }
 
 /// Reads the features the kernel reports to 32-bit processes, as aws-lc does
 /// (`crypto/fipsmodule/cpucap/cpu_arm_linux.c`). A kernel that omits
-/// `AT_HWCAP2` gets the portable code: aws-lc parses `/proc/cpuinfo` for those
-/// early ARMv8 Android kernels instead, which rind does not.
+/// `AT_HWCAP2` gets the portable code for the crypto extension: aws-lc parses
+/// `/proc/cpuinfo` for those early ARMv8 Android kernels instead, which rind
+/// does not.
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn detect() -> bool {
+fn detect() -> u8 {
     // Bits from the kernel's arch/arm/include/uapi/asm/hwcap.h.
     const HWCAP_NEON: libc::c_ulong = 1 << 12;
     const HWCAP2_AES: libc::c_ulong = 1 << 0;
@@ -57,18 +74,21 @@ fn detect() -> bool {
             libc::getauxval(libc::AT_HWCAP2),
         )
     };
-    test_toggle("neon", hwcap & HWCAP_NEON != 0)
-        && test_toggle("aes", hwcap2 & HWCAP2_AES != 0)
+    if !test_toggle("neon", hwcap & HWCAP_NEON != 0) {
+        return 0;
+    }
+    let crypto_ext = test_toggle("aes", hwcap2 & HWCAP2_AES != 0)
         && test_toggle("pmull", hwcap2 & HWCAP2_PMULL != 0)
         && test_toggle("sha1", hwcap2 & HWCAP2_SHA1 != 0)
-        && test_toggle("sha2", hwcap2 & HWCAP2_SHA2 != 0)
+        && test_toggle("sha2", hwcap2 & HWCAP2_SHA2 != 0);
+    if crypto_ext { NEON | CRYPTO_EXT } else { NEON }
 }
 
-/// Other operating systems report the extension differently, so they get the
+/// Other operating systems report features differently, so they get the
 /// portable code.
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-fn detect() -> bool {
-    false
+fn detect() -> u8 {
+    0
 }
 
 #[cfg(all(not(debug_assertions), any(target_os = "linux", target_os = "android")))]
@@ -158,10 +178,13 @@ pub(in crate::low) unsafe fn ct_compare_bytes(a: *const u8, b: *const u8, len: u
 mod tests {
     use super::*;
 
-    // CI runs the armv7 suite on a CPU model with the extension and one
-    // without, and names which, so neither run silently tests only one path.
+    // CI runs the armv7 suite on CPU models with and without NEON and the
+    // extension, and names which, so no run silently tests the wrong path.
     #[test]
     fn detects_the_expected_cpu() {
+        if let Some(expected) = std::env::var_os("RIND_TEST_ARM_NEON") {
+            assert_eq!(HaveNeon::check().is_some(), expected == "1");
+        }
         if let Some(expected) = std::env::var_os("RIND_TEST_ARM_CRYPTO_EXT") {
             assert_eq!(HaveCryptoExt::check().is_some(), expected == "1");
         }

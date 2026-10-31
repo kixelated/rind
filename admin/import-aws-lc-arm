@@ -3,13 +3,13 @@
 
 Usage: admin/import-aws-lc-arm <aws-lc checkout at REV>
 
-Each output is aws-lc's pregenerated `generated-src/linux-arm` file, run
-through cpp for ARM mode, cut down to the routines rind calls and the
-constants they load, then escaped for `global_asm!`: braces doubled, each
-routine's name a `{name}` operand that rind binds to a crate-version qualified
-symbol, and each `.L` label tagged with its file, since `global_asm!` blocks
-can share an assembler scope. Undoing those three edits gives aws-lc's text
-line for line.
+Each output is one of aws-lc's 32-bit ARM assembly files, mostly the
+pregenerated `generated-src/linux-arm` ones, run through cpp for ARM mode, cut
+down to the routines rind calls and the constants they load, then escaped for
+`global_asm!`: braces doubled, each routine's name a `{name}` operand that rind
+binds to a crate-version qualified symbol, and each local label (`.L` or `._`)
+tagged with its file, since `global_asm!` blocks can share an assembler scope.
+Undoing those three edits gives aws-lc's text line for line.
 """
 
 import os
@@ -23,6 +23,8 @@ REV = "91c93a8eb860e51482a871a8772cb9b1b310baea"
 # aws-lc builds them for 32-bit Android and Linux.
 CPP = [
     "cpp",
+    "-x",
+    "assembler-with-cpp",
     "-traditional-cpp",
     "-P",
     "-undef",
@@ -36,12 +38,16 @@ CPP = [
     "-",
 ]
 
+FIPS = "generated-src/linux-arm/crypto/fipsmodule/"
+OPENSSL = "The OpenSSL Project Authors. All Rights Reserved."
+APACHE = "SPDX-License-Identifier: Apache-2.0"
+
 IMPORTS = [
     {
-        "source": "aesv8-armx.S",
+        "source": FIPS + "aesv8-armx.S",
         "tag": "aes",
         "perlasm": "crypto/fipsmodule/aes/asm/aesv8-armx.pl",
-        "copyright": "Copyright 2014-2016 The OpenSSL Project Authors. All Rights Reserved.",
+        "notice": [f"Copyright 2014-2016 {OPENSSL}", APACHE],
         "constants": [(".Lrcon:", 3)],
         "routines": [
             "aes_hw_set_encrypt_key",
@@ -50,28 +56,51 @@ IMPORTS = [
         ],
     },
     {
-        "source": "ghashv8-armx.S",
+        "source": FIPS + "ghashv8-armx.S",
         "tag": "ghash",
         "perlasm": "crypto/fipsmodule/modes/asm/ghashv8-armx.pl",
-        "copyright": "Copyright 2014-2020 The OpenSSL Project Authors. All Rights Reserved.",
+        "notice": [f"Copyright 2014-2020 {OPENSSL}", APACHE],
         "constants": [],
         "routines": ["gcm_init_v8", "gcm_ghash_v8"],
     },
     {
-        "source": "sha1-armv4-large.S",
+        "source": FIPS + "sha1-armv4-large.S",
         "tag": "sha1",
         "perlasm": "crypto/fipsmodule/sha/asm/sha1-armv4-large.pl",
-        "copyright": "Copyright 2007-2016 The OpenSSL Project Authors. All Rights Reserved.",
+        "notice": [f"Copyright 2007-2016 {OPENSSL}", APACHE],
         "constants": [(".LK_00_19:.word", 3)],
         "routines": ["sha1_block_data_order_hw"],
     },
     {
-        "source": "sha256-armv4.S",
+        "source": FIPS + "sha256-armv4.S",
         "tag": "sha256",
         "perlasm": "crypto/fipsmodule/sha/asm/sha256-armv4.pl",
-        "copyright": "Copyright 2007-2016 The OpenSSL Project Authors. All Rights Reserved.",
+        "notice": [f"Copyright 2007-2016 {OPENSSL}", APACHE],
         "constants": [("K256:", 16), (".LK256_shortcut_hw:", 2)],
         "routines": ["sha256_block_data_order_hw"],
+    },
+    {
+        "source": "generated-src/linux-arm/crypto/chacha/chacha-armv4.S",
+        "tag": "chacha",
+        "perlasm": "crypto/chacha/asm/chacha-armv4.pl",
+        "notice": [f"Copyright 2016 {OPENSSL}", APACHE],
+        "constants": [(".Lsigma:", 3)],
+        "routines": ["ChaCha20_ctr32_nohw", "ChaCha20_ctr32_neon"],
+    },
+    # Written by hand rather than generated, and its routines end without
+    # `.size`, so the whole file is kept. aws-lc keeps BoringSSL's ISC license
+    # for it.
+    {
+        "source": "crypto/poly1305/poly1305_arm_asm.S",
+        "tag": "poly1305",
+        "notice": [
+            "Public domain: the neon2 version in SUPERCOP by D. J. Bernstein and",
+            "Peter Schwabe, as BoringSSL imported it. Copyright (c) 2014, Google Inc.",
+            "SPDX-License-Identifier: ISC",
+        ],
+        "constants": [],
+        "routines": ["openssl_poly1305_neon2_blocks", "openssl_poly1305_neon2_addmulmod"],
+        "whole": True,
     },
 ]
 
@@ -112,10 +141,10 @@ def routine(lines, name):
 
 def escape(lines, routines, tag):
     names = re.compile(r"\b(" + "|".join(routines) + r")\b")
-    labels = re.compile(r"(?<![\w.])\.L(\w+)")
+    labels = re.compile(r"(?<![\w.])\.(L|_)(\w+)")
     for line in lines:
         line = line.replace("{", "{{").replace("}", "}}")
-        line = labels.sub(rf".L{tag}_\1", line)
+        line = labels.sub(rf".\1{tag}_\2", line)
         yield names.sub(r"{\1}", line)
 
 
@@ -131,24 +160,28 @@ def main():
 
     out_dir = os.path.join(os.path.dirname(__file__), "..", "rind", "src", "low", "arm", "aws_lc")
     for spec in IMPORTS:
-        source = os.path.join("generated-src", "linux-arm", "crypto", "fipsmodule", spec["source"])
+        source = spec["source"]
         lines = preprocess(os.path.join(aws_lc, source))
 
-        body = []
-        for label, following in spec["constants"]:
-            body += constant(lines, label, following)
-        for name in spec["routines"]:
-            body += routine(lines, name)
+        if spec.get("whole"):
+            body = "\n".join(lines).strip("\n").split("\n")
+        else:
+            body = []
+            for label, following in spec["constants"]:
+                body += constant(lines, label, following)
+            for name in spec["routines"]:
+                body += routine(lines, name)
 
-        header = [
-            f"@ {spec['copyright']}",
-            "@ SPDX-License-Identifier: Apache-2.0",
+        origin = f"@ {source}"
+        if "perlasm" in spec:
+            origin += f", which aws-lc generates from {spec['perlasm']}"
+        header = [f"@ {line}" for line in spec["notice"]] + [
             "@",
             f"@ Generated by admin/import-aws-lc-arm from aws-lc {REV}:",
-            f"@ {source}, which aws-lc generates from {spec['perlasm']}.",
+            origin + ".",
             "@ Do not edit by hand.",
         ]
-        out = os.path.join(out_dir, spec["source"].removesuffix(".S") + ".s")
+        out = os.path.join(out_dir, os.path.basename(source).removesuffix(".S") + ".s")
         with open(out, "w") as f:
             f.write("\n".join(header + list(escape(body, spec["routines"], spec["tag"]))) + "\n")
 
