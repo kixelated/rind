@@ -34,7 +34,6 @@ IMPORTS_X86_64 = [
         "tables": ["bswap_mask", "gfpoly", "gfpoly_and_internal_carrybit", "ctr_pattern", "inc_2blocks"],
         "routines": [
             "gcm_init_vpclmulqdq_avx2",
-            "gcm_ghash_vpclmulqdq_avx2",
             "aes_gcm_enc_update_vaes_avx2",
             "aes_gcm_dec_update_vaes_avx2",
         ],
@@ -45,7 +44,6 @@ IMPORTS_X86_64 = [
         "tables": ["bswap_mask", "gfpoly", "gfpoly_and_internal_carrybit", "ctr_pattern", "inc_4blocks"],
         "routines": [
             "gcm_init_vpclmulqdq_avx512",
-            "gcm_ghash_vpclmulqdq_avx512",
             "aes_gcm_enc_update_vaes_avx512",
             "aes_gcm_dec_update_vaes_avx512",
         ],
