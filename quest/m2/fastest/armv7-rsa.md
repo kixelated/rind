@@ -24,7 +24,7 @@ verifies in 285 µs against 215 µs (bench-tmp run 41151132431), so it is not
 the candidate.
 
 aws-lc's 32-bit ARM Montgomery multiplication is `bn_mul_mont` from
-`armv4-mont`, with a NEON path. Import it with `admin/import-aws-lc-arm`, then
+`armv4-mont`, with a NEON path. Import it with `admin/import-aws-lc`, then
 decide how much of HACL*'s exponentiation and context code to keep around it.
 Signing's exponentiation must stay constant time, so check what aws-lc's
 constant-time exponentiation relies on before composing with it.

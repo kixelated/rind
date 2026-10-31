@@ -29,9 +29,10 @@ i7-8700: if so, adopting it would also make part of this cell verified.
 
 Open questions:
 
-- Which routines to import, and whether `admin/import-aws-lc-arm`'s approach
-  (aws-lc's pregenerated assembly in `global_asm!`, symbols named by crate
-  version) carries over to x86_64.
+- Which routines to import. `admin/import-aws-lc` already brings x86_64
+  routines in as naked functions over aws-lc's pregenerated text, as it does
+  SHA-512; check that AES-GCM's fit that shape, such as routines that call
+  each other.
 - Whether Graviola's AVX-512 path stays: measure it against aws-lc's on an
   AVX-512 host.
 - Short messages, where rind leads: measure about 1200B (QUIC) before

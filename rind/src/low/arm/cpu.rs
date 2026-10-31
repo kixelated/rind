@@ -2,8 +2,9 @@
 
 use core::sync::atomic::{AtomicU8, Ordering};
 
-/// The portable code needs nothing beyond the base instruction set, so the
-/// crypto extension speeds things up where present but is never required.
+/// The portable code needs nothing beyond the base instruction set, so NEON
+/// and the crypto extension speed things up where present but are never
+/// required.
 pub(crate) fn missing_cpu_feature() -> Option<&'static str> {
     None
 }
@@ -11,8 +12,7 @@ pub(crate) fn missing_cpu_feature() -> Option<&'static str> {
 /// Proof that the CPU has the ARMv8 Crypto Extension in AArch32: NEON, AES,
 /// PMULL, SHA-1, and SHA-256.
 ///
-/// ARMv8 cores ship the extension as one unit, so one token keeps the paths
-/// to two: all of it, or the portable code.
+/// ARMv8 cores ship the extension as one unit, so one token covers all of it.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct HaveCryptoExt(());
 
@@ -23,8 +23,8 @@ impl HaveCryptoExt {
     }
 }
 
-/// Proof that the CPU has NEON, which ARMv7 cores without the crypto
-/// extension often have too.
+/// Proof that the CPU has NEON, which many ARMv7 cores without the crypto
+/// extension have too.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct HaveNeon(());
 
@@ -39,6 +39,7 @@ const NEON: u8 = 1 << 0;
 const CRYPTO_EXT: u8 = 1 << 1;
 const DETECTED: u8 = 1 << 7;
 
+/// The detected features, read from the kernel once.
 fn features() -> u8 {
     static FEATURES: AtomicU8 = AtomicU8::new(0);
 

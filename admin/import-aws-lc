@@ -124,7 +124,7 @@ IMPORTS_64 = [
         "perlasm": "crypto/fipsmodule/sha/asm/sha512-x86_64.pl",
         "copyright": "Copyright 2005-2016 The OpenSSL Project Authors. All Rights Reserved.",
         "tables": ["K512"],
-        "routines": ["sha512_block_data_order_avx"],
+        "routines": ["sha512_block_data_order_avx", "sha512_block_data_order_nohw"],
     },
     {
         "arch": "aarch64",
