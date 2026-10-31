@@ -40,8 +40,9 @@ jobs:
         run: admin/ctgrind ${{ matrix.build }}
 
   # The arm64 runner executes 32-bit ARM natively, so an armhf valgrind checks
-  # the armv7 build without emulation. Its core has the crypto extension, so
-  # the debug build also runs with it denied to check the portable code.
+  # the armv7 build without emulation. Its core has the crypto extension, but
+  # valgrind hides `AT_HWCAP2` from the program, so only the portable code is
+  # checked here (see `admin/ctgrind`).
   armv7:
     name: armv7 (${{ matrix.build || 'debug' }})
     strategy:
@@ -74,15 +75,4 @@ jobs:
           CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
           CC_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-gcc
           CXX_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-g++
-          RIND_TEST_ARM_CRYPTO_EXT: 1
-
-      # `RIND_CPU_DISABLE_*` only takes effect with debug assertions.
-      - name: ctgrind tests (portable)
-        if: matrix.build == ''
-        run: admin/ctgrind --target armv7-unknown-linux-gnueabihf
-        env:
-          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
-          CC_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-gcc
-          CXX_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-g++
-          RIND_CPU_DISABLE_aes: 1
           RIND_TEST_ARM_CRYPTO_EXT: 0
