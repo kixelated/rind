@@ -8,5 +8,4 @@ to get there, and the speed and armv7 work that does not block it.
 ## Required
 
 - [Re-measure accepted costs](/quest/m2/remeasure.md) - ChaCha20-Poly1305 throughput and RSA key generation timing on rind's first release
-- [Fastest source per cell](/quest/m2/fastest/README.md) - every algorithm cell runs its fastest source, verified when as fast
 - [armv7 ChaCha20-Poly1305 for short messages](/quest/m2/armv7-chacha-short.md) - a 32B seal costs 628 ns against RustCrypto's 403 ns

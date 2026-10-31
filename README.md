@@ -94,7 +94,7 @@ Each cell names whose code runs for that algorithm on that backend: the
 intrinsics. A ✓ marks code its source formally verifies, to the extent
 [Sources](#sources) states. A ⚡ marks unverified code chosen because it
 measured faster than a verified alternative; other unverified code has none,
-or a [quest](quest/m2/fastest/README.md) covers it. The table describes
+or a [quest](quest/README.md) covers it. The table describes
 `main`, and changes alongside the code it describes.
 
 | Algorithm | x86_64 | aarch64 | armv7 |
