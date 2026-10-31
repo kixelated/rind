@@ -14,7 +14,7 @@ mod precomp;
 /// A P-384 public key.
 #[derive(Clone, Debug)]
 pub(crate) struct PublicKey {
-    precomp_w5: JacobianMontPointTableW5,
+    point: AffineMontPoint,
 }
 
 impl PublicKey {
@@ -28,13 +28,27 @@ impl PublicKey {
     pub(crate) fn from_x962_uncompressed(bytes: &[u8]) -> Result<Self, Error> {
         let _entry = low::Entry::new_public();
         let point = AffineMontPoint::from_x962_uncompressed(bytes)?;
-        Ok(Self::from_affine(point))
+        Ok(Self { point })
     }
+}
 
-    fn from_affine(point: AffineMontPoint) -> Self {
-        Self {
+/// A P-384 public key for ECDSA verification.
+///
+/// It keeps the point's multiples, so verifying again with the same key
+/// skips computing them; Diffie-Hellman's [`PublicKey`] is used once and
+/// never needs them.
+#[derive(Clone, Debug)]
+pub(crate) struct VerifyingKey {
+    precomp_w5: JacobianMontPointTableW5,
+}
+
+impl VerifyingKey {
+    /// Create a [`VerifyingKey`] as [`PublicKey::from_x962_uncompressed`] does.
+    pub(crate) fn from_x962_uncompressed(bytes: &[u8]) -> Result<Self, Error> {
+        let PublicKey { point } = PublicKey::from_x962_uncompressed(bytes)?;
+        Ok(Self {
             precomp_w5: point.public_precomp_w5(),
-        }
+        })
     }
 
     pub(crate) fn raw_ecdsa_verify(&self, r: &Scalar, s: &Scalar, e: &Scalar) -> Result<(), Error> {
@@ -46,7 +60,7 @@ impl PublicKey {
         // 5. Compute: R = (xR, yR) = u1 G + u2 QU
         //  If R = O, output "invalid" and stop.
         let lhs = JacobianMontPoint::public_base_multiply(&u1);
-        let rhs = JacobianMontPoint::public_multiply_w5(&u2, &self.precomp_w5);
+        let rhs = JacobianMontPoint::multiply_w5::<false>(&u2, &self.precomp_w5);
 
         // nb. if lhs == rhs, then we need a doubling rather than addition
         // (because `p384_montjadd` doesn't handle P + P.)
@@ -102,7 +116,7 @@ impl PrivateKey {
     /// Returns a [`SharedSecret`].  May return an error in fault conditions.
     pub(crate) fn diffie_hellman(&self, peer: &PublicKey) -> Result<SharedSecret, Error> {
         let _entry = low::Entry::new_secret();
-        let mut shared_point = JacobianMontPoint::multiply_w5(&self.scalar, &peer.precomp_w5);
+        let mut shared_point = JacobianMontPoint::multiply(&self.scalar, &peer.point);
         let result = shared_point.as_affine();
         // aws-lc wipes the product point, but not the coordinates derived from it.
         low::zeroise(&mut shared_point.xyz);
@@ -327,9 +341,17 @@ impl AffineMontPoint {
 
     #[cfg(test)]
     fn slow_multiply(&self, scalar: &Scalar) -> Self {
-        JacobianMontPoint::from_affine(self)
-            .multiply(scalar)
-            .as_affine()
+        let mut result = JacobianMontPoint::infinity();
+
+        let mut j = JacobianMontPoint::from_affine(self);
+        let zero = JacobianMontPoint::zero();
+
+        for bit in scalar.bits() {
+            result.add_inplace(&JacobianMontPoint::select(&zero, &j, bit));
+            j = j.double();
+        }
+
+        result.as_affine()
     }
 
     /// Returns table[i - 1] if index > 0, or else the affine point at infinity
@@ -408,21 +430,6 @@ impl JacobianMontPoint {
     const Y: Range<usize> = 6..12;
     const XY: Range<usize> = 0..12;
     const Z: Range<usize> = 12..18;
-
-    #[cfg(test)]
-    fn multiply(&self, scalar: &Scalar) -> Self {
-        let mut result = Self::infinity();
-
-        let mut j = *self;
-        let zero = Self::zero();
-
-        for bit in scalar.bits() {
-            result.add_inplace(&Self::select(&zero, &j, bit));
-            j = j.double();
-        }
-
-        result
-    }
 
     fn infinity() -> Self {
         Self {
@@ -510,41 +517,34 @@ impl JacobianMontPoint {
         result
     }
 
-    fn multiply_w5(scalar: &Scalar, precomp: &JacobianMontPointTableW5) -> Self {
-        Self::_multiply_w5::<true>(scalar, precomp)
+    /// `scalar * point`, by s2n-bignum's `p384_montjscalarmul`.
+    #[cfg(not(target_arch = "arm"))]
+    fn multiply(scalar: &Scalar, point: &AffineMontPoint) -> Self {
+        let mut r = Self::zero();
+        low::p384_montjscalarmul(&mut r.xyz, &scalar.0, &Self::from_affine(point).xyz);
+        r
     }
 
-    fn public_multiply_w5(scalar: &Scalar, precomp: &JacobianMontPointTableW5) -> Self {
-        Self::_multiply_w5::<false>(scalar, precomp)
+    /// `scalar * point`, by windows over the point's multiples.
+    #[cfg(target_arch = "arm")]
+    fn multiply(scalar: &Scalar, point: &AffineMontPoint) -> Self {
+        Self::multiply_w5::<true>(scalar, &point.public_precomp_w5())
     }
 
-    fn _multiply_w5<const SECRET: bool>(
+    /// `scalar * P`, from `P`'s multiples in `precomp`, by Booth-recoded
+    /// 5-bit windows.
+    fn multiply_w5<const SECRET: bool>(
         scalar: &Scalar,
         precomp: &JacobianMontPointTableW5,
     ) -> Self {
         let mut terms = scalar.reversed_booth_recoded_w5();
 
         let (digit, _, _) = terms.next().unwrap();
-        let mut result = if SECRET {
-            Self::lookup_w5(precomp, digit)
-        } else {
-            Self::public_lookup_w5(precomp, digit)
-        };
+        let mut result = Self::lookup_w5::<SECRET>(precomp, digit, 0);
         result.double_inplace_n(5);
 
         for (digit, sign, last) in terms {
-            let tmp = if SECRET {
-                let mut tmp = Self::lookup_w5(precomp, digit);
-                tmp.maybe_negate_y(sign);
-                tmp
-            } else {
-                let mut tmp = Self::public_lookup_w5(precomp, digit);
-                if sign > 0 {
-                    tmp.negate_y();
-                }
-                tmp
-            };
-            result.add_inplace(&tmp);
+            result.add_inplace(&Self::lookup_w5::<SECRET>(precomp, digit, sign));
 
             if !last {
                 result.double_inplace_n(5);
@@ -645,19 +645,32 @@ impl JacobianMontPoint {
         r
     }
 
-    /// Returns table[i - 1] if index > 0, or else infinity
-    fn lookup_w5(table: &JacobianMontPointTableW5, index: u8) -> Self {
+    /// Returns `table[index - 1]`, negated if `sign` is set, or infinity
+    /// for a zero `index`.
+    fn lookup_w5<const SECRET: bool>(
+        table: &JacobianMontPointTableW5,
+        index: u8,
+        sign: u8,
+    ) -> Self {
         let mut r = Self::infinity();
-        low::bignum_jac_point_select_p384(&mut r.xyz, table, index);
-        r
-    }
+        #[cfg(target_arch = "arm")]
+        if SECRET {
+            low::bignum_jac_point_select_p384(&mut r.xyz, table, index);
+            r.maybe_negate_y(sign);
+            return r;
+        }
+        // s2n-bignum's `p384_montjscalarmul` multiplies secrets here.
+        #[cfg(not(target_arch = "arm"))]
+        const {
+            assert!(!SECRET)
+        };
 
-    /// Returns table[i - 1] if index > 0, or else infinity
-    fn public_lookup_w5(table: &JacobianMontPointTableW5, index: u8) -> Self {
-        let mut r = Self::infinity();
         if index > 0 {
             let offs = (index - 1) as usize * 18;
             r.xyz.copy_from_slice(&table[offs..offs + 18]);
+            if sign > 0 {
+                r.negate_y();
+            }
         }
         r
     }
@@ -667,6 +680,7 @@ impl JacobianMontPoint {
         self.xyz[Self::Y].copy_from_slice(&neg_y.0);
     }
 
+    #[cfg(target_arch = "arm")]
     fn maybe_negate_y(&mut self, sign: u8) {
         let y = self.y();
         let neg_y = y.negate_mod_p();
@@ -1112,6 +1126,39 @@ mod tests {
         let u = CURVE_GENERATOR.slow_multiply(&scalar);
         println!("raw {u:x?}");
         println!("fmt {:x?}", u.as_bytes_uncompressed());
+    }
+
+    #[test]
+    fn multiply_matches_double_and_add() {
+        let n_minus = |k: u64| {
+            let mut s = CURVE_ORDER;
+            s[0] -= k;
+            Scalar(s)
+        };
+        let point = CURVE_GENERATOR.slow_multiply(&Scalar::small_u64(5));
+        let precomp = point.public_precomp_w5();
+        for scalar in [
+            Scalar::small_u64(1),
+            Scalar::small_u64(2),
+            Scalar::small_u64(16),
+            Scalar::small_u64(17),
+            Scalar::small_u64(99999999),
+            Scalar([0, 0, 0, 0, 0, 1 << 63]),
+            n_minus(1),
+            n_minus(2),
+        ] {
+            let expected = point.slow_multiply(&scalar).xy;
+            assert_eq!(
+                JacobianMontPoint::multiply(&scalar, &point).as_affine().xy,
+                expected
+            );
+            assert_eq!(
+                JacobianMontPoint::multiply_w5::<false>(&scalar, &precomp)
+                    .as_affine()
+                    .xy,
+                expected
+            );
+        }
     }
 
     #[test]

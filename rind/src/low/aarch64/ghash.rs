@@ -8,16 +8,20 @@
 use core::arch::aarch64::*;
 use core::mem;
 
+use super::cpu::HaveSha3;
 use crate::low;
 
 pub(crate) struct GhashTable {
     powers: [uint64x2_t; 8],
     powers_xor: [uint64x2_t; 8],
-    /// H to H^4 in the layout `gcm_init_v8` writes, which s2n-bignum's
-    /// AES-GCM kernels read: H, m(H, H^2), H^2, H^3, m(H^3, H^4), H^4, with
-    /// each power's 64-bit halves swapped and m(A, B) holding the Karatsuba
-    /// middle terms of A and B in its low and high halves.
-    pub(crate) htable: [uint64x2_t; 6],
+    /// H to H^8 in the layout `gcm_init_v8` writes, which s2n-bignum's
+    /// AES-GCM kernels read: H, m(H, H^2), H^2, H^3, m(H^3, H^4), H^4, and so
+    /// on to H^8, with each power's 64-bit halves swapped and m(A, B) holding
+    /// the Karatsuba middle terms of A and B in its low and high halves. The
+    /// four-way kernels read only the first six entries.
+    pub(crate) htable: [uint64x2_t; 12],
+    /// Whether AES-256 runs the eight-way kernels, which need SHA3's `EOR3`.
+    pub(crate) eight_way: Option<HaveSha3>,
 }
 
 impl GhashTable {
@@ -56,6 +60,12 @@ impl GhashTable {
                 vextq_u64(h3, h3, 1),
                 vzip1q_u64(powers_xor[2], powers_xor[3]),
                 vextq_u64(h4, h4, 1),
+                vextq_u64(h5, h5, 1),
+                vzip1q_u64(powers_xor[4], powers_xor[5]),
+                vextq_u64(h6, h6, 1),
+                vextq_u64(h7, h7, 1),
+                vzip1q_u64(powers_xor[6], powers_xor[7]),
+                vextq_u64(h8, h8, 1),
             ]
         };
 
@@ -63,6 +73,7 @@ impl GhashTable {
             powers,
             powers_xor,
             htable,
+            eight_way: HaveSha3::check(),
         }
     }
 }

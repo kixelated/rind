@@ -4,7 +4,9 @@
 use super::aes128_gcm_dec::aes128_gcm_dec;
 use super::aes128_gcm_enc::aes128_gcm_enc;
 use super::aes256_gcm_dec::aes256_gcm_dec;
+use super::aes256_gcm_dec_alt::aes256_gcm_dec_alt;
 use super::aes256_gcm_enc::aes256_gcm_enc;
+use super::aes256_gcm_enc_alt::aes256_gcm_enc_alt;
 use crate::low::AesKey;
 use crate::low::ghash::Ghash;
 
@@ -46,25 +48,33 @@ fn cipher<const ENC: bool>(
     if !blocks.is_empty() {
         let mut tag = ghash.state();
         let htable = &ghash.table.htable;
+        let [htable4 @ .., _, _, _, _, _, _] = htable;
         let (inout, len) = (blocks.as_mut_ptr(), blocks.len());
-        // SAFETY: this crate requires the `aes` cpu feature, and `inout` is
-        // valid for reads and writes of `len` blocks. The kernels' proofs
-        // assume the input and output do not overlap, but every path through
-        // them loads each input block before storing its output block and
-        // never reads an output back, so in place they compute the same.
+        // SAFETY: this crate requires the `aes` cpu feature, `eight_way`
+        // proves `sha3`, and `inout` is valid for reads and writes of `len`
+        // blocks. The kernels' proofs assume the input and output do not
+        // overlap, but every path through them loads each input block before
+        // storing its output block and never reads an output back, so in
+        // place they compute the same.
         unsafe {
-            match (key, ENC) {
-                (AesKey::Aes128(k), true) => {
-                    aes128_gcm_enc(inout, len, &mut tag, &mut counter, k.round_keys(), htable)
+            match (key, ENC, ghash.table.eight_way) {
+                (AesKey::Aes128(k), true, _) => {
+                    aes128_gcm_enc(inout, len, &mut tag, &mut counter, k.round_keys(), htable4)
                 }
-                (AesKey::Aes128(k), false) => {
-                    aes128_gcm_dec(inout, len, &mut tag, &mut counter, k.round_keys(), htable)
+                (AesKey::Aes128(k), false, _) => {
+                    aes128_gcm_dec(inout, len, &mut tag, &mut counter, k.round_keys(), htable4)
                 }
-                (AesKey::Aes256(k), true) => {
-                    aes256_gcm_enc(inout, len, &mut tag, &mut counter, k.round_keys(), htable)
+                (AesKey::Aes256(k), true, None) => {
+                    aes256_gcm_enc(inout, len, &mut tag, &mut counter, k.round_keys(), htable4)
                 }
-                (AesKey::Aes256(k), false) => {
-                    aes256_gcm_dec(inout, len, &mut tag, &mut counter, k.round_keys(), htable)
+                (AesKey::Aes256(k), false, None) => {
+                    aes256_gcm_dec(inout, len, &mut tag, &mut counter, k.round_keys(), htable4)
+                }
+                (AesKey::Aes256(k), true, Some(_)) => {
+                    aes256_gcm_enc_alt(inout, len, &mut tag, &mut counter, k.round_keys(), htable)
+                }
+                (AesKey::Aes256(k), false, Some(_)) => {
+                    aes256_gcm_dec_alt(inout, len, &mut tag, &mut counter, k.round_keys(), htable)
                 }
             }
         }
