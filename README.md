@@ -98,7 +98,7 @@ or a [quest](quest/m2/fastest/README.md) covers it. The table describes
 
 | Algorithm | x86_64 | aarch64 | armv7 |
 |---|---|---|---|
-| AES-128-GCM, AES-256-GCM | Graviola | [s2n-bignum] CTR and GHASH of whole blocks ⚡, run in place, which its proofs exclude; Graviola key schedule, H powers, single-block AES (H, the tag mask, and a final partial block), and GHASH of the AAD, final partial block, and lengths | crypto extension: [aws-lc] AES and GHASH (copied), rind GCM; otherwise: [libcrux-aes] |
+| AES-128-GCM, AES-256-GCM | Graviola | [s2n-bignum] CTR and GHASH of whole blocks ⚡, by-8 for AES-256 on cores with SHA3, run in place, which its proofs exclude; Graviola key schedule, H powers, single-block AES (H, the tag mask, and a final partial block), and GHASH of the AAD, final partial block, and lengths | crypto extension: [aws-lc] AES and GHASH (copied), rind GCM; otherwise: [libcrux-aes] |
 | AES block (header protection), AES-CTR (SRTP) | Graviola block, rind CTR | Graviola block, rind CTR | crypto extension: [aws-lc] block and CTR (copied); otherwise: [libcrux-aes] block (copied), rind CTR |
 | ChaCha20 (header protection) | Graviola; [HACL\*]'s block function measured level for one block, so it isn't worth a libcrux dependency here | Graviola; as x86_64 | [HACL\*] block function ✓ (copied), rind keystream |
 | ChaCha20-Poly1305, XChaCha20-Poly1305 | Graviola ⚡ | Graviola ⚡ | [HACL\*] ChaCha20 block function and Poly1305 ✓; Graviola AEAD; rind HChaCha20 |
@@ -240,8 +240,9 @@ interleaved; this is future work.)  There is also an optional AVX-512 by-16 AES-
 and GHASH.  It uses dynamic CPU feature detection, so AVX-512 is not required at runtime.
 
 On aarch64, AES-GCM runs s2n-bignum's kernels, which interleave a by-4 AES-CTR
-and GHASH over whole blocks. They run in place, outside their proofs, which
-assume separate input and output buffers.
+and GHASH over whole blocks. An AES-256 key made on a core with SHA3 runs their
+by-8 kernels instead, which use its three-way XOR. They run in place, outside
+their proofs, which assume separate input and output buffers.
 
 32-bit `arm` decides once per process from `AT_HWCAP2`: with the crypto
 extension, AES and AES-GCM keys use aws-lc's `aesv8-armx` and `ghashv8-armx`
