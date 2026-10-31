@@ -43,11 +43,15 @@ jobs:
   # the armv7 build without emulation. Its core has the crypto extension, but
   # valgrind hides `AT_HWCAP2` from the program, so only the portable code is
   # checked here (see `admin/ctgrind`).
+  #
+  # Release only: constant time matters in the code that ships, and a debug
+  # build can only add findings in code that does not. Valgrind runs every
+  # thread on one core, so the suites run as parallel jobs instead.
   armv7:
-    name: armv7 (${{ matrix.build || 'debug' }})
+    name: armv7 (${{ matrix.suite }})
     strategy:
       matrix:
-        build: ["", --release]
+        suite: [unit, wycheproof, adapters]
 
     runs-on: ubuntu-24.04-arm
     steps:
@@ -70,7 +74,7 @@ jobs:
           sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6:armhf valgrind:armhf
 
       - name: ctgrind tests
-        run: admin/ctgrind --target armv7-unknown-linux-gnueabihf ${{ matrix.build }}
+        run: admin/ctgrind ${{ matrix.suite }} --target armv7-unknown-linux-gnueabihf --release
         env:
           CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
           CC_armv7_unknown_linux_gnueabihf: arm-linux-gnueabihf-gcc

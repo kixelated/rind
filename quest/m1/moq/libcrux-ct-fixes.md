@@ -10,8 +10,8 @@ Check the advisory's state and patched versions with
 the crate's versions on crates.io. It was in triage on 2026-10-29.
 
 Once that release exists, bump rind's libcrux crates to it, drop the bignum
-entries from `admin/ctgrind.supp`, confirm armv7 ctgrind passes in debug and
-release, and delete this quest.
+entries from `admin/ctgrind.supp`, confirm armv7 ctgrind passes, and delete
+this quest.
 
 ## Plan
 
