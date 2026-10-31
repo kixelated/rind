@@ -49,43 +49,11 @@ impl AesKey {
         }
     }
 
-    #[target_feature(enable = "avx512f")]
-    pub(crate) fn round_keys_512(&self) -> RoundKeys512 {
+    /// This key as BoringSSL's `AES_KEY`, for its AES-GCM kernels.
+    pub(crate) fn as_aes_key(&self) -> *const u8 {
         match self {
-            Self::Aes128(AesKey128 {
-                round_keys: [a, b, c, d, e, f, g, h, i, j, k],
-            }) => RoundKeys512::Aes128([
-                _mm512_broadcast_i32x4(*a),
-                _mm512_broadcast_i32x4(*b),
-                _mm512_broadcast_i32x4(*c),
-                _mm512_broadcast_i32x4(*d),
-                _mm512_broadcast_i32x4(*e),
-                _mm512_broadcast_i32x4(*f),
-                _mm512_broadcast_i32x4(*g),
-                _mm512_broadcast_i32x4(*h),
-                _mm512_broadcast_i32x4(*i),
-                _mm512_broadcast_i32x4(*j),
-                _mm512_broadcast_i32x4(*k),
-            ]),
-            Self::Aes256(AesKey256 {
-                round_keys: [a, b, c, d, e, f, g, h, i, j, k, l, m, n, o],
-            }) => RoundKeys512::Aes256([
-                _mm512_broadcast_i32x4(*a),
-                _mm512_broadcast_i32x4(*b),
-                _mm512_broadcast_i32x4(*c),
-                _mm512_broadcast_i32x4(*d),
-                _mm512_broadcast_i32x4(*e),
-                _mm512_broadcast_i32x4(*f),
-                _mm512_broadcast_i32x4(*g),
-                _mm512_broadcast_i32x4(*h),
-                _mm512_broadcast_i32x4(*i),
-                _mm512_broadcast_i32x4(*j),
-                _mm512_broadcast_i32x4(*k),
-                _mm512_broadcast_i32x4(*l),
-                _mm512_broadcast_i32x4(*m),
-                _mm512_broadcast_i32x4(*n),
-                _mm512_broadcast_i32x4(*o),
-            ]),
+            Self::Aes128(a128) => (a128 as *const AesKey128).cast(),
+            Self::Aes256(a256) => (a256 as *const AesKey256).cast(),
         }
     }
 }
@@ -98,23 +66,13 @@ impl Drop for AesKey {
 
 impl low::generic::zeroise::Zeroable for AesKey {}
 
-#[expect(clippy::large_enum_variant)] // 200 bytes is a bad heuristic for large enums
-pub(crate) enum RoundKeys512 {
-    Aes128([__m512i; 11]),
-    Aes256([__m512i; 15]),
-}
-
-impl RoundKeys512 {
-    pub(crate) fn split(&self) -> (__m512i, &[__m512i], __m512i) {
-        match self {
-            Self::Aes128(rks) => (rks[0], &rks[1..10], rks[10]),
-            Self::Aes256(rks) => (rks[0], &rks[1..14], rks[14]),
-        }
-    }
-}
-
+/// Laid out as BoringSSL's `AES_KEY`: round key `i` at byte `16 * i`, and at
+/// byte 240 the number of rounds less one, as AES-NI code counts them.
+#[repr(C)]
 pub(crate) struct AesKey128 {
     round_keys: [__m128i; 10 + 1],
+    unused: [__m128i; 4],
+    rounds: u32,
 }
 
 impl AesKey128 {
@@ -126,7 +84,11 @@ impl AesKey128 {
             aes128_expand(key, &mut round_keys);
         }
 
-        Self { round_keys }
+        Self {
+            round_keys,
+            unused: [zero(); 4],
+            rounds: 9,
+        }
     }
 
     pub(crate) fn encrypt_block(&self, inout: &mut [u8; 16]) {
@@ -140,9 +102,15 @@ fn zero() -> __m128i {
     unsafe { _mm_setzero_si128() }
 }
 
+/// Laid out as BoringSSL's `AES_KEY`, as [`AesKey128`] is.
+#[repr(C)]
 pub(crate) struct AesKey256 {
     round_keys: [__m128i; 14 + 1],
+    rounds: u32,
 }
+
+const _: () = assert!(core::mem::offset_of!(AesKey128, rounds) == 240);
+const _: () = assert!(core::mem::offset_of!(AesKey256, rounds) == 240);
 
 impl AesKey256 {
     pub(crate) fn new(key: &[u8; 32]) -> Self {
@@ -153,7 +121,10 @@ impl AesKey256 {
             aes256_expand(key, &mut round_keys);
         }
 
-        Self { round_keys }
+        Self {
+            round_keys,
+            rounds: 13,
+        }
     }
 
     pub(crate) fn encrypt_block(&self, inout: &mut [u8; 16]) {
