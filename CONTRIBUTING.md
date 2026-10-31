@@ -35,7 +35,7 @@ Fix any merge conflicts and failing CI checks.
 PRs run no CI of their own.
 The platform workflows inherited from graviola run nightly, or on demand with `gh workflow run <name> --ref <branch>`.
 PRs land only through `quest land`: once the review is clean and the maintainer has approved merging, queue the PR with `quest merge <pr> <token> --land <head>`.
-The Land workflow squashes the queue onto `main`, runs `just ci` once on the organization's queue runner, and fast-forwards `main` to the longest passing prefix, ejecting with a comment a PR that conflicts or fails alone.
+The land gate, `quest land serve` on the maintainer's host, takes the longest-queued PR plus up to log₂ n more that merge cleanly, runs `just ci` once on the batch, and lands each PR through GitHub's squash merge. A failing batch is ejected together, and a Codex fixer makes mechanical fixes and requeues healthy PRs or hands them back with a comment.
 The admin bypass of `main`'s ruleset is for emergencies.
 
 # AI
