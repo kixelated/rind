@@ -201,6 +201,33 @@ fn ecdsa_verify(c: &mut Criterion) {
             public_key.verify(message, signature).unwrap();
         })
     });
+    group.finish();
+
+    // A key parsed once, as a JWT verifier holds it, keeps its multiplication table.
+    let mut group = c.benchmark_group("p384-ecdsa-verify-parsed");
+    group.throughput(Throughput::Elements(1));
+
+    group.bench_function("aws-lc-rs", |b| {
+        use aws_lc_rs::signature;
+        let public_key =
+            signature::ParsedPublicKey::new(&signature::ECDSA_P384_SHA384_FIXED, public_key)
+                .unwrap();
+
+        b.iter(|| {
+            public_key.verify_sig(message, signature).unwrap();
+        })
+    });
+
+    group.bench_function("rind", |b| {
+        use rind::signature;
+        let public_key =
+            signature::ParsedPublicKey::new(&signature::ECDSA_P384_SHA384_FIXED, public_key)
+                .unwrap();
+
+        b.iter(|| {
+            public_key.verify(message, signature).unwrap();
+        })
+    });
 }
 
 fn ecdsa_sign(c: &mut Criterion) {
