@@ -157,17 +157,26 @@ impl GhashTableAvx {
         }
 
         let (blocks, partial) = bytes.as_chunks::<16>();
-        let mut last = [0u8; 16];
-        last[..partial.len()].copy_from_slice(partial);
-        let blocks = blocks.iter().chain((!partial.is_empty()).then_some(&last));
-        let powers = self.powers.iter().zip(&self.powers_xor);
+        let mut powers = self
+            .powers
+            .iter()
+            .zip(&self.powers_xor)
+            .take(bytes.len().div_ceil(16))
+            .rev();
 
         let (mut lo, mut mi, mut hi) = (zero(), zero(), zero());
         let mut x = current;
-        for (block, (h, hx)) in blocks.zip(powers.take(bytes.len().div_ceil(16)).rev()) {
+        for (block, (h, hx)) in blocks.iter().zip(&mut powers) {
             let b = _mm_xor_si128(x, u128_to_m128i(u128::from_be_bytes(*block)));
             mul!(lo, mi, hi, b, *h, *hx);
             x = zero();
+        }
+        // Only a partial block pays for the copy that pads it.
+        if let Some((h, hx)) = powers.next() {
+            let mut last = [0u8; 16];
+            last[..partial.len()].copy_from_slice(partial);
+            let b = _mm_xor_si128(x, u128_to_m128i(u128::from_be_bytes(last)));
+            mul!(lo, mi, hi, b, *h, *hx);
         }
         reduce!(lo, mi, hi)
     }
@@ -236,14 +245,9 @@ impl GhashTableAvx512 {
             current = _mul16(self, m0123, m4567, m89ab, mcdef);
         }
 
-        let mut tail = [_mm512_setzero_si512(); 4];
-        for (t, chunk) in tail.iter_mut().zip(remainder.chunks(64)) {
-            // SAFETY: the mask covers `chunk`, and masked-off bytes are not read
-            let m =
-                unsafe { _mm512_maskz_loadu_epi8(byte_mask(chunk.len()), chunk.as_ptr().cast()) };
-            *t = _mm512_shuffle_epi8(m, bswap_mask);
-        }
-        _mul_tail(self, current, tail, remainder.len())
+        // A short input, such as AAD or the length block, has too few blocks
+        // to fill vectors, so it is quicker to hash it by the AVX path.
+        self.avx.add(remainder, current)
     }
 }
 
@@ -439,12 +443,6 @@ pub(crate) fn _mul_tail(
     let d = _mm512_extracti32x4_epi32::<3>(r);
     let ab = _mm_xor_si128(a, b);
     _mm_ternarylogic_epi32(ab, c, d, TERNARY_XOR)
-}
-
-/// A mask of the first `len` bytes of a 64-byte vector.
-#[inline]
-pub(crate) fn byte_mask(len: usize) -> __mmask64 {
-    u64::MAX.checked_shr(64 - len.min(64) as u32).unwrap_or(0)
 }
 
 #[target_feature(enable = "avx")]

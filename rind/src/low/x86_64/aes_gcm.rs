@@ -336,7 +336,8 @@ fn _cipher_avx512<const ENC: bool>(
 
     let mut tail = [_mm512_setzero_si512(); 4];
     for ((t, k), chunk) in tail.iter_mut().zip(ks).zip(remainder.chunks_mut(64)) {
-        let mask = ghash::byte_mask(chunk.len());
+        // The first `chunk.len()` bytes, at least one.
+        let mask = u64::MAX >> (64 - chunk.len());
         // SAFETY: the mask covers `chunk`, and masked-off bytes are not read
         let p = unsafe { _mm512_maskz_loadu_epi8(mask, chunk.as_ptr().cast()) };
         let c = _mm512_xor_epi32(
