@@ -15,6 +15,40 @@ use core::mem;
 use super::cpu::HaveAvx512ForAesGcm;
 use crate::low;
 
+macro_rules! mul {
+    ($lo:ident, $mi:ident, $hi:ident, $x:ident, $h:expr, $hx:expr) => {
+        let tlo = _mm_clmulepi64_si128($x, $h, 0x00);
+        $lo = _mm_xor_si128(tlo, $lo);
+
+        let xx = _mm_shuffle_epi32($x, 0b01_00_11_10);
+        let xx = _mm_xor_si128(xx, $x);
+
+        let thi = _mm_clmulepi64_si128($x, $h, 0x11);
+        $hi = _mm_xor_si128(thi, $hi);
+
+        let tmi = _mm_clmulepi64_si128(xx, $hx, 0x00);
+        $mi = _mm_xor_si128(tmi, $mi);
+    };
+}
+
+macro_rules! reduce {
+    ($lo:ident, $mi:ident, $hi:ident) => {{
+        let $mi = _mm_xor_si128($mi, $lo);
+        let $mi = _mm_xor_si128($mi, $hi);
+
+        let ls = _mm_shuffle_epi32($lo, 0b01_00_11_10);
+        let $lo = _mm_clmulepi64_si128(GF128_POLY_HI, $lo, 0x00);
+        let $mi = _mm_xor_si128($mi, ls);
+        let $mi = _mm_xor_si128($mi, $lo);
+
+        let ms = _mm_shuffle_epi32($mi, 0b01_00_11_10);
+        let $mi = _mm_clmulepi64_si128(GF128_POLY_HI, $mi, 0x00);
+        let $hi = _mm_xor_si128($hi, ms);
+        let $hi = _mm_xor_si128($hi, $mi);
+        $hi
+    }};
+}
+
 #[expect(clippy::large_enum_variant)]
 pub(crate) enum GhashTable {
     Avx(GhashTableAvx),
@@ -80,7 +114,7 @@ impl GhashTableAvx {
         Self { powers, powers_xor }
     }
 
-    fn add_wide<'a>(&self, bytes: &'a [u8], mut current: __m128i) -> (__m128i, &'a [u8]) {
+    fn add(&self, bytes: &[u8], mut current: __m128i) -> __m128i {
         let (eight_blocks, remainder) = bytes.as_chunks::<128>();
 
         for chunk8 in eight_blocks {
@@ -109,12 +143,48 @@ impl GhashTableAvx {
             }
         }
 
-        (current, remainder)
+        // SAFETY: this crate requires the `avx` and `pclmulqdq` cpu features
+        unsafe { self.add_tail(remainder, current) }
+    }
+
+    /// Hashes the fewer than eight blocks after `add`'s chunks, zero-padding
+    /// the last: block `i` of `n` is multiplied by H^(n-i), so the sum needs
+    /// one reduction rather than one per block.
+    #[target_feature(enable = "pclmulqdq,avx")]
+    fn add_tail(&self, bytes: &[u8], current: __m128i) -> __m128i {
+        if bytes.is_empty() {
+            return current;
+        }
+
+        let (blocks, partial) = bytes.as_chunks::<16>();
+        let mut powers = self
+            .powers
+            .iter()
+            .zip(&self.powers_xor)
+            .take(bytes.len().div_ceil(16))
+            .rev();
+
+        let (mut lo, mut mi, mut hi) = (zero(), zero(), zero());
+        let mut x = current;
+        for (block, (h, hx)) in blocks.iter().zip(&mut powers) {
+            let b = _mm_xor_si128(x, u128_to_m128i(u128::from_be_bytes(*block)));
+            mul!(lo, mi, hi, b, *h, *hx);
+            x = zero();
+        }
+        // Only a partial block pays for the copy that pads it.
+        if let Some((h, hx)) = powers.next() {
+            let mut last = [0u8; 16];
+            last[..partial.len()].copy_from_slice(partial);
+            let b = _mm_xor_si128(x, u128_to_m128i(u128::from_be_bytes(last)));
+            mul!(lo, mi, hi, b, *h, *hx);
+        }
+        reduce!(lo, mi, hi)
     }
 }
 
 pub(crate) struct GhashTableAvx512 {
-    /// H, H^2, H^3, H^4, ... H^16
+    /// H^16, H^15, ... H^1: descending, so a tail of `n` blocks multiplies
+    /// by the last `n`
     powers: [__m512i; 4],
     avx: GhashTableAvx,
     pub(crate) token: HaveAvx512ForAesGcm,
@@ -138,10 +208,10 @@ impl GhashTableAvx512 {
         // SAFETY: avx512f checked by caller
         let powers = unsafe {
             [
-                join512(powers[0], powers[1], powers[2], powers[3]),
-                join512(powers[4], powers[5], powers[6], powers[7]),
-                join512(powers[8], powers[9], powers[10], powers[11]),
                 join512(powers[12], powers[13], powers[14], powers[15]),
+                join512(powers[8], powers[9], powers[10], powers[11]),
+                join512(powers[4], powers[5], powers[6], powers[7]),
+                join512(powers[0], powers[1], powers[2], powers[3]),
             ]
         };
 
@@ -149,7 +219,7 @@ impl GhashTableAvx512 {
     }
 
     #[target_feature(enable = "vpclmulqdq,avx512bw,avx512f,avx512vl")]
-    fn add_wide<'a>(&self, bytes: &'a [u8], mut current: __m128i) -> (__m128i, &'a [u8]) {
+    fn add(&self, bytes: &[u8], mut current: __m128i) -> __m128i {
         let bswap_mask = _mm512_broadcast_i32x4(BYTESWAP);
 
         let (by_16_blocks, remainder) = bytes.as_chunks::<256>();
@@ -175,7 +245,9 @@ impl GhashTableAvx512 {
             current = _mul16(self, m0123, m4567, m89ab, mcdef);
         }
 
-        (current, remainder)
+        // A short input, such as AAD or the length block, has too few blocks
+        // to fill vectors, so it is quicker to hash it by the AVX path.
+        self.avx.add(remainder, current)
     }
 }
 
@@ -195,28 +267,12 @@ impl<'a> Ghash<'a> {
     /// Input `bytes` to the computation.
     ///
     /// `bytes` is zero-padded, if required.
-    pub(crate) fn add(&mut self, mut bytes: &[u8]) {
-        (self.current, bytes) = match self.table {
-            GhashTable::Avx(avx) => avx.add_wide(bytes, self.current),
+    pub(crate) fn add(&mut self, bytes: &[u8]) {
+        self.current = match self.table {
+            GhashTable::Avx(avx) => avx.add(bytes, self.current),
             // SAFETY: avx512.token proves features were dynamically checked
-            GhashTable::Avx512(avx512) => unsafe { avx512.add_wide(bytes, self.current) },
+            GhashTable::Avx512(avx512) => unsafe { avx512.add(bytes, self.current) },
         };
-
-        let (whole_blocks, remainder) = bytes.as_chunks::<16>();
-
-        for chunk in whole_blocks {
-            let u = u128::from_be_bytes(*chunk);
-            self.one_block(u128_to_m128i(u));
-        }
-
-        let bytes = remainder;
-        if !bytes.is_empty() {
-            let mut block = [0u8; 16];
-            block[..bytes.len()].copy_from_slice(bytes);
-
-            let u = u128::from_be_bytes(block);
-            self.one_block(u128_to_m128i(u));
-        }
     }
 
     pub(crate) fn into_bytes(self) -> [u8; 16] {
@@ -232,56 +288,6 @@ impl<'a> Ghash<'a> {
         unsafe { _mm_store_si128((&mut out as *mut i128).cast(), reverse) };
         out.to_le_bytes()
     }
-
-    fn one_block(&mut self, block: __m128i) {
-        // SAFETY: this crate requires the `avx` and `pclmulqdq` cpu features
-        unsafe {
-            self.current = _mm_xor_si128(self.current, block);
-            self.current = _mul(self.current, self.h());
-        }
-    }
-
-    #[inline]
-    fn h(&self) -> __m128i {
-        match self.table {
-            GhashTable::Avx(avx) => avx.powers[0],
-            GhashTable::Avx512(avx512) => avx512.avx.powers[0],
-        }
-    }
-}
-
-macro_rules! mul {
-    ($lo:ident, $mi:ident, $hi:ident, $x:ident, $h:expr, $hx:expr) => {
-        let tlo = _mm_clmulepi64_si128($x, $h, 0x00);
-        $lo = _mm_xor_si128(tlo, $lo);
-
-        let xx = _mm_shuffle_epi32($x, 0b01_00_11_10);
-        let xx = _mm_xor_si128(xx, $x);
-
-        let thi = _mm_clmulepi64_si128($x, $h, 0x11);
-        $hi = _mm_xor_si128(thi, $hi);
-
-        let tmi = _mm_clmulepi64_si128(xx, $hx, 0x00);
-        $mi = _mm_xor_si128(tmi, $mi);
-    };
-}
-
-macro_rules! reduce {
-    ($lo:ident, $mi:ident, $hi:ident) => {{
-        let $mi = _mm_xor_si128($mi, $lo);
-        let $mi = _mm_xor_si128($mi, $hi);
-
-        let ls = _mm_shuffle_epi32($lo, 0b01_00_11_10);
-        let $lo = _mm_clmulepi64_si128(GF128_POLY_HI, $lo, 0x00);
-        let $mi = _mm_xor_si128($mi, ls);
-        let $mi = _mm_xor_si128($mi, $lo);
-
-        let ms = _mm_shuffle_epi32($mi, 0b01_00_11_10);
-        let $mi = _mm_clmulepi64_si128(GF128_POLY_HI, $mi, 0x00);
-        let $hi = _mm_xor_si128($hi, ms);
-        let $hi = _mm_xor_si128($hi, $mi);
-        $hi
-    }};
 }
 
 #[inline]
@@ -330,41 +336,103 @@ pub(crate) fn _mul16(
 ) -> __m128i {
     let gfpoly = _mm512_broadcast_i32x4(GF128_POLY_LO);
 
-    let lo0 = _mm512_clmulepi64_epi128(x0123, table.powers[3], 0x00);
-    let lo1 = _mm512_clmulepi64_epi128(x4567, table.powers[2], 0x00);
-    let lo2 = _mm512_clmulepi64_epi128(x89ab, table.powers[1], 0x00);
+    let lo0 = _mm512_clmulepi64_epi128(x0123, table.powers[0], 0x00);
+    let lo1 = _mm512_clmulepi64_epi128(x4567, table.powers[1], 0x00);
+    let lo2 = _mm512_clmulepi64_epi128(x89ab, table.powers[2], 0x00);
 
     let lo01 = _mm512_xor_epi32(lo0, lo1);
-    let lo3 = _mm512_clmulepi64_epi128(xcdef, table.powers[0], 0x00);
+    let lo3 = _mm512_clmulepi64_epi128(xcdef, table.powers[3], 0x00);
     let lo = _mm512_ternarylogic_epi64(lo2, lo3, lo01, TERNARY_XOR);
-    let mi0 = _mm512_clmulepi64_epi128(x0123, table.powers[3], 0x01);
+    let mi0 = _mm512_clmulepi64_epi128(x0123, table.powers[0], 0x01);
 
-    let mi1 = _mm512_clmulepi64_epi128(x4567, table.powers[2], 0x01);
-    let mi2 = _mm512_clmulepi64_epi128(x89ab, table.powers[1], 0x01);
+    let mi1 = _mm512_clmulepi64_epi128(x4567, table.powers[1], 0x01);
+    let mi2 = _mm512_clmulepi64_epi128(x89ab, table.powers[2], 0x01);
     let mi012 = _mm512_ternarylogic_epi32(mi0, mi1, mi2, TERNARY_XOR);
-    let mi3 = _mm512_clmulepi64_epi128(xcdef, table.powers[0], 0x01);
+    let mi3 = _mm512_clmulepi64_epi128(xcdef, table.powers[3], 0x01);
 
-    let mi4 = _mm512_clmulepi64_epi128(x0123, table.powers[3], 0x10);
+    let mi4 = _mm512_clmulepi64_epi128(x0123, table.powers[0], 0x10);
     let mi01234 = _mm512_ternarylogic_epi32(mi012, mi3, mi4, TERNARY_XOR);
-    let mi5 = _mm512_clmulepi64_epi128(x4567, table.powers[2], 0x10);
-    let mi6 = _mm512_clmulepi64_epi128(x89ab, table.powers[1], 0x10);
+    let mi5 = _mm512_clmulepi64_epi128(x4567, table.powers[1], 0x10);
+    let mi6 = _mm512_clmulepi64_epi128(x89ab, table.powers[2], 0x10);
 
     let mi = _mm512_ternarylogic_epi64(mi01234, mi5, mi6, TERNARY_XOR);
     let lo_r = _mm512_clmulepi64_epi128(gfpoly, lo, 0x01);
-    let mi7 = _mm512_clmulepi64_epi128(xcdef, table.powers[0], 0x10);
+    let mi7 = _mm512_clmulepi64_epi128(xcdef, table.powers[3], 0x10);
     let mi = _mm512_xor_epi32(mi7, mi);
 
     let lo_s = _mm512_shuffle_epi32(lo, 0b01_00_11_10);
-    let hi0 = _mm512_clmulepi64_epi128(x0123, table.powers[3], 0x11);
-    let hi1 = _mm512_clmulepi64_epi128(x4567, table.powers[2], 0x11);
-    let hi2 = _mm512_clmulepi64_epi128(x89ab, table.powers[1], 0x11);
+    let hi0 = _mm512_clmulepi64_epi128(x0123, table.powers[0], 0x11);
+    let hi1 = _mm512_clmulepi64_epi128(x4567, table.powers[1], 0x11);
+    let hi2 = _mm512_clmulepi64_epi128(x89ab, table.powers[2], 0x11);
 
     let mi = _mm512_ternarylogic_epi32(lo_r, lo_s, mi, TERNARY_XOR);
-    let hi3 = _mm512_clmulepi64_epi128(xcdef, table.powers[0], 0x11);
+    let hi3 = _mm512_clmulepi64_epi128(xcdef, table.powers[3], 0x11);
     let hi012 = _mm512_ternarylogic_epi32(hi0, hi1, hi2, TERNARY_XOR);
     let mi_r = _mm512_clmulepi64_epi128(gfpoly, mi, 0x01);
 
     let hi = _mm512_xor_epi32(hi012, hi3);
+    let mi_s = _mm512_shuffle_epi32(mi, 0b01_00_11_10);
+    let r = _mm512_ternarylogic_epi32(mi_r, mi_s, hi, TERNARY_XOR);
+
+    // xor together all terms of `r`
+    let a = _mm512_extracti32x4_epi32::<0>(r);
+    let b = _mm512_extracti32x4_epi32::<1>(r);
+    let c = _mm512_extracti32x4_epi32::<2>(r);
+    let d = _mm512_extracti32x4_epi32::<3>(r);
+    let ab = _mm_xor_si128(a, b);
+    _mm_ternarylogic_epi32(ab, c, d, TERNARY_XOR)
+}
+
+/// Hashes a tail of `len` bytes, under 256, into `current`.
+///
+/// `x` holds the tail's blocks byte-reversed and zero-padded, so the vectors
+/// past it are zero. Block `i` of `n` is multiplied by H^(n-i), so the sum
+/// needs one reduction rather than one per block.
+#[inline]
+#[target_feature(enable = "vpclmulqdq,avx512f,avx512vl")]
+pub(crate) fn _mul_tail(
+    table: &GhashTableAvx512,
+    current: __m128i,
+    x: [__m512i; 4],
+    len: usize,
+) -> __m128i {
+    let n = len.div_ceil(16);
+    if n == 0 {
+        return current;
+    }
+
+    // `table.powers` descends to H^1, so H^n is `n` blocks before its end.
+    let powers = table.powers.as_ptr().cast::<__m128i>();
+    let (mut lo, mut mi, mut hi) = (
+        _mm512_setzero_si512(),
+        _mm512_setzero_si512(),
+        _mm512_setzero_si512(),
+    );
+    for (j, x) in x.into_iter().enumerate().take(n.div_ceil(4)) {
+        let x = match j {
+            0 => _mm512_xor_epi64(x, _mm512_inserti32x4::<0>(_mm512_setzero_si512(), current)),
+            _ => x,
+        };
+        // Two quadwords per block, for up to four blocks left from here on.
+        let mask = u8::MAX >> (8 - 2 * (n - 4 * j).min(4));
+        // SAFETY: the vector starts at H^(n-4j), within `table.powers`, and
+        // the mask stops it at H^1, the last; masked-off lanes are not read.
+        let h = unsafe { _mm512_maskz_loadu_epi64(mask, powers.add(16 - n + 4 * j).cast()) };
+        lo = _mm512_xor_epi32(lo, _mm512_clmulepi64_epi128(x, h, 0x00));
+        mi = _mm512_ternarylogic_epi32(
+            mi,
+            _mm512_clmulepi64_epi128(x, h, 0x01),
+            _mm512_clmulepi64_epi128(x, h, 0x10),
+            TERNARY_XOR,
+        );
+        hi = _mm512_xor_epi32(hi, _mm512_clmulepi64_epi128(x, h, 0x11));
+    }
+
+    let gfpoly = _mm512_broadcast_i32x4(GF128_POLY_LO);
+    let lo_r = _mm512_clmulepi64_epi128(gfpoly, lo, 0x01);
+    let lo_s = _mm512_shuffle_epi32(lo, 0b01_00_11_10);
+    let mi = _mm512_ternarylogic_epi32(lo_r, lo_s, mi, TERNARY_XOR);
+    let mi_r = _mm512_clmulepi64_epi128(gfpoly, mi, 0x01);
     let mi_s = _mm512_shuffle_epi32(mi, 0b01_00_11_10);
     let r = _mm512_ternarylogic_epi32(mi_r, mi_s, hi, TERNARY_XOR);
 
