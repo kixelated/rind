@@ -49,6 +49,7 @@ macro_rules! reduce {
     }};
 }
 
+#[expect(clippy::large_enum_variant)]
 pub(crate) enum GhashTable {
     Avx(GhashTableAvx),
     Vaes(GhashTableVaes),
@@ -59,6 +60,14 @@ impl GhashTable {
         match GhashTableVaes::new(h) {
             Some(vaes) => Self::Vaes(vaes),
             None => Self::Avx(GhashTableAvx::new(h)),
+        }
+    }
+
+    /// The AVX path's powers, which every table has.
+    pub(crate) fn avx(&self) -> &GhashTableAvx {
+        match self {
+            Self::Avx(table) => table,
+            Self::Vaes(table) => table.avx(),
         }
     }
 }
@@ -190,14 +199,9 @@ impl<'a> Ghash<'a> {
     ///
     /// `bytes` is zero-padded, if required.
     pub(crate) fn add(&mut self, bytes: &[u8]) {
-        match self.table {
-            GhashTable::Avx(avx) => self.current = avx.add(bytes, self.current),
-            GhashTable::Vaes(vaes) => {
-                let mut xi = self.xi();
-                vaes.ghash(&mut xi, bytes);
-                self.set_xi(xi);
-            }
-        }
+        // Short inputs, such as the AAD and the lengths block, are quicker
+        // by the AVX path than by a call into a VAES kernel.
+        self.current = self.table.avx().add(bytes, self.current);
     }
 
     pub(crate) fn into_bytes(self) -> [u8; 16] {

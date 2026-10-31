@@ -40,17 +40,16 @@ fn cipher<const ENC: bool>(
 ) {
     ghash.add(aad);
     match ghash.table {
-        // SAFETY: this crate requires the `aes`, `ssse3`, `pclmulqdq` and `avx` cpu features
-        GhashTable::Avx(table) => unsafe {
-            _cipher::<ENC>(key, ghash, table, initial_counter, cipher_inout)
-        },
-        GhashTable::Vaes(table) => {
-            let mut xi = ghash.xi();
-            table.cipher::<ENC>(key, initial_counter, &mut xi, cipher_inout);
-            ghash.set_xi(xi);
+        GhashTable::Vaes(table) if cipher_inout.len() >= VAES_MINIMUM_CIPHER_LEN => {
+            table.cipher::<ENC>(key, initial_counter, ghash, cipher_inout)
         }
+        // SAFETY: this crate requires the `aes`, `ssse3`, `pclmulqdq` and `avx` cpu features
+        table => unsafe { _cipher::<ENC>(key, ghash, table.avx(), initial_counter, cipher_inout) },
     }
 }
+
+/// How many message bytes a VAES kernel needs to beat the AVX path.
+const VAES_MINIMUM_CIPHER_LEN: usize = 1;
 
 #[target_feature(enable = "aes,ssse3,pclmulqdq,avx")]
 fn _cipher<const ENC: bool>(
