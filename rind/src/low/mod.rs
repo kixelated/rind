@@ -5,24 +5,6 @@
 #[macro_use]
 mod macros;
 
-/// The symbol for an aws-lc routine, qualified by rind's version so two
-/// semver-incompatible copies of rind can link into one binary.
-#[cfg(any(target_arch = "x86_64", target_arch = "arm"))]
-macro_rules! aws_lc_symbol {
-    ($name:literal) => {
-        concat!(
-            "rind_",
-            env!("CARGO_PKG_VERSION_MAJOR"),
-            "_",
-            env!("CARGO_PKG_VERSION_MINOR"),
-            "_",
-            env!("CARGO_PKG_VERSION_PATCH"),
-            "_",
-            $name
-        )
-    };
-}
-
 pub(crate) mod ct;
 
 #[cfg(doc)]

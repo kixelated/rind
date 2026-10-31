@@ -4,7 +4,6 @@
 pub(crate) mod aes;
 pub(crate) mod aes_ctr;
 pub(crate) mod aes_gcm;
-mod aws_lc;
 pub(crate) mod bignum_add;
 pub(crate) mod bignum_add_p256;
 pub(crate) mod bignum_add_p384;

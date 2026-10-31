@@ -9,13 +9,9 @@ use core::arch::x86_64::*;
 
 use crate::low;
 
-/// An expanded AES-128 or AES-256 encryption key, laid out as aws-lc's
-/// `AES_KEY` so its assembly can read it.
-#[repr(C, align(16))]
-pub(crate) struct AesKey {
-    round_keys: [__m128i; 15],
-    /// One less than the number of rounds, as aws-lc's x86_64 assembly counts.
-    rounds: u32,
+pub(crate) enum AesKey {
+    Aes128(AesKey128),
+    Aes256(AesKey256),
 }
 
 impl AesKey {
@@ -23,49 +19,73 @@ impl AesKey {
     ///
     /// `key` must be 16 or 32 bytes in length (AES-192 not supported).
     pub(crate) fn new(key: &[u8]) -> Self {
-        let mut round_keys = [zero(); 15];
-        let rounds = match key.len() {
-            16 => {
-                let (out, _) = round_keys.split_first_chunk_mut().unwrap();
-                // SAFETY: this crate requires the `aes` & `avx` cpu features
-                unsafe { aes128_expand(key.try_into().unwrap(), out) };
-                9
-            }
-            32 => {
-                // SAFETY: this crate requires the `aes` & `avx` cpu features
-                unsafe { aes256_expand(key.try_into().unwrap(), &mut round_keys) };
-                13
-            }
+        match key.len() {
+            16 => Self::Aes128(AesKey128::new(key.try_into().unwrap())),
+            32 => Self::Aes256(AesKey256::new(key.try_into().unwrap())),
             24 => panic!("aes-192 not supported"),
             _ => panic!("invalid aes key size"),
-        };
-        Self { round_keys, rounds }
+        }
     }
 
     pub(crate) fn encrypt_block(&self, inout: &mut [u8; 16]) {
-        // SAFETY: this crate requires the `aes` & `avx` cpu features
-        unsafe {
-            match self.rounds {
-                9 => aes128_block(self.round_keys.first_chunk().unwrap(), inout),
-                _ => aes256_block(&self.round_keys, inout),
-            }
+        match self {
+            Self::Aes128(a128) => a128.encrypt_block(inout),
+            Self::Aes256(a256) => a256.encrypt_block(inout),
         }
     }
 
     pub(crate) fn round_keys(&self) -> (__m128i, &[__m128i], __m128i) {
-        let last = self.rounds as usize + 1;
-        (
-            self.round_keys[0],
-            &self.round_keys[1..last],
-            self.round_keys[last],
-        )
+        match self {
+            Self::Aes128(a128) => (
+                a128.round_keys[0],
+                &a128.round_keys[1..10],
+                a128.round_keys[10],
+            ),
+            Self::Aes256(a256) => (
+                a256.round_keys[0],
+                &a256.round_keys[1..14],
+                a256.round_keys[14],
+            ),
+        }
     }
 
     #[target_feature(enable = "avx512f")]
     pub(crate) fn round_keys_512(&self) -> RoundKeys512 {
-        RoundKeys512 {
-            round_keys: self.round_keys.map(|rk| _mm512_broadcast_i32x4(rk)),
-            last: self.rounds as usize + 1,
+        match self {
+            Self::Aes128(AesKey128 {
+                round_keys: [a, b, c, d, e, f, g, h, i, j, k],
+            }) => RoundKeys512::Aes128([
+                _mm512_broadcast_i32x4(*a),
+                _mm512_broadcast_i32x4(*b),
+                _mm512_broadcast_i32x4(*c),
+                _mm512_broadcast_i32x4(*d),
+                _mm512_broadcast_i32x4(*e),
+                _mm512_broadcast_i32x4(*f),
+                _mm512_broadcast_i32x4(*g),
+                _mm512_broadcast_i32x4(*h),
+                _mm512_broadcast_i32x4(*i),
+                _mm512_broadcast_i32x4(*j),
+                _mm512_broadcast_i32x4(*k),
+            ]),
+            Self::Aes256(AesKey256 {
+                round_keys: [a, b, c, d, e, f, g, h, i, j, k, l, m, n, o],
+            }) => RoundKeys512::Aes256([
+                _mm512_broadcast_i32x4(*a),
+                _mm512_broadcast_i32x4(*b),
+                _mm512_broadcast_i32x4(*c),
+                _mm512_broadcast_i32x4(*d),
+                _mm512_broadcast_i32x4(*e),
+                _mm512_broadcast_i32x4(*f),
+                _mm512_broadcast_i32x4(*g),
+                _mm512_broadcast_i32x4(*h),
+                _mm512_broadcast_i32x4(*i),
+                _mm512_broadcast_i32x4(*j),
+                _mm512_broadcast_i32x4(*k),
+                _mm512_broadcast_i32x4(*l),
+                _mm512_broadcast_i32x4(*m),
+                _mm512_broadcast_i32x4(*n),
+                _mm512_broadcast_i32x4(*o),
+            ]),
         }
     }
 }
@@ -78,25 +98,68 @@ impl Drop for AesKey {
 
 impl low::generic::zeroise::Zeroable for AesKey {}
 
-/// Each round key broadcast to the four lanes of a 512-bit register.
-pub(crate) struct RoundKeys512 {
-    round_keys: [__m512i; 15],
-    last: usize,
+#[expect(clippy::large_enum_variant)] // 200 bytes is a bad heuristic for large enums
+pub(crate) enum RoundKeys512 {
+    Aes128([__m512i; 11]),
+    Aes256([__m512i; 15]),
 }
 
 impl RoundKeys512 {
     pub(crate) fn split(&self) -> (__m512i, &[__m512i], __m512i) {
-        (
-            self.round_keys[0],
-            &self.round_keys[1..self.last],
-            self.round_keys[self.last],
-        )
+        match self {
+            Self::Aes128(rks) => (rks[0], &rks[1..10], rks[10]),
+            Self::Aes256(rks) => (rks[0], &rks[1..14], rks[14]),
+        }
+    }
+}
+
+pub(crate) struct AesKey128 {
+    round_keys: [__m128i; 10 + 1],
+}
+
+impl AesKey128 {
+    pub(crate) fn new(key: &[u8; 16]) -> Self {
+        let mut round_keys = [zero(); (10 + 1)];
+
+        // SAFETY: this crate requires the `aes` & `avx` cpu features
+        unsafe {
+            aes128_expand(key, &mut round_keys);
+        }
+
+        Self { round_keys }
+    }
+
+    pub(crate) fn encrypt_block(&self, inout: &mut [u8; 16]) {
+        // SAFETY: this crate requires the `aes` & `avx` cpu features
+        unsafe { aes128_block(&self.round_keys, inout) }
     }
 }
 
 fn zero() -> __m128i {
     // SAFETY: this crate requires the `avx` cpu feature
     unsafe { _mm_setzero_si128() }
+}
+
+pub(crate) struct AesKey256 {
+    round_keys: [__m128i; 14 + 1],
+}
+
+impl AesKey256 {
+    pub(crate) fn new(key: &[u8; 32]) -> Self {
+        let mut round_keys = [zero(); 14 + 1];
+
+        // SAFETY: this crate requires the `aes` & `avx` cpu features
+        unsafe {
+            aes256_expand(key, &mut round_keys);
+        }
+
+        Self { round_keys }
+    }
+
+    pub(crate) fn encrypt_block(&self, inout: &mut [u8; 16]) {
+        // SAFETY: this crate requires the `aes` & `avx` cpu features
+        unsafe { aes256_block(&self.round_keys, inout) }
+    }
 }
 
 macro_rules! expand_128 {
@@ -281,9 +344,9 @@ mod tests {
         for len in 0..=input.len() {
             let num_bits = len * 8;
             match panic::catch_unwind(|| AesKey::new(&input[..len])) {
-                Ok(key) => match key.rounds {
-                    9 => assert_eq!(num_bits, 128),
-                    _ => assert_eq!(num_bits, 256),
+                Ok(key) => match key {
+                    AesKey::Aes128(_) => assert_eq!(num_bits, 128),
+                    AesKey::Aes256(_) => assert_eq!(num_bits, 256),
                 },
                 Err(_) => {
                     assert_ne!(num_bits, 128);
@@ -295,7 +358,7 @@ mod tests {
 
     #[test]
     fn test_key_expansion_128() {
-        let context = AesKey::new(&[
+        let context = AesKey128::new(&[
             0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf,
             0x4f, 0x3c,
         ]);
@@ -321,7 +384,7 @@ mod tests {
 
     #[test]
     fn test_key_expansion_256() {
-        let context = AesKey::new(&[
+        let context = AesKey256::new(&[
             0x60, 0x3d, 0xeb, 0x10, 0x15, 0xca, 0x71, 0xbe, 0x2b, 0x73, 0xae, 0xf0, 0x85, 0x7d,
             0x77, 0x81, 0x1f, 0x35, 0x2c, 0x07, 0x3b, 0x61, 0x08, 0xd7, 0x2d, 0x98, 0x10, 0xa3,
             0x09, 0x14, 0xdf, 0xf4,
@@ -352,7 +415,7 @@ mod tests {
 
     #[test]
     fn test_block_128() {
-        let context = AesKey::new(&[
+        let context = AesKey128::new(&[
             0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
             0x0e, 0x0f,
         ]);
@@ -372,7 +435,7 @@ mod tests {
 
     #[test]
     fn test_block_256() {
-        let context = AesKey::new(&[
+        let context = AesKey256::new(&[
             0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
             0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
             0x1c, 0x1d, 0x1e, 0x1f,

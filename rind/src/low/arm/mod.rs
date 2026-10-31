@@ -7,6 +7,23 @@
 //! rest are swapped in `mid`, where libcrux's whole operations fit, except
 //! P-384, whose arithmetic is fiat-crypto's in `generic::p384`.
 
+/// The symbol for an aws-lc routine, qualified by rind's version so two
+/// semver-incompatible copies of rind can link into one binary.
+macro_rules! aws_lc_symbol {
+    ($name:literal) => {
+        concat!(
+            "rind_",
+            env!("CARGO_PKG_VERSION_MAJOR"),
+            "_",
+            env!("CARGO_PKG_VERSION_MINOR"),
+            "_",
+            env!("CARGO_PKG_VERSION_PATCH"),
+            "_",
+            $name
+        )
+    };
+}
+
 pub(crate) mod aes;
 pub(crate) mod aes_ctr;
 pub(crate) mod aesv8_armx;
