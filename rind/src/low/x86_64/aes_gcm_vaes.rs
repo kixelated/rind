@@ -199,22 +199,22 @@ macro_rules! kernel {
     };
 }
 
-kernel!(
-    fn gcm_init_vpclmulqdq_avx2(htable: *mut Htable, h: *const [u64; 2]);,
+kernel! {
+    fn gcm_init_vpclmulqdq_avx2(htable: *mut Htable, h: *const [u64; 2]);
     gfpoly = AVX2_GFPOLY,
     gfpoly_and_internal_carrybit = AVX2_GFPOLY_AND_INTERNAL_CARRYBIT,
-);
-kernel!(
+}
+kernel! {
     fn gcm_ghash_vpclmulqdq_avx2(
         xi: *mut [u8; 16],
         htable: *const Htable,
         input: *const u8,
         len: usize,
-    );,
+    );
     bswap_mask = AVX2_BSWAP_MASK,
     gfpoly = AVX2_GFPOLY,
-);
-kernel!(
+}
+kernel! {
     fn aes_gcm_enc_update_vaes_avx2(
         input: *const u8,
         output: *mut u8,
@@ -223,13 +223,13 @@ kernel!(
         ivec: *const [u8; 16],
         htable: *const Htable,
         xi: *mut [u8; 16],
-    );,
+    );
     bswap_mask = AVX2_BSWAP_MASK,
     ctr_pattern = AVX2_CTR_PATTERN,
     gfpoly = AVX2_GFPOLY,
     inc_2blocks = AVX2_INC_2BLOCKS,
-);
-kernel!(
+}
+kernel! {
     fn aes_gcm_dec_update_vaes_avx2(
         input: *const u8,
         output: *mut u8,
@@ -238,29 +238,29 @@ kernel!(
         ivec: *const [u8; 16],
         htable: *const Htable,
         xi: *mut [u8; 16],
-    );,
+    );
     bswap_mask = AVX2_BSWAP_MASK,
     ctr_pattern = AVX2_CTR_PATTERN,
     gfpoly = AVX2_GFPOLY,
     inc_2blocks = AVX2_INC_2BLOCKS,
-);
+}
 
-kernel!(
-    fn gcm_init_vpclmulqdq_avx512(htable: *mut Htable, h: *const [u64; 2]);,
+kernel! {
+    fn gcm_init_vpclmulqdq_avx512(htable: *mut Htable, h: *const [u64; 2]);
     gfpoly = AVX512_GFPOLY,
     gfpoly_and_internal_carrybit = AVX512_GFPOLY_AND_INTERNAL_CARRYBIT,
-);
-kernel!(
+}
+kernel! {
     fn gcm_ghash_vpclmulqdq_avx512(
         xi: *mut [u8; 16],
         htable: *const Htable,
         input: *const u8,
         len: usize,
-    );,
+    );
     bswap_mask = AVX512_BSWAP_MASK,
     gfpoly = AVX512_GFPOLY,
-);
-kernel!(
+}
+kernel! {
     fn aes_gcm_enc_update_vaes_avx512(
         input: *const u8,
         output: *mut u8,
@@ -269,13 +269,13 @@ kernel!(
         ivec: *const [u8; 16],
         htable: *const Htable,
         xi: *mut [u8; 16],
-    );,
+    );
     bswap_mask = AVX512_BSWAP_MASK,
     ctr_pattern = AVX512_CTR_PATTERN,
     gfpoly = AVX512_GFPOLY,
     inc_4blocks = AVX512_INC_4BLOCKS,
-);
-kernel!(
+}
+kernel! {
     fn aes_gcm_dec_update_vaes_avx512(
         input: *const u8,
         output: *mut u8,
@@ -284,9 +284,9 @@ kernel!(
         ivec: *const [u8; 16],
         htable: *const Htable,
         xi: *mut [u8; 16],
-    );,
+    );
     bswap_mask = AVX512_BSWAP_MASK,
     ctr_pattern = AVX512_CTR_PATTERN,
     gfpoly = AVX512_GFPOLY,
     inc_4blocks = AVX512_INC_4BLOCKS,
-);
+}
