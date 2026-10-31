@@ -161,6 +161,22 @@ impl HaveAvx512ForAesGcm {
     }
 }
 
+/// Token type reflecting the check for CPU features needed for VAES-AES-GCM
+/// on 256-bit vectors, beyond the AVX2 this crate requires.
+///
+/// A value of this type is proof that the CPU dynamic feature check has happened.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct HaveVaesAvx2ForAesGcm(());
+
+impl HaveVaesAvx2ForAesGcm {
+    pub(crate) fn check() -> Option<Self> {
+        match have_cpu_feature!("vpclmulqdq") && have_cpu_feature!("vaes") {
+            true => Some(Self(())),
+            false => None,
+        }
+    }
+}
+
 /// Token type reflecting the check for CPU features needed for AVX512-ML-KEM
 ///
 /// A value of this type is proof that the CPU dynamic feature check has happened.

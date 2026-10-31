@@ -109,13 +109,17 @@ aws-lc <https://github.com/aws/aws-lc>, from OpenSSL and BoringSSL
 
 BoringSSL <https://boringssl.googlesource.com/boringssl>
 
-  What: rind/src/low/arm/boringssl/x25519-asm-arm.s (X25519 on NEON),
-  which admin/import-boringssl takes from BoringSSL's
-  crypto/curve25519/asm/x25519-asm-arm.S at commit
-  ed9209cff8b5a2fbc6c10050f29b3355048bda85. BoringSSL took it from
+  What: the files under rind/src/low/{x86_64,arm}/boringssl, which
+  admin/import-boringssl takes from BoringSSL at commit
+  ed9209cff8b5a2fbc6c10050f29b3355048bda85: for x86_64, AES-GCM on VAES
+  from its pregenerated gen/bcm/aes-gcm-avx2-x86_64 and
+  aes-gcm-avx512-x86_64, the AVX-512 one based on aes-gcm-avx10-x86_64.S
+  from Linux; for 32-bit ARM, X25519 on NEON from
+  crypto/curve25519/asm/x25519-asm-arm.S, which BoringSSL took from
   crypto_scalarmult/curve25519/neon2/scalarmult.s in SUPERCOP 20141124
   <https://bench.cr.yp.to/supercop.html>, which is public domain.
   Copyright 2015 The BoringSSL Authors
+  Copyright 2024 The BoringSSL Authors
   License: Apache-2.0. BoringSSL has no NOTICE file.
 
 --

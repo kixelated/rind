@@ -17,4 +17,3 @@ with the code.
 
 ## Required
 
-- [x86_64 AES-GCM on VAES](/quest/m2/fastest/x86-aes-gcm-vaes.md) - a compact VAES kernel closes the 1.1-1.6x gap to aws-lc's AVX-512 code
