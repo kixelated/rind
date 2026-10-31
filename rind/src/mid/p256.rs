@@ -1088,16 +1088,22 @@ mod tests {
             let expected = CURVE_GENERATOR.slow_multiply(&scalar).xy;
             assert_eq!(AffineMontPoint::base_multiply(&scalar).xy, expected);
             assert_eq!(
-                JacobianMontPoint::public_base_multiply(&scalar).as_affine().xy,
+                JacobianMontPoint::public_base_multiply(&scalar)
+                    .as_affine()
+                    .xy,
                 expected
             );
             assert_eq!(
-                JacobianMontPoint::multiply(&scalar, &CURVE_GENERATOR).as_affine().xy,
+                JacobianMontPoint::multiply(&scalar, &CURVE_GENERATOR)
+                    .as_affine()
+                    .xy,
                 expected
             );
             let precomp = CURVE_GENERATOR.public_precomp_w5();
             assert_eq!(
-                JacobianMontPoint::public_multiply_w5(&scalar, &precomp).as_affine().xy,
+                JacobianMontPoint::public_multiply_w5(&scalar, &precomp)
+                    .as_affine()
+                    .xy,
                 expected
             );
         }
