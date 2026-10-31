@@ -42,10 +42,12 @@ DECL = re.compile(
     r"^pub\(crate\) (?:unsafe )?fn \w+\((.*?)\)(?: -> [^{]*)? \{$", re.S | re.M
 )
 GPR = re.compile(r"^(?:[xw](\d+)|xzr|wzr|sp)$")
-FLAG_SETTERS = {"cmp", "cmn", "tst", "ccmp", "ccmn", "fcmp", "fcmpe"}
-FLAG_SETTERS |= {
-    o + "s" for o in ("add", "sub", "and", "bic", "adc", "sbc", "neg", "ngc")
-}
+# Instructions that leave the flags alone. Any other clears what the walk
+# knows of them, so a flag writer it has never seen cannot hide behind a
+# compare of the length.
+KEEPS_FLAGS = {"add", "sub", "mov", "movi", "movk", "and", "orr", "eor", "eor3"}
+KEEPS_FLAGS |= {"lsr", "shl", "ext", "rev", "rev32", "rev64", "trn1", "trn2"}
+KEEPS_FLAGS |= {"tbl", "fmov", "aese", "aesmc", "pmull", "pmull2"}
 MEMORY = {"ldr", "ldp", "ldur", "ld1", "str", "stp", "stur", "st1"}
 SIZES = {"q": 16, "x": 8, "d": 8, "w": 4, "s": 4, "h": 2, "b": 1}
 CONDITIONS = {
@@ -306,7 +308,8 @@ class Walk:
         r = reg(tok)
         if r is None:
             raise Unmodelled
-        return self.get(r)
+        # A w register reads the low half; a pointer has none.
+        return width(self.get(r), 32 if tok[0] == "w" else 64)
 
     def shifted(self, ops):
         # The second source of add/sub/cmp, with an optional shift.
@@ -411,14 +414,15 @@ class Walk:
             return nxt
         if op[:2] in ("ld", "st"):
             raise Fault("unmodelled", "memory access %s" % (self.insns[pc],))
-        if op in FLAG_SETTERS:
-            self.flags = None
         if op == "b":
             return target
         if op.startswith("b."):
             return target if self.cond(pc, op[2:]) else nxt
         if op in ("cbz", "cbnz"):
-            v = self.r.get(reg(ops[0]))
+            try:
+                v = self.operand(ops[0])
+            except Unmodelled:
+                v = None
             if not isinstance(v, int):
                 raise Fault(
                     "branch", "%s on a value not from the length" % (self.insns[pc],)
@@ -426,6 +430,8 @@ class Walk:
             return target if (v == 0) == (op == "cbz") else nxt
         if target is not None or op in ("br", "blr", "bl", "ret"):
             raise Fault("unmodelled", "control flow %s" % (self.insns[pc],))
+        if op not in KEEPS_FLAGS:
+            self.flags = None
         if re.search(r"\[(?:[xw]\d+|sp)\b", args):
             raise Fault("unmodelled", "memory operand in %s" % (self.insns[pc],))
         regs = [reg(o.split()[0]) for o in ops]
@@ -453,14 +459,14 @@ class Walk:
                 )
                 self.set(d, width(v, bits))
             elif op == "mov" and d and len(ops) == 2:
-                self.set(d, self.operand(ops[1]))
+                self.set(d, width(self.operand(ops[1]), bits))
             elif op in ("and", "lsr", "lsl") and d and len(ops) == 3:
                 a, b = self.operand(ops[1]), self.operand(ops[2])
                 if not (isinstance(a, int) and isinstance(b, int)):
                     raise Unmodelled
-                self.set(
-                    d, {"and": a & b, "lsr": a >> (b & 63), "lsl": a << (b & 63)}[op]
-                )
+                shift = b & (bits - 1)
+                v = {"and": a & b, "lsr": a >> shift, "lsl": a << shift}[op]
+                self.set(d, width(v, bits))
             else:
                 raise Unmodelled
         except Unmodelled:
@@ -471,10 +477,8 @@ class Walk:
                     raise Fault(
                         "escape", "buffer pointer escapes into %s" % (self.insns[pc],)
                     )
-            if d and op not in ("cmp", "cmn", "tst"):
+            if d and op not in ("cmp", "cmn", "tst", "ccmp", "ccmn"):
                 self.set(d, None)
-            if op in FLAG_SETTERS:
-                self.flags = None
         return nxt
 
     def run(self):
@@ -528,7 +532,7 @@ def check(kernel):
 
 
 def planted(kernel, text):
-    # Each fault goes right before the kernel's first load from the buffer,
+    # Most faults go right before the kernel's first load from the buffer,
     # which runs before any store to it, when both pointers are at its start.
     _, homes, regs = kernel.layout()
     other = next(r for r, (arg, _) in sorted(regs.items()) if arg is not None)
@@ -551,6 +555,7 @@ def planted(kernel, text):
         for i, line in enumerate(lines)
         if re.search(r'"    st\w+ .*\[%s\b' % dst, line)
     )
+    conds = [i for i, line in enumerate(lines) if re.search(r'"    b\.\w+ ', line)]
     step = re.search(r"#\w+(?=\]!|\"\),$)", lines[store])
     # A scratch register the kernel never touches, so the faults change
     # nothing else.
@@ -569,27 +574,49 @@ def planted(kernel, text):
     # Dropping the first store keeps any pointer step it made.
     dropped = [q("add", "%s, %s, %s" % (dst, dst, step.group(0)))] if step else []
     label = '        Q!(Label!("planted", 99) ":"),'
-    return {
-        "order": insert(q("str", "q0, [%s]" % dst)),
-        "bounds": insert(q("ldr", "q0, [%s, #-16]" % src)),
-        "coverage": "\n".join(lines[:store] + dropped + lines[store + 1 :]),
-        "direction": insert(q("ldr", "q0, [%s]" % dst)),
-        "escape": insert(q("mov", "%s, %s" % (tmp, src)), q("str", "q0, [%s]" % tmp)),
-        "address": insert(
-            q("ldr", "%s, [%s]" % (tmp, other)), q("ldr", "q0, [%s]" % tmp)
+    # (the check that must catch it, the kernel with it planted)
+    faults = [
+        # A store to the first block before its load.
+        ("order", insert(q("str", "q0, [%s]" % dst))),
+        # A load before the buffer.
+        ("bounds", insert(q("ldr", "q0, [%s, #-16]" % src))),
+        # A store dropped.
+        ("coverage", "\n".join(lines[:store] + dropped + lines[store + 1 :])),
+        # A load through the output pointer.
+        ("direction", insert(q("ldr", "q0, [%s]" % dst))),
+        # A store through a copy of the input pointer.
+        ("escape", insert(q("mov", "%s, %s" % (tmp, src)), q("str", "q0, [%s]" % tmp))),
+        # An address loaded from memory.
+        (
+            "address",
+            insert(q("ldr", "%s, [%s]" % (tmp, other)), q("ldr", "q0, [%s]" % tmp)),
         ),
-        "branch": insert(
-            q("ldr", "%s, [%s]" % (tmp, other)), q("cbz", tmp + ", ", 99), label
+        # A branch on loaded data.
+        (
+            "branch",
+            insert(
+                q("ldr", "%s, [%s]" % (tmp, other)), q("cbz", tmp + ", ", 99), label
+            ),
         ),
-        "unreached": insert(
-            q("mov", tmp + ", #1"), q("cbnz", tmp + ", ", 99), q("ret"), label
+        # A reachable instruction no length runs.
+        (
+            "unreached",
+            insert(q("mov", tmp + ", #1"), q("cbnz", tmp + ", ", 99), q("ret"), label),
         ),
-    }
+    ]
+    if conds:
+        # Flags set from a register the kernel never sets, before its first
+        # conditional branch.
+        msr = q("msr", "nzcv, " + tmp)
+        faults.append(
+            ("branch", "\n".join(lines[: conds[0]] + [msr] + lines[conds[0] :]))
+        )
+    return faults
 
 
 def self_test(kernel, text):
     faults = planted(kernel, text)
-    for kind, faulty in faults.items():
+    for kind, faulty in faults:
         try:
             check(Kernel(kernel.path, faulty))
         except Fault as f:
