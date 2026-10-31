@@ -81,7 +81,7 @@ macro_rules! NSPACE { () => { Q!("11 * " NUMSIZE!()) } }
 /// the multiple 2^{blocksize * i} * j * P is stored at
 /// tab[8 * (B * i + (j - 1))], considered as uint64_t pointers
 /// or tab + 64 * (B * i + (j - 1)) as byte pointers.
-pub(crate) fn p256_scalarmulbase(res: &mut [u64; 8], scalar: &[u64; 4], table: &[[u64; 512]; 37]) {
+pub(crate) fn p256_scalarmulbase(res: &mut [u64; 8], scalar: &[u64; 4], table: &[[u64; 256]; 43]) {
     // SAFETY: inline assembly. see [crate::low::inline_assembly_safety] for safety info.
     unsafe {
         core::arch::asm!(
@@ -3537,7 +3537,7 @@ pub(crate) fn p256_scalarmulbase(res: &mut [u64; 8], scalar: &[u64; 4], table: &
         Q!(Label!("hoist_finish", 9) ":"),
         inout("rdi") res.as_mut_ptr() => _,
         inout("rsi") scalar.as_ptr() => _,
-        inout("rdx") 7u64 => _,
+        inout("rdx") 6u64 => _,
         inout("rcx") table.as_ptr() => _,
         // clobbers
         out("r10") _,

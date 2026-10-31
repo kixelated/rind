@@ -379,11 +379,11 @@ if __name__ == "__main__":
             parameter_map=[
                 ("inout", "res.as_mut_ptr() => _"),
                 ("inout", "scalar.as_ptr() => _"),
-                ("inout", "7u64 => _"),
+                ("inout", "6u64 => _"),
                 ("inout", "table.as_ptr() => _"),
             ],
             hoist=["proc", "Lp256_scalarmulbase_local_p256_montjmixadd", "ret"],
-            rust_decl="fn p256_scalarmulbase(res: &mut [u64; 8], scalar: &[u64; 4], table: &[[u64; 512]; 37])",
+            rust_decl="fn p256_scalarmulbase(res: &mut [u64; 8], scalar: &[u64; 4], table: &[[u64; 256]; 43])",
         )
         parse_file(input, d)
 
@@ -835,10 +835,10 @@ if __name__ == "__main__":
             parameter_map=[
                 ("inout", "res.as_mut_ptr() => _"),
                 ("inout", "scalar.as_ptr() => _"),
-                ("inout", "7u64 => _"),
+                ("inout", "6u64 => _"),
                 ("inout", "table.as_ptr() => _"),
             ],
             hoist=["proc", "Lp256_scalarmulbase_alt_local_p256_montjmixadd", "ret"],
-            rust_decl="fn p256_scalarmulbase(res: &mut [u64; 8], scalar: &[u64; 4], table: &[[u64; 512]; 37])",
+            rust_decl="fn p256_scalarmulbase(res: &mut [u64; 8], scalar: &[u64; 4], table: &[[u64; 256]; 43])",
         )
         parse_file(input, d)

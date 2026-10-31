@@ -123,7 +123,7 @@ pub(crate) struct P256;
 
 impl Curve for P256 {
     type PrivateKey = p256::StaticPrivateKey;
-    type PublicKey = p256::PublicKey;
+    type PublicKey = p256::VerifyingKey;
     type Scalar = p256::Scalar;
 
     fn oid() -> asn1::ObjectId {
@@ -167,7 +167,7 @@ impl PrivateKey<P256> for p256::StaticPrivateKey {
     }
 }
 
-impl PublicKey<P256> for p256::PublicKey {
+impl PublicKey<P256> for p256::VerifyingKey {
     fn from_x962_uncompressed(bytes: &[u8]) -> Result<Self, Error> {
         Self::from_x962_uncompressed(bytes)
     }
@@ -211,7 +211,7 @@ pub(crate) struct P384;
 
 impl Curve for P384 {
     type PrivateKey = p384::StaticPrivateKey;
-    type PublicKey = p384::PublicKey;
+    type PublicKey = p384::VerifyingKey;
     type Scalar = p384::Scalar;
 
     fn oid() -> asn1::ObjectId {
@@ -255,7 +255,7 @@ impl PrivateKey<P384> for p384::StaticPrivateKey {
     }
 }
 
-impl PublicKey<P384> for p384::PublicKey {
+impl PublicKey<P384> for p384::VerifyingKey {
     fn from_x962_uncompressed(bytes: &[u8]) -> Result<Self, Error> {
         Self::from_x962_uncompressed(bytes)
     }
