@@ -3,7 +3,7 @@
 ## Goal
 
 If the `--release` armv7 ctgrind job is fast enough for the PR gate, it runs
-on every PR and is required. The debug job stays nightly.
+on every PR and is required.
 
 ## Plan
 
