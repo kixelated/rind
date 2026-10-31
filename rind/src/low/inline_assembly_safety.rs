@@ -72,6 +72,11 @@
 //! frame.  However, our inline assembly can contain leaf internal
 //! functions: these may `ret` back to the outer frame.
 //!
+//! aws-lc's x86_64 and aarch64 routines are the exception: each is a
+//! naked function holding aws-lc's whole routine, which keeps its own
+//! entry, exit, and callee-saved registers, so it is called like any
+//! `extern` function of its ABI.
+//!
 //! # Safety of intrinsics
 //!
 //! The above sections "Using unsupported instructions" also apply
