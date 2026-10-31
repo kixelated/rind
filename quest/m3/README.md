@@ -15,6 +15,6 @@ quest names how to check it and is deleted once it holds.
 
 - [MoQ runs on rind](/quest/m3/moq-on-rind.md) - waiting on MoQ to finish its migration
 - [dimpl checks signatures for every provider](/quest/m3/dimpl-crypto-common.md) - waiting on a dimpl release, then rind-dimpl drops dimpl's internal feature
-- [armv7 raw ciphers from libcrux](/quest/m3/libcrux-ciphers.md) - drop rind's copies once libcrux exports its AES and ChaCha20
+- [armv7 raw ciphers from libcrux](/quest/m3/libcrux-ciphers.md) - drop rind's copy once libcrux exports its AES
 - [libcrux exports its raw ciphers](/quest/m3/libcrux-ciphers-exported.md) - waiting on a libcrux release that exports them
 - [ring and aws-lc-rs parity](/quest/m3/parity/README.md) - switch from ring or aws-lc-rs to rind: algorithms, `rind-ring`, rustls parity, and a migration guide

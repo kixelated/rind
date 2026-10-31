@@ -19,5 +19,5 @@ Settled (maintainer, 2026-10-30): armv7 ctgrind landed without waiting on
 libcrux, with this finding suppressed. Settled (2026-10-29): this quest only
 bumps libcrux for the bignum fix and drops that suppression. armv7's
 ChaCha20-Poly1305 and XChaCha20-Poly1305 keep the shared composition over
-rind's ChaCha20, HACL*'s Poly1305, and rind's `ct_equal`, and do not go back
-to libcrux's AEAD, so libcrux's ChaCha report needs nothing here.
+aws-lc's ChaCha20, aws-lc's or HACL*'s Poly1305, and rind's `ct_equal`, and do
+not go back to libcrux's AEAD, so libcrux's ChaCha report needs nothing here.

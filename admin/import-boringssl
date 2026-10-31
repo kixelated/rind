@@ -3,12 +3,12 @@
 
 Usage: admin/import-boringssl <BoringSSL checkout at REV>
 
-aws-lc dropped the 32-bit ARM X25519 assembly that BoringSSL keeps, so it
-comes from BoringSSL, through admin/import-aws-lc's 32-bit ARM steps: cpp for
-ARM mode, then braces doubled, the routine's name a `{name}` operand that rind
-binds to a crate-version qualified symbol, and each local label tagged with
-its file. Undoing those edits gives BoringSSL's text line for line, without
-its license comment, which the header restates.
+aws-lc lacks BoringSSL's 32-bit ARM X25519 assembly, so it comes from
+BoringSSL, through admin/import-aws-lc's 32-bit ARM steps: cpp for ARM mode,
+braces doubled, the routine's name a `{name}` operand that rind binds to a
+crate-version qualified symbol, and each local label tagged with its file.
+Undoing those edits gives BoringSSL's text line for line, without its license
+comment, which the header restates.
 """
 
 import importlib.machinery
@@ -25,7 +25,7 @@ loader = importlib.machinery.SourceFileLoader("import_aws_lc", os.path.join(ADMI
 aws_lc = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
 loader.exec_module(aws_lc)
 
-IMPORTS = [
+IMPORTS_ARM = [
     {
         "source": "crypto/curve25519/asm/x25519-asm-arm.S",
         "tag": "x25519",
@@ -39,18 +39,9 @@ IMPORTS = [
 ]
 
 
-def main():
-    if len(sys.argv) != 2:
-        sys.exit(__doc__)
-    boringssl = sys.argv[1]
-    rev = subprocess.run(
-        ["git", "-C", boringssl, "rev-parse", "HEAD"], capture_output=True, text=True, check=True
-    ).stdout.strip()
-    if rev != REV:
-        sys.exit(f"BoringSSL is at {rev}, expected {REV}")
-
+def import_arm(boringssl):
     out_dir = os.path.join(aws_lc.ROOT, "arm", "boringssl")
-    for spec in IMPORTS:
+    for spec in IMPORTS_ARM:
         lines = aws_lc.preprocess(os.path.join(boringssl, spec["source"]), aws_lc.ARM_CPP)
         # Traditional cpp keeps the `//` license comment; the header restates it.
         while not lines[0].strip() or lines[0].startswith("//"):
@@ -66,6 +57,19 @@ def main():
         operands = {name: name for name in spec["routines"]}
         out = os.path.join(out_dir, os.path.basename(spec["source"]).removesuffix(".S") + ".s")
         aws_lc.write(out, header + list(aws_lc.escape(lines, operands, "._", spec["tag"])))
+
+
+def main():
+    if len(sys.argv) != 2:
+        sys.exit(__doc__)
+    boringssl = sys.argv[1]
+    rev = subprocess.run(
+        ["git", "-C", boringssl, "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    if rev != REV:
+        sys.exit(f"BoringSSL is at {rev}, expected {REV}")
+
+    import_arm(boringssl)
 
 
 if __name__ == "__main__":

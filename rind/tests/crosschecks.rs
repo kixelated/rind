@@ -409,9 +409,11 @@ mod aead {
         Ok(())
     }
 
-    // Every length to 32 blocks, each with every partial tail, so each path
-    // through the aarch64 kernels runs, the eight-way loop's repeat included.
-    // They work in place, which a block stored before it is loaded would break.
+    // Every message and AAD length to 32 blocks, each with every partial
+    // tail, so each path through the aarch64 kernels runs, the eight-way
+    // loop's repeat included, and so does every tail after x86_64's 128- and
+    // 256-byte chunks. They work in place, which a block stored before it is
+    // loaded would break.
     #[test]
     fn aes_gcm_every_length() {
         let msg: Vec<u8> = (0..32 * 16 + 15).map(|i| (i * 7 + 3) as u8).collect();
@@ -421,6 +423,7 @@ mod aead {
         ] {
             for len in 0..=msg.len() {
                 check(ours, theirs, key, [3; 12], b"aad", &msg[..len], None).unwrap();
+                check(ours, theirs, key, [3; 12], &msg[..len], b"msg", None).unwrap();
             }
         }
     }

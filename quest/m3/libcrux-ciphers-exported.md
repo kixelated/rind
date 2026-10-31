@@ -3,8 +3,7 @@
 ## Goal
 
 A published libcrux release exports the AES block cipher and AES-CTR from
-libcrux-aes and HACL*'s ChaCha20 from libcrux-chacha20poly1305, which 0.0.10
-keeps `pub(crate)`. Check each crate's latest `src/lib.rs` on crates.io. This
+libcrux-aes, which 0.0.10 keeps `pub(crate)`. Check the crate's latest `src/lib.rs` on crates.io. This
 quest only waits; delete it once that holds.
 
 ## Plan
