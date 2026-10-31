@@ -26,8 +26,11 @@ debug = true
 [profile.dev.package.fiat-crypto]
 overflow-checks = false
 
-# curve25519-dalek's debug assertions test secret limbs, scalar digits, and
-# ladder bits, branches ctgrind refuses; release builds drop them.
+# curve25519-dalek's and subtle's debug assertions test secret limbs, scalar
+# digits, and choice bits, branches ctgrind refuses; release builds drop them.
 [profile.dev.package.curve25519-dalek]
 debug-assertions = false
 overflow-checks = false
+
+[profile.dev.package.subtle]
+debug-assertions = false

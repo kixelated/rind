@@ -9,7 +9,8 @@ use crate::error::Error;
 use crate::low;
 use crate::mid::sha2::Sha512Context;
 
-// Both are plain limbs or bytes, so all zeroes is a value they can hold.
+// Both are plain integer arrays in every dalek backend, so all zeroes is a
+// value they can hold.
 impl low::Zeroable for Scalar {}
 impl low::Zeroable for EdwardsPoint {}
 
@@ -29,6 +30,8 @@ impl SigningKey {
         // `s := ed25519-clamp(h[0..32])`
         // `prefix := h[32..64]`
         let mut h = ed25519_digest(seed, &[], &[]);
+        // INVARIANT: these unwraps are unreachable: `h` is [u8; 64], so its
+        // split at 32 yields two 32-length slices.
         let (lower, upper) = h.split_at(32);
         // `s` is reduced, but `[s]B` is unchanged since `B` has order `L`.
         let s = Scalar::from_bytes_mod_order(clamp_integer(lower.try_into().unwrap()));
@@ -134,9 +137,13 @@ impl VerifyingKey {
         // Step: rfc8032 5.1.7.1 (A' := A is an invariant for `self`)
         let (sig_r, s) = sig.split_at(32);
 
+        // INVARIANT: this unwrap is unreachable: sig is [u8; 64]
+        // so its split at 32 yields two 32-length slices.
+        let s = s.try_into().unwrap();
+
         // S must be in the range [0, order) to prevent signature malleability.
-        let s = Option::<Scalar>::from(Scalar::from_canonical_bytes(s.try_into().unwrap()))
-            .ok_or(Error::BadSignature)?;
+        let s =
+            Option::<Scalar>::from(Scalar::from_canonical_bytes(s)).ok_or(Error::BadSignature)?;
 
         // Step: rfc8032 5.1.7.2
         // `k := SHA512(dom2(F, C) || R || A || msg)`
