@@ -28,7 +28,7 @@ import re
 import sys
 
 MAX = 64
-GENERATED = "../../rind/src/low/*/*.rs"
+GENERATED = "../../rind/src/low/**/*.rs"
 HEADER = "// generated source. do not edit.\n"
 
 INSN = re.compile(
@@ -42,12 +42,14 @@ DECL = re.compile(
     r"^pub\(crate\) (?:unsafe )?fn \w+\((.*?)\)(?: -> [^{]*)? \{$", re.S | re.M
 )
 GPR = re.compile(r"^(?:[xw](\d+)|xzr|wzr|sp)$")
-# Instructions that leave the flags alone. Any other clears what the walk
-# knows of them, so a flag writer it has never seen cannot hide behind a
-# compare of the length.
-KEEPS_FLAGS = {"add", "sub", "mov", "movi", "movk", "and", "orr", "eor", "eor3"}
-KEEPS_FLAGS |= {"lsr", "shl", "ext", "rev", "rev32", "rev64", "trn1", "trn2"}
-KEEPS_FLAGS |= {"tbl", "fmov", "aese", "aesmc", "pmull", "pmull2"}
+# Every instruction the walk accepts is a load or store, a branch, a compare,
+# or one of these, which write only their first operand, a register, and never
+# memory, flags, or control flow. Any other fails, so an instruction a bump
+# introduces is classified before it is trusted.
+DATA = {"add", "sub", "mov", "movi", "movk", "and", "orr", "eor", "eor3", "lsr"}
+DATA |= {"shl", "ext", "rev", "rev32", "rev64", "trn1", "trn2", "tbl", "fmov"}
+DATA |= {"aese", "aesmc", "pmull", "pmull2"}
+COMPARES = {"cmp", "tst", "subs"}
 MEMORY = {"ldr", "ldp", "ldur", "ld1", "str", "stp", "stur", "st1"}
 SIZES = {"q": 16, "x": 8, "d": 8, "w": 4, "s": 4, "h": 2, "b": 1}
 CONDITIONS = {
@@ -107,6 +109,23 @@ def imm(tok):
             return int(tok[1:], 0)
         except ValueError:
             pass
+    raise Unmodelled
+
+
+def data_size(data):
+    # Bytes a load or store moves: scalar registers, or one list of whole
+    # 16-byte vector registers, with ranges expanded.
+    if len(data) == 1 and data[0].startswith("{"):
+        size = 0
+        for item in split_ops(data[0].strip("{} ")):
+            m = re.fullmatch(r"v(\d+)\.16b(?:-v(\d+)\.16b)?", item)
+            if not m:
+                raise Unmodelled
+            last = int(m.group(2) or m.group(1))
+            size += 16 * ((last - int(m.group(1))) % 32 + 1)
+        return size
+    if data and all(re.fullmatch(r"[qdxwshb]\d+|[xw]zr", d) for d in data):
+        return sum(SIZES[d[0]] for d in data)
     raise Unmodelled
 
 
@@ -367,14 +386,13 @@ class Walk:
         if addr.startswith("#"):
             post = imm(addr)
             ops, addr = ops[:-1], ops[-2]
-        m = re.match(r"^\[(\w+)(?:, #(-?\w+))?\]\s*(!?)$", addr)
-        if not m or reg(m.group(1)) is None:
+        m = re.match(r"^\[(x\d+|sp)(?:, (#[^\]]+))?\]\s*(!?)$", addr)
+        if not m:
             raise Fault("unmodelled", "addressing mode %s" % (where,))
-        base, off, pre = reg(m.group(1)), int(m.group(2) or "0", 0), m.group(3)
+        base, off, pre = reg(m.group(1)), imm(m.group(2) or "#0"), m.group(3)
         data = ops[:-1]
         load = op.startswith("ld")
         dregs = [reg(d) for d in data if reg(d)]
-        vregs = [d for d in data if not reg(d)]
         if not load:
             for d in dregs:
                 if self.is_buf(d):
@@ -394,15 +412,9 @@ class Walk:
                     "direction", "%s both loads and stores, at %s" % (base, where)
                 )
             addr = at + (0 if post is not None else off)
-            # Scalar registers, or a list of whole 16-byte vector registers.
-            if vregs and vregs[0].startswith("{"):
-                lanes = split_ops(vregs[0].strip("{} "))
-                if not all(v.endswith(".16b") for v in lanes):
-                    raise Fault("unmodelled", "vector arrangement in %s" % (where,))
-                size = 16 * len(lanes)
-            elif all(d[0] in SIZES for d in data):
-                size = sum(SIZES[d[0]] for d in data)
-            else:
+            try:
+                size = data_size(data)
+            except Unmodelled:
                 raise Fault("unmodelled", "data registers in %s" % (where,))
             self.events.append((load, addr, size, where))
         if pre or post is not None:
@@ -416,10 +428,14 @@ class Walk:
         ops = split_ops(args)
         nxt = pc + 1
         if op in MEMORY:
-            self.mem(pc, op, ops)
+            try:
+                self.mem(pc, op, ops)
+            except Unmodelled:
+                raise Fault("unmodelled", "memory access %s" % (self.insns[pc],))
             return nxt
-        if op[:2] in ("ld", "st"):
-            raise Fault("unmodelled", "memory access %s" % (self.insns[pc],))
+        branch = op in ("b", "cbz", "cbnz") or op.startswith("b.")
+        if branch != (target is not None):
+            raise Fault("unmodelled", "control flow %s" % (self.insns[pc],))
         if op == "b":
             return target
         if op.startswith("b."):
@@ -434,12 +450,10 @@ class Walk:
                     "branch", "%s on a value not from the length" % (self.insns[pc],)
                 )
             return target if (v == 0) == (op == "cbz") else nxt
-        if target is not None or op in ("br", "blr", "bl", "ret"):
-            raise Fault("unmodelled", "control flow %s" % (self.insns[pc],))
-        if op not in KEEPS_FLAGS:
+        if op in COMPARES:
             self.flags = None
-        if re.search(r"\[(?:[xw]\d+|sp)\b", args):
-            raise Fault("unmodelled", "memory operand in %s" % (self.insns[pc],))
+        elif op not in DATA:
+            raise Fault("unmodelled", "instruction %s" % (self.insns[pc],))
         regs = [reg(o.split()[0]) for o in ops]
         d = regs[0] if regs else None
         bits = 32 if ops and ops[0].startswith("w") else 64
@@ -483,7 +497,7 @@ class Walk:
                     raise Fault(
                         "escape", "buffer pointer escapes into %s" % (self.insns[pc],)
                     )
-            if d and op not in ("cmp", "cmn", "tst", "ccmp", "ccmn"):
+            if d and op not in ("cmp", "tst"):
                 self.set(d, None)
         return nxt
 
@@ -562,7 +576,6 @@ def planted(kernel, text):
         for i, line in enumerate(lines)
         if re.search(r'"    st\w+ .*\[%s\b' % dst, line)
     )
-    conds = [i for i, line in enumerate(lines) if re.search(r'"    b\.\w+ ', line)]
     step = re.search(r"#\w+(?=\]!|\"\),$)", lines[store])
     # A scratch register the kernel never touches, so the faults change
     # nothing else.
@@ -591,6 +604,17 @@ def planted(kernel, text):
         ("bounds", insert(q("ldr", "q0, [%s, #-16]" % src))),
         # A store dropped.
         ("coverage", "\n".join(lines[:store] + dropped + lines[store + 1 :])),
+        # Four blocks loaded by one register range, at the entry, so past a
+        # buffer of one to three blocks.
+        (
+            "bounds",
+            insert(
+                q("cbz", count + ", ", 99),
+                q("ld1", "{{ v0.16b-v3.16b }}, [%s]" % src),
+                label,
+                at=entry,
+            ),
+        ),
         # A load through the output pointer.
         ("direction", insert(q("ldr", "q0, [%s]" % dst))),
         # A store through a copy of the input pointer.
@@ -620,19 +644,15 @@ def planted(kernel, text):
                 at=entry,
             ),
         ),
+        # An instruction the walk does not know, here one that sets the flags
+        # from a register the kernel never sets.
+        ("unmodelled", insert(q("msr", "nzcv, " + tmp))),
         # A reachable instruction no length runs.
         (
             "unreached",
             insert(q("mov", tmp + ", #1"), q("cbnz", tmp + ", ", 99), q("ret"), label),
         ),
     ]
-    if conds:
-        # Flags set from a register the kernel never sets, before its first
-        # conditional branch.
-        msr = q("msr", "nzcv, " + tmp)
-        faults.append(
-            ("branch", "\n".join(lines[: conds[0]] + [msr] + lines[conds[0] :]))
-        )
     return faults
 
 
@@ -656,7 +676,7 @@ def self_test(kernel, text):
 
 def main():
     kernels = []
-    for path in sorted(glob.glob(GENERATED)):
+    for path in sorted(glob.glob(GENERATED, recursive=True)):
         text = open(path).read()
         if text.startswith(HEADER):
             kernel = Kernel(path, text)
