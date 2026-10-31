@@ -18,7 +18,7 @@ file is about 700 KB of machine code, too large to import.
   and `aes-gcm-avx10-x86_64`, against rind's current paths at 32 B, 1200 B
   (a QUIC packet), and 16 KB on the hosted Zen 4 and Zen 5 runners and a
   VAES core without AVX-512.
-- Import mechanically, as `admin/import-aws-lc-arm` does on armv7, decide the
+- Import mechanically with `admin/import-aws-lc`, as SHA-512 is, decide the
   path once at setup from CPU features, and keep `cpu::check()`'s
   requirements. Mark the cell ⚡ unless a proof covers rind's in-place use.
 - Update the README cell and LICENSE with the code.

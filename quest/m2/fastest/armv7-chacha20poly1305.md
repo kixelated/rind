@@ -29,7 +29,7 @@ keep the portable path for any that do not.
 
 `rind::cipher::ChaCha20` shares the keystream loop, so it moves with the AEAD.
 
-`admin/import-aws-lc-arm` already imports aws-lc's AArch32 assembly the same
+`admin/import-aws-lc` already imports aws-lc's AArch32 assembly the same
 way, so this extends it with `chacha-armv4` and `poly1305-armv4`.
 
 If aws-lc's code is ruled out, HACL*'s own `chacha20_encrypt` is about 1.3x
