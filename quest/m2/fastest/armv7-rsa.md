@@ -19,6 +19,10 @@ against aws-lc-rs (run 41139274206):
 | rsa2048-pkcs1-sha256-verify-parsed | 155 µs | 60.8 µs | 2.55 |
 | rsa2048-pkcs1-sha256-sign | 6.93 ms | 2.71 ms | 2.56 |
 
+RustCrypto's pure-Rust `rsa` signs in 5.57 ms against rind's 6.91 ms, but
+verifies in 285 µs against 215 µs (bench-tmp run 41151132431), so it is not
+the candidate.
+
 aws-lc's 32-bit ARM Montgomery multiplication is `bn_mul_mont` from
 `armv4-mont`, with a NEON path. Import it with `admin/import-aws-lc-arm`, then
 decide how much of HACL*'s exponentiation and context code to keep around it.

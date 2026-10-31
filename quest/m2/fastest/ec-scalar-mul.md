@@ -23,18 +23,19 @@ decoding and validating the peer's point:
 | host | P-256 variable: rind / s2n best | P-256 generator: rind keygen / s2n `scalarmulbase` best | P-384 variable: rind / s2n `montjscalarmul` best + inversion |
 |---|---|---|---|
 | i7-8700 (local) | 37.7 / 35.2 µs | 8.5 / 7.6 µs | 121.4 / 119.8 µs |
-| EPYC 7763 (run 41147916836) | 52.2 / 48.8 µs | 12.1 / 10.8 µs | P384_EPYC |
+| EPYC 7763 (run 41147916836) | 52.2 / 48.8 µs | 12.1 / 10.8 µs | not measured |
+| EPYC 9V45 (run 41153443847) | 33.0 / 27.6 µs | 7.1 / 5.6 µs | 94.4 / 89.6 µs |
 | Neoverse-N2 (run 41147916836) | 47.7 / 45.1 µs | 12.8 / 10.4 µs | 156.9 / 153.4 µs |
 
 rind's key generation also draws the scalar from the OS RNG, so the generator
-column flatters s2n-bignum by that much. Both variable columns are within about
-7%, s2n-bignum ahead on P-256 and level on P-384. Re-measure inside rind,
+column flatters s2n-bignum by that much. s2n-bignum leads on P-256 by 5-16%, and
+is level with rind or up to 5% ahead on P-384. Re-measure inside rind,
 calling both through the same `mid` path, before switching: the subtraction
 above is good enough to show they are as fast, not to rank them.
 
 P-384's generator stays on rind's comb from
-[moq-dev/rind#102](https://github.com/moq-dev/rind/pull/102): 30-40 µs
-against about 120-155 µs for the only verified alternative, a variable
+[moq-dev/rind#102](https://github.com/moq-dev/rind/pull/102): 23-40 µs
+against 90-155 µs for the only verified alternative, a variable
 multiplication by G.
 
 Things to settle:

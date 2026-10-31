@@ -12,18 +12,22 @@ AES hardware, so this is their bulk cipher there.
 Today the cell runs HACL*'s verified ChaCha20 block function and Poly1305
 under rind's keystream loop and Graviola's AEAD composition. Seal on the bench
 runner (Neoverse-N2 running the armv7 build; bench run 41141591842 and
-bench-tmp run 41147916836):
+bench-tmp runs 41147916836 and 41151132431):
 
 | | 32B | 1200B | 2KB | 16KB |
 |---|---|---|---|---|
 | rind (today) | 0.65-0.72 µs | 5.68 µs | 9.38 µs | 70.8 µs |
 | libcrux's HACL\* AEAD, whole | 0.45 µs | 4.25 µs | | 53.4 µs |
+| RustCrypto `chacha20poly1305` | 0.40 µs | | 7.27 µs | 55.9 µs |
 | aws-lc-rs (aws-lc's NEON `chacha-armv4` and `poly1305-armv4`) | 0.63 µs | | 3.46 µs | 23.9 µs |
 
 aws-lc's NEON assembly is unverified and about 3x faster from 2KB up; the cell
-would become ⚡. Most armv7 cores without the crypto extension (Pi 4, CM4,
+would become ⚡. RustCrypto's pure Rust leads at 32B, so check short messages
+too. Most armv7 cores without the crypto extension (Pi 4, CM4,
 Zero 2 W) have NEON, but check the target cores do before relying on it, and
 keep the portable path for any that do not.
+
+`rind::cipher::ChaCha20` shares the keystream loop, so it moves with the AEAD.
 
 `admin/import-aws-lc-arm` already imports aws-lc's AArch32 assembly the same
 way, so this extends it with `chacha-armv4` and `poly1305-armv4`.
