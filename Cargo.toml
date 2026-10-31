@@ -25,3 +25,9 @@ debug = true
 # still branch on overflow flags derived from secrets, which ctgrind refuses.
 [profile.dev.package.fiat-crypto]
 overflow-checks = false
+
+# curve25519-dalek's debug assertions test secret limbs, scalar digits, and
+# ladder bits, branches ctgrind refuses; release builds drop them.
+[profile.dev.package.curve25519-dalek]
+debug-assertions = false
+overflow-checks = false
