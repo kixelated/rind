@@ -662,9 +662,13 @@ mod tests {
         #[test]
         fn point_select(table in prop::collection::vec(any::<u64>(), 288), index: u8) {
             let index = index % 20;
-            let (mut ours, mut theirs) = ([0; 18], [0; 18]);
+            // Only armv7 selects Jacobian points, so check against the table.
+            let mut ours = [0; 18];
             bignum_jac_point_select_p384(&mut ours, &table, into_secret(index));
-            low::bignum_jac_point_select_p384(&mut theirs, &table, index);
+            let theirs = match index {
+                1..=16 => table.as_chunks::<18>().0[usize::from(index) - 1],
+                _ => [0; 18],
+            };
             prop_assert_eq!(into_public(ours), theirs);
 
             let (mut ours, mut theirs) = ([0; 12], [0; 12]);

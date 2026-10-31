@@ -32,8 +32,6 @@ mod generic {
     pub(super) mod sha1;
     #[cfg(any(target_arch = "arm", all(test, target_arch = "x86_64")))]
     pub(super) mod sha256;
-    #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-    pub(super) mod sha512;
     pub(super) mod zeroise;
 }
 
@@ -75,8 +73,7 @@ cfg_if::cfg_if! {
         pub(crate) use x86_64::bignum_copy_row_from_table_mux::bignum_copy_row_from_table;
         pub(crate) use x86_64::bignum_ctz::bignum_ctz;
         pub(crate) use x86_64::bignum_demont::bignum_demont;
-        pub(crate) use x86_64::bignum_point_select_p256::{bignum_aff_point_select_p256, bignum_jac_point_select_p256};
-        pub(crate) use x86_64::bignum_point_select_p384::{bignum_aff_point_select_p384, bignum_jac_point_select_p384};
+        pub(crate) use x86_64::bignum_point_select_p384::bignum_aff_point_select_p384;
         pub(crate) use x86_64::bignum_demont_p256::bignum_demont_p256;
         pub(crate) use x86_64::bignum_demont_p384::bignum_demont_p384;
         pub(crate) use x86_64::bignum_digitsize::bignum_digitsize;
@@ -136,9 +133,12 @@ cfg_if::cfg_if! {
         pub(crate) use x86_64::p256_montjadd::p256_montjadd;
         pub(crate) use x86_64::p256_montjdouble::p256_montjdouble;
         pub(crate) use x86_64::p256_montjmixadd::p256_montjmixadd;
+        pub(crate) use x86_64::p256_montjscalarmul::p256_montjscalarmul;
+        pub(crate) use x86_64::p256_scalarmulbase::p256_scalarmulbase;
         pub(crate) use x86_64::p384_montjadd::p384_montjadd;
         pub(crate) use x86_64::p384_montjmixadd::p384_montjmixadd;
         pub(crate) use x86_64::p384_montjdouble::p384_montjdouble;
+        pub(crate) use x86_64::p384_montjscalarmul::p384_montjscalarmul;
         pub(crate) use x86_64::sha1_mux::sha1_compress_blocks;
         pub(crate) use x86_64::sha256_mux::sha256_compress_blocks;
         pub(crate) use x86_64::sha512::sha512_compress_blocks;
@@ -161,8 +161,7 @@ cfg_if::cfg_if! {
         pub(crate) use aarch64::bignum_coprime::bignum_coprime;
         pub(crate) use aarch64::bignum_copy_row_from_table_mux::bignum_copy_row_from_table;
         pub(crate) use aarch64::bignum_ctz::bignum_ctz;
-        pub(crate) use aarch64::bignum_point_select_p256::{bignum_aff_point_select_p256, bignum_jac_point_select_p256};
-        pub(crate) use aarch64::bignum_point_select_p384::{bignum_aff_point_select_p384, bignum_jac_point_select_p384};
+        pub(crate) use aarch64::bignum_point_select_p384::bignum_aff_point_select_p384;
         pub(crate) use aarch64::bignum_demont::bignum_demont;
         pub(crate) use aarch64::bignum_demont_p256::bignum_demont_p256;
         pub(crate) use aarch64::bignum_demont_p384::bignum_demont_p384;
@@ -219,17 +218,20 @@ cfg_if::cfg_if! {
         pub(crate) use aarch64::p256_montjadd::p256_montjadd;
         pub(crate) use aarch64::p256_montjdouble::p256_montjdouble;
         pub(crate) use aarch64::p256_montjmixadd::p256_montjmixadd;
+        pub(crate) use aarch64::p256_montjscalarmul::p256_montjscalarmul;
+        pub(crate) use aarch64::p256_scalarmulbase::p256_scalarmulbase;
         pub(crate) use aarch64::p384_montjadd::p384_montjadd;
         pub(crate) use aarch64::p384_montjmixadd::p384_montjmixadd;
         pub(crate) use aarch64::p384_montjdouble::p384_montjdouble;
+        pub(crate) use aarch64::p384_montjscalarmul::p384_montjscalarmul;
         pub(crate) use aarch64::sha1::sha1_compress_blocks;
         pub(crate) use aarch64::sha256::sha256_compress_blocks;
         pub(crate) use aarch64::sha3_keccak_f1600_mux::sha3_keccak_f1600;
         pub(crate) use aarch64::sha3_keccak4_f1600_mux::sha3_keccak4_f1600;
         pub(crate) use aarch64::sha3_keccak2of4_f1600::sha3_keccak2of4_f1600;
+        pub(crate) use aarch64::sha512::sha512_compress_blocks;
 
         pub(crate) use aarch64::chacha20;
-        pub(crate) use generic::sha512::sha512_compress_blocks;
         pub(crate) use generic::mlkem::{mlkem_frombytes, mlkem_unpack};
         pub(crate) use generic::mlkem768::mlkem768_sample_poly_ntt_8x;
     } else if #[cfg(target_arch = "arm")] {
@@ -256,10 +258,12 @@ cfg_if::cfg_if! {
             bignum_neg_p384, bignum_tomont_p384, p384_montjadd, p384_montjdouble,
             p384_montjmixadd,
         };
-        // The crypto extension where present, else rind's portable SHA, since
-        // libcrux has no SHA-1 and rind's SHA-256 is faster than libcrux's.
-        pub(crate) use arm::sha_armv4::{sha1_compress_blocks, sha256_compress_blocks};
-        pub(crate) use generic::sha512::sha512_compress_blocks;
+        // SHA-1 and SHA-256 use the crypto extension where present, else rind's
+        // portable SHA, since libcrux has no SHA-1 and rind's SHA-256 is faster
+        // than libcrux's. SHA-512 is aws-lc's, NEON or scalar.
+        pub(crate) use arm::sha_armv4::{
+            sha1_compress_blocks, sha256_compress_blocks, sha512_compress_blocks,
+        };
     } else {
         compile_error!("This crate only supports x86_64, aarch64, or arm");
     }
