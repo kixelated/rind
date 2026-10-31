@@ -35,7 +35,7 @@ but there is also a public API for general-purpose use.
 - [x] Fast and simple compilation
     - [x] `cargo build` takes less than one second, and requires only rustc
 - [x] Competitive performance (with *ring*, aws-lc-rs, and rustcrypto)
-- [x] Uses formally-verified assembler from other projects (where available)
+- [x] Uses formally-verified code from other projects (where it is as fast)
 - [x] Intended to provide algorithms in wide use on web
 - [x] Intended for use as a rustls `CryptoProvider`, via [rind-rustls][].
 
@@ -91,25 +91,27 @@ extension.
 Each cell names whose code runs for that algorithm on that backend: the
 [sources](#sources) below, rind's own code, or Graviola's own Rust and
 intrinsics. A ✓ marks code its source formally verifies, to the extent
-[Sources](#sources) states; everything else is unverified. The table
-describes `main`, and changes alongside the code it describes.
+[Sources](#sources) states. A ⚡ marks unverified code chosen because it
+measured faster than a verified alternative; other unverified code has none,
+or a [quest](quest/m2/fastest/README.md) covers it. The table describes
+`main`, and changes alongside the code it describes.
 
 | Algorithm | x86_64 | aarch64 | armv7 |
 |---|---|---|---|
 | AES-128-GCM, AES-256-GCM | Graviola | [s2n-bignum] CTR and GHASH of whole blocks ✓, run from a copy of the input since its proofs exclude in-place operation; Graviola key schedule, H powers, single-block AES (H, the tag mask, and a final partial block), and GHASH of the AAD, final partial block, and lengths | crypto extension: [aws-lc] AES and GHASH (copied), rind GCM; otherwise: [libcrux-aes] |
 | AES block (header protection), AES-CTR (SRTP) | Graviola block, rind CTR | Graviola block, rind CTR | crypto extension: [aws-lc] block and CTR (copied); otherwise: [libcrux-aes] block (copied), rind CTR |
 | ChaCha20 (header protection) | Graviola | Graviola | [HACL\*] block function ✓ (copied), rind keystream |
-| ChaCha20-Poly1305, XChaCha20-Poly1305 | Graviola | Graviola | [HACL\*] ChaCha20 block function and Poly1305 ✓; Graviola AEAD; rind HChaCha20 |
+| ChaCha20-Poly1305, XChaCha20-Poly1305 | Graviola ⚡ | Graviola ⚡ | [HACL\*] ChaCha20 block function and Poly1305 ✓; Graviola AEAD; rind HChaCha20 |
 | SHA-1 (legacy only) | rind | rind | crypto extension: [aws-lc] (copied); otherwise: rind |
-| SHA-256, SHA-384, SHA-512 | Graviola | Graviola | crypto extension: [aws-lc] SHA-256 (copied); otherwise: Graviola SHA-256; Graviola SHA-384 and SHA-512 |
-| HMAC | Graviola | Graviola | Graviola |
-| HKDF | rind | rind | rind |
+| SHA-256, SHA-384, SHA-512 | Graviola SHA-256 ⚡, SHA-384, and SHA-512 | Graviola SHA-256 ⚡, SHA-384, and SHA-512 | crypto extension: [aws-lc] SHA-256 (copied) ⚡; otherwise: Graviola SHA-256 ⚡; Graviola SHA-384 and SHA-512 |
+| HMAC | Graviola ⚡ | Graviola ⚡ | Graviola ⚡ |
+| HKDF | rind ⚡ | rind ⚡ | rind ⚡ |
 | X25519 | [s2n-bignum] ✓ | [s2n-bignum] ✓ | [HACL\*] ✓ |
-| Ed25519 | [s2n-bignum] point and scalar arithmetic ✓; Graviola EdDSA and SHA-512 | [s2n-bignum] point and scalar arithmetic ✓; Graviola EdDSA and SHA-512 | [HACL\*] ✓ |
-| P-256 ECDH, ECDSA | [s2n-bignum] field and point arithmetic ✓; Graviola scalar multiplication, table lookup, and ECDSA | [s2n-bignum] field and point arithmetic ✓; Graviola scalar multiplication, table lookup, and ECDSA | [HACL\*] ✓; Graviola ECDSA nonce |
-| P-384 ECDH, ECDSA | [s2n-bignum] field and point arithmetic ✓; rind comb multiplication of the generator; Graviola other scalar multiplication, table lookup, and ECDSA | [s2n-bignum] field and point arithmetic ✓; rind comb multiplication of the generator; Graviola other scalar multiplication, table lookup, and ECDSA | [fiat-crypto] field and scalar arithmetic ✓; rind point formulas, inversion, table lookup, and comb multiplication of the generator; Graviola other scalar multiplication and ECDSA |
-| ML-KEM-768 | [s2n-bignum] polynomial arithmetic and Keccak-f ✓; Graviola FIPS 203 and AVX-512 sampling | [s2n-bignum] polynomial arithmetic and Keccak-f ✓; Graviola FIPS 203 | [libcrux-ml-kem] ✓, except its SHA-3 |
-| RSA PKCS#1 v1.5 and PSS signatures, key generation | [s2n-bignum] bignum arithmetic ✓; Graviola exponentiation, CRT, padding, and key generation | [s2n-bignum] bignum arithmetic ✓; Graviola exponentiation, CRT, padding, and key generation | [HACL\*] bignum arithmetic and exponentiation ✓; rind CRT and key generation; Graviola padding |
+| Ed25519 | [s2n-bignum] point and scalar arithmetic ✓; Graviola EdDSA ⚡ and SHA-512 | [s2n-bignum] point and scalar arithmetic ✓; Graviola EdDSA ⚡ and SHA-512 | [HACL\*] ✓ |
+| P-256 ECDH, ECDSA | [s2n-bignum] field and point arithmetic ✓; Graviola scalar multiplication and table lookup; Graviola ECDSA ⚡ | [s2n-bignum] field and point arithmetic ✓; Graviola scalar multiplication and table lookup; Graviola ECDSA ⚡ | [HACL\*] ✓; Graviola ECDSA nonce |
+| P-384 ECDH, ECDSA | [s2n-bignum] field and point arithmetic ✓; rind comb multiplication of the generator ⚡; Graviola other scalar multiplication, table lookup, and ECDSA | [s2n-bignum] field and point arithmetic ✓; rind comb multiplication of the generator ⚡; Graviola other scalar multiplication, table lookup, and ECDSA | [fiat-crypto] field and scalar arithmetic ✓; scalar multiplication over it ⚡, from rind point formulas, inversion, table lookup, and comb multiplication of the generator, and Graviola other scalar multiplication; Graviola ECDSA |
+| ML-KEM-768 | [s2n-bignum] polynomial arithmetic and Keccak-f ✓; Graviola FIPS 203 and AVX-512 sampling ⚡ | [s2n-bignum] polynomial arithmetic and Keccak-f ✓; Graviola FIPS 203 ⚡ | [libcrux-ml-kem] ✓, except its SHA-3 |
+| RSA PKCS#1 v1.5 and PSS signatures, key generation | [s2n-bignum] bignum arithmetic ✓; Graviola exponentiation ⚡, CRT, padding, and key generation | [s2n-bignum] bignum arithmetic ✓; Graviola exponentiation ⚡, CRT, padding, and key generation | [HACL\*] bignum arithmetic and exponentiation ✓; rind CRT and key generation; Graviola padding |
 
 The tests use [Wycheproof]'s vectors.
 
