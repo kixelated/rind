@@ -409,6 +409,22 @@ mod aead {
         Ok(())
     }
 
+    // Every length through six of the aarch64 kernels' 4-block groups, each
+    // with every partial tail, so each path through them runs. They work in
+    // place, which a block stored before it is loaded would break.
+    #[test]
+    fn aes_gcm_every_length() {
+        let msg: Vec<u8> = (0..24 * 16 + 15).map(|i| (i * 7 + 3) as u8).collect();
+        for (ours, theirs, key) in [
+            (&AES_128_GCM, &theirs::AES_128_GCM, &[1u8; 16][..]),
+            (&AES_256_GCM, &theirs::AES_256_GCM, &[2u8; 32][..]),
+        ] {
+            for len in 0..=msg.len() {
+                check(ours, theirs, key, [3; 12], b"aad", &msg[..len], None).unwrap();
+            }
+        }
+    }
+
     // Messages and AAD span several blocks with ragged tails.
     proptest! {
         #[test]
