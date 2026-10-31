@@ -11,7 +11,7 @@
     # The quest CLI, which also serves the quest guide and skills the stubs in
     # .claude/skills call. Bump the rev to upgrade them.
     quest = {
-      url = "github:kixelated/quest/95b7d27de5ba6e6cba42d721e3a77b0f5d965294";
+      url = "github:moq-dev/quest/782132ecd41fa26d5eea7e627170e6749f29aad8";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.follows = "flake-utils";
     };
@@ -65,12 +65,6 @@
           armv7-prefix = "${armv7-cc}/bin/${armv7-cc.targetPrefix}";
         in
         {
-          packages = {
-            # The quest CLI alone, so land.yml's jobs run the gate without
-            # building the dev shell around it.
-            quest = quest-cli;
-          };
-
           devShells = {
             default = pkgs.mkShell {
               packages =

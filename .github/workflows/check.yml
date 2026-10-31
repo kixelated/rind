@@ -3,8 +3,8 @@ name: Check
 permissions:
   contents: read
 
-# PRs land through land.yml, which runs `just ci` over the queued batch's diff
-# on the queue runner. A push to `main` runs every crate, so a tool or advisory
+# PRs land through the host land gate, which runs `just ci` over each batch's
+# diff on the maintainer's host. A push to `main` runs every crate, so a tool or advisory
 # that changed under an untouched crate shows too. The platform matrix and the
 # deeper suites run nightly in the other workflows.
 on:
