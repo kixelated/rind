@@ -20,7 +20,6 @@ on:
       - cranelift
       - ctgrind
       - fuzz
-      - Land
       - quality lints
       - Release
       - x86-cpu
@@ -35,14 +34,13 @@ jobs:
     name: Discord
     # `cancelled` is excluded: a superseded run is cancelled as a matter of
     # course. The nightlies alert only when scheduled, since whoever dispatched
-    # one is already watching it. Release, Land, and Check alert however they
-    # ran: they follow the gate's own pushes and dispatches, which nobody
-    # watches, and a failed Land stalls the queue.
+    # one is already watching it. Release and Check alert however they ran:
+    # they follow the gate's own pushes, which nobody watches.
     if: >-
       (github.event.workflow_run.conclusion == 'failure' ||
       github.event.workflow_run.conclusion == 'timed_out') &&
       (github.event.workflow_run.event == 'schedule' ||
-      contains(fromJSON('["Release", "Land", "Check"]'), github.event.workflow_run.name))
+      contains(fromJSON('["Release", "Check"]'), github.event.workflow_run.name))
     runs-on: ubuntu-latest
     timeout-minutes: 5
 

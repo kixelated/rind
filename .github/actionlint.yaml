@@ -1,4 +1,0 @@
-self-hosted-runner:
-  labels:
-    # The moq-dev organization's queue runner, for land.yml's check job.
-    - moq-queue
