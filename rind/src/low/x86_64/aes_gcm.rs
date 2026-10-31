@@ -1,15 +1,17 @@
 // Written for Graviola by Joe Birr-Pixton, 2024.
 // SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 //
-//! Ref. <https://www.intel.com/content/dam/www/public/us/en/documents/white-papers/communications-ia-cryptographic-paper.pdf>
+//! AES-GCM, composed as aws-lc's `CRYPTO_gcm128_encrypt_ctr32` does on
+//! x86_64: aws-lc's stitched AES-NI and AVX kernel for the bulk, then its
+//! counter mode and GHASH for the remaining blocks. Where the CPU has
+//! AVX-512 with VAES, Graviola's by-16 kernel runs the bulk instead.
 
 use core::arch::x86_64::*;
 use core::mem;
 
 use super::aes::AesKey;
-use super::cpu::HaveAvx512ForAesGcm;
-use super::ghash::{self, Ghash};
-use crate::low::ghash::{GhashTable, GhashTableAvx512};
+use super::aws_lc;
+use super::ghash::{self, Bulk, Ghash, GhashTableAvx512};
 
 pub(crate) fn encrypt(
     key: &AesKey,
@@ -18,17 +20,7 @@ pub(crate) fn encrypt(
     aad: &[u8],
     cipher_inout: &mut [u8],
 ) {
-    if let (true, GhashTable::Avx512(GhashTableAvx512 { token, .. })) =
-        (cipher_inout.len() >= AVX512_MINIMUM_CIPHER_LEN, ghash.table)
-    {
-        // SAFETY: this crate requires the `aes`, `sse3`, `ssse3`, `pclmulqdq`, `avx` and `avx2` cpu features;
-        // `token` proves the remaining features were dynamically checked
-        unsafe { _cipher_avx512::<true>(key, ghash, initial_counter, aad, cipher_inout, *token) };
-        return;
-    }
-
-    // SAFETY: this crate requires the `aes`, `ssse3`, `pclmulqdq` and `avx` cpu features
-    unsafe { _cipher::<true>(key, ghash, initial_counter, aad, cipher_inout) }
+    cipher::<true>(key, ghash, initial_counter, aad, cipher_inout)
 }
 
 pub(crate) fn decrypt(
@@ -38,20 +30,11 @@ pub(crate) fn decrypt(
     aad: &[u8],
     cipher_inout: &mut [u8],
 ) {
-    if let (true, GhashTable::Avx512(GhashTableAvx512 { token, .. })) =
-        (cipher_inout.len() >= AVX512_MINIMUM_CIPHER_LEN, ghash.table)
-    {
-        // SAFETY: this crate requires the `aes`, `sse3`, `ssse3`, `pclmulqdq`, `avx` and `avx2` cpu features;
-        // `token` proves the remaining features were dynamically checked
-        unsafe { _cipher_avx512::<false>(key, ghash, initial_counter, aad, cipher_inout, *token) };
-        return;
-    }
-    // SAFETY: this crate requires the `aes`, `ssse3`, `pclmulqdq` and `avx` cpu features
-    unsafe { _cipher::<false>(key, ghash, initial_counter, aad, cipher_inout) }
+    cipher::<false>(key, ghash, initial_counter, aad, cipher_inout)
 }
 
-#[target_feature(enable = "aes,ssse3,pclmulqdq,avx")]
-fn _cipher<const ENC: bool>(
+// AES-GCM encrypt (if `ENC` is `true`) or decrypt.
+fn cipher<const ENC: bool>(
     key: &AesKey,
     ghash: &mut Ghash<'_>,
     initial_counter: &[u8; 16],
@@ -60,194 +43,111 @@ fn _cipher<const ENC: bool>(
 ) {
     ghash.add(aad);
 
-    let (rk_first, rks, rk_last) = key.round_keys();
+    let mut ivec = *initial_counter;
+    add_ctr32(&mut ivec, 1);
 
-    let mut counter = Counter::new(initial_counter);
-    let (by8_iter, remainder) = cipher_inout.as_chunks_mut::<128>();
-    let avx_ghash_table = ghash.table.avx();
-
-    for blocks in by8_iter {
-        // prefetch to avoid any stall later
-        super::cpu::prefetch(blocks, 64);
-
-        let c1 = counter.next();
-        let c2 = counter.next();
-        let c3 = counter.next();
-        let c4 = counter.next();
-        let c5 = counter.next();
-        let c6 = counter.next();
-        let c7 = counter.next();
-        let c8 = counter.next();
-
-        let mut c1 = _mm_xor_si128(c1, rk_first);
-        let mut c2 = _mm_xor_si128(c2, rk_first);
-        let mut c3 = _mm_xor_si128(c3, rk_first);
-        let mut c4 = _mm_xor_si128(c4, rk_first);
-        let mut c5 = _mm_xor_si128(c5, rk_first);
-        let mut c6 = _mm_xor_si128(c6, rk_first);
-        let mut c7 = _mm_xor_si128(c7, rk_first);
-        let mut c8 = _mm_xor_si128(c8, rk_first);
-
-        for rk in rks {
-            c1 = _mm_aesenc_si128(c1, *rk);
-            c2 = _mm_aesenc_si128(c2, *rk);
-            c3 = _mm_aesenc_si128(c3, *rk);
-            c4 = _mm_aesenc_si128(c4, *rk);
-            c5 = _mm_aesenc_si128(c5, *rk);
-            c6 = _mm_aesenc_si128(c6, *rk);
-            c7 = _mm_aesenc_si128(c7, *rk);
-            c8 = _mm_aesenc_si128(c8, *rk);
+    let table = ghash.table;
+    let bulk = match &table.bulk {
+        // SAFETY: this crate requires the `aes`, `ssse3`, `pclmulqdq`, `avx`
+        // and `avx2` cpu features; `token` proves the rest were checked.
+        Bulk::Avx512(avx512) => unsafe {
+            by16::<ENC>(
+                key,
+                avx512,
+                &mut ghash.xi,
+                &mut ivec,
+                cipher_inout,
+                avx512.token,
+            )
+        },
+        Bulk::Stitched(_) => {
+            let p = cipher_inout.as_mut_ptr();
+            let len = cipher_inout.len();
+            let (key, htable, xi) = (key as *const AesKey, &table.htable, &mut ghash.xi);
+            // SAFETY: `p` is `len` readable and writable bytes, which aws-lc
+            // allows to be the input and output both. It reads `key` as its
+            // `AES_KEY` and `htable` as `gcm_init_avx` wrote it, and updates
+            // `ivec` and `xi`. This crate requires the `aes`, `pclmulqdq`
+            // and `avx` cpu features, and the token proves `movbe`.
+            unsafe {
+                match ENC {
+                    true => aws_lc::aesni_gcm_encrypt(p, p, len, key, &mut ivec, htable, xi),
+                    false => aws_lc::aesni_gcm_decrypt(p, p, len, key, &mut ivec, htable, xi),
+                }
+            }
         }
+        Bulk::Separate => 0,
+    };
 
-        let c1 = _mm_aesenclast_si128(c1, rk_last);
-        let c2 = _mm_aesenclast_si128(c2, rk_last);
-        let c3 = _mm_aesenclast_si128(c3, rk_last);
-        let c4 = _mm_aesenclast_si128(c4, rk_last);
-        let c5 = _mm_aesenclast_si128(c5, rk_last);
-        let c6 = _mm_aesenclast_si128(c6, rk_last);
-        let c7 = _mm_aesenclast_si128(c7, rk_last);
-        let c8 = _mm_aesenclast_si128(c8, rk_last);
-
-        // SAFETY: `blocks` is 128 bytes and readable
-        let (p1, p2, p3, p4, p5, p6, p7, p8) = unsafe {
-            (
-                _mm_loadu_si128(blocks.as_ptr().add(0).cast()),
-                _mm_loadu_si128(blocks.as_ptr().add(16).cast()),
-                _mm_loadu_si128(blocks.as_ptr().add(32).cast()),
-                _mm_loadu_si128(blocks.as_ptr().add(48).cast()),
-                _mm_loadu_si128(blocks.as_ptr().add(64).cast()),
-                _mm_loadu_si128(blocks.as_ptr().add(80).cast()),
-                _mm_loadu_si128(blocks.as_ptr().add(96).cast()),
-                _mm_loadu_si128(blocks.as_ptr().add(112).cast()),
+    let (blocks, tail) = cipher_inout[bulk..].as_chunks_mut::<16>();
+    if !ENC {
+        table.ghash(&mut ghash.xi, blocks);
+    }
+    if !blocks.is_empty() {
+        // SAFETY: `blocks` is `blocks.len()` readable and writable blocks,
+        // which aws-lc allows to alias. This crate requires the `aes` cpu
+        // feature.
+        unsafe {
+            aws_lc::aes_hw_ctr32_encrypt_blocks(
+                blocks.as_ptr().cast(),
+                blocks.as_mut_ptr().cast(),
+                blocks.len(),
+                key,
+                &ivec,
             )
         };
-
-        let c1 = _mm_xor_si128(c1, p1);
-        let c2 = _mm_xor_si128(c2, p2);
-        let c3 = _mm_xor_si128(c3, p3);
-        let c4 = _mm_xor_si128(c4, p4);
-        let c5 = _mm_xor_si128(c5, p5);
-        let c6 = _mm_xor_si128(c6, p6);
-        let c7 = _mm_xor_si128(c7, p7);
-        let c8 = _mm_xor_si128(c8, p8);
-
-        // SAFETY: `blocks` is 128 bytes and writable, due to `as_chunks_mut`
-        unsafe {
-            _mm_storeu_si128(blocks.as_mut_ptr().add(0).cast(), c1);
-            _mm_storeu_si128(blocks.as_mut_ptr().add(16).cast(), c2);
-            _mm_storeu_si128(blocks.as_mut_ptr().add(32).cast(), c3);
-            _mm_storeu_si128(blocks.as_mut_ptr().add(48).cast(), c4);
-            _mm_storeu_si128(blocks.as_mut_ptr().add(64).cast(), c5);
-            _mm_storeu_si128(blocks.as_mut_ptr().add(80).cast(), c6);
-            _mm_storeu_si128(blocks.as_mut_ptr().add(96).cast(), c7);
-            _mm_storeu_si128(blocks.as_mut_ptr().add(112).cast(), c8);
-        }
-
-        let (a1, a2, a3, a4, a5, a6, a7, a8) = if ENC {
-            (c1, c2, c3, c4, c5, c6, c7, c8)
-        } else {
-            (p1, p2, p3, p4, p5, p6, p7, p8)
-        };
-
-        let a1 = _mm_shuffle_epi8(a1, BYTESWAP);
-        let a2 = _mm_shuffle_epi8(a2, BYTESWAP);
-        let a3 = _mm_shuffle_epi8(a3, BYTESWAP);
-        let a4 = _mm_shuffle_epi8(a4, BYTESWAP);
-        let a5 = _mm_shuffle_epi8(a5, BYTESWAP);
-        let a6 = _mm_shuffle_epi8(a6, BYTESWAP);
-        let a7 = _mm_shuffle_epi8(a7, BYTESWAP);
-        let a8 = _mm_shuffle_epi8(a8, BYTESWAP);
-
-        let a1 = _mm_xor_si128(ghash.current, a1);
-        ghash.current = ghash::_mul8(avx_ghash_table, a1, a2, a3, a4, a5, a6, a7, a8);
+        add_ctr32(&mut ivec, blocks.len());
     }
-
-    let cipher_inout = remainder;
-
-    if !ENC {
-        ghash.add(cipher_inout);
-    }
-
-    {
-        let (blocks_iter, remainder) = cipher_inout.as_chunks_mut::<16>();
-        for block in blocks_iter {
-            let c1 = counter.next();
-
-            let mut c1 = _mm_xor_si128(c1, rk_first);
-
-            for rk in rks {
-                c1 = _mm_aesenc_si128(c1, *rk);
-            }
-
-            let c1 = _mm_aesenclast_si128(c1, rk_last);
-
-            // SAFETY: `block` is 16 bytes due to `as_chunks_mut`
-            let p1 = unsafe { _mm_loadu_si128(block.as_ptr().cast()) };
-            let c1 = _mm_xor_si128(c1, p1);
-
-            // SAFETY: `block` is 16 bytes and writable, due to `as_chunks_mut`
-            unsafe { _mm_storeu_si128(block.as_mut_ptr().cast(), c1) };
-        }
-
-        let cipher_inout = remainder;
-        if !cipher_inout.is_empty() {
-            let mut block = [0u8; 16];
-            let len = cipher_inout.len();
-            debug_assert!(len < 16);
-            block[..len].copy_from_slice(cipher_inout);
-
-            let c1 = counter.next();
-            let mut c1 = _mm_xor_si128(c1, rk_first);
-
-            for rk in rks {
-                c1 = _mm_aesenc_si128(c1, *rk);
-            }
-
-            let c1 = _mm_aesenclast_si128(c1, rk_last);
-
-            // SAFETY: `block` is 16 bytes and writable.
-            let p1 = unsafe { _mm_loadu_si128(block.as_ptr().cast()) };
-            let c1 = _mm_xor_si128(c1, p1);
-
-            // SAFETY: `block` is 16 bytes and writable.
-            unsafe {
-                _mm_storeu_si128(block.as_mut_ptr().cast(), c1);
-            }
-
-            cipher_inout.copy_from_slice(&block[..len]);
-        }
-    }
-
     if ENC {
-        ghash.add(cipher_inout);
+        table.ghash(&mut ghash.xi, blocks);
+    }
+
+    if !tail.is_empty() {
+        if !ENC {
+            ghash.add(tail);
+        }
+        key.encrypt_block(&mut ivec);
+        for (c, k) in tail.iter_mut().zip(ivec) {
+            *c ^= k;
+        }
+        if ENC {
+            ghash.add(tail);
+        }
     }
 }
 
+/// Adds `n` to the big-endian 32-bit counter in the last four bytes of `block`.
+///
+/// `check_gcm_lengths` keeps a message's counters from wrapping.
+fn add_ctr32(block: &mut [u8; 16], n: usize) {
+    let (_, ctr) = block.split_last_chunk_mut::<4>().unwrap();
+    *ctr = u32::from_be_bytes(*ctr)
+        .wrapping_add(n as u32)
+        .to_be_bytes();
+}
+
+/// Encrypts or decrypts the whole 256-byte chunks of `cipher_inout`, and
+/// returns how many bytes that was.
 #[target_feature(
     enable = "aes,avx,avx2,avx512bw,avx512f,avx512vl,sse3,ssse3,pclmulqdq,vaes,vpclmulqdq"
 )]
-fn _cipher_avx512<const ENC: bool>(
+fn by16<const ENC: bool>(
     key: &AesKey,
-    ghash: &mut Ghash<'_>,
-    initial_counter: &[u8; 16],
-    aad: &[u8],
+    table: &GhashTableAvx512,
+    xi: &mut [u8; 16],
+    ivec: &mut [u8; 16],
     cipher_inout: &mut [u8],
-    _feature_token: HaveAvx512ForAesGcm,
-) {
-    ghash.add(aad);
-
+    _feature_token: super::cpu::HaveAvx512ForAesGcm,
+) -> usize {
     let round_keys = key.round_keys_512();
     let (rk_first, rks, rk_last) = round_keys.split();
 
-    let mut counter = Counter512::new(initial_counter);
-    let (by16_iter, remainder) = cipher_inout.as_chunks_mut::<AVX512_MINIMUM_CIPHER_LEN>();
+    let mut counter = Counter512::new(ivec);
+    // SAFETY: `xi` is 16 readable bytes
+    let mut current = _mm_shuffle_epi8(unsafe { _mm_loadu_si128(xi.as_ptr().cast()) }, BYTESWAP);
+    let (by16_iter, _) = cipher_inout.as_chunks_mut::<256>();
 
-    let ghash_avx512 = match ghash.table {
-        GhashTable::Avx512(ghash_avx512) => ghash_avx512,
-        _ => panic!("unexpected ghash table variant"),
-    };
-
-    for blocks in by16_iter {
+    for blocks in by16_iter.iter_mut() {
         // prefetch to avoid any stall later
         super::cpu::prefetch(blocks, 256);
 
@@ -307,111 +207,36 @@ fn _cipher_avx512<const ENC: bool>(
         let a89ab = _mm512_shuffle_epi8(a89ab, BYTESWAP_512);
         let acdef = _mm512_shuffle_epi8(acdef, BYTESWAP_512);
 
-        let c0___ = _mm512_inserti32x4::<0>(_mm512_setzero_si512(), ghash.current);
+        let c0___ = _mm512_inserti32x4::<0>(_mm512_setzero_si512(), current);
         let a0123 = _mm512_xor_epi64(a0123, c0___);
 
-        ghash.current = ghash::_mul16(ghash_avx512, a0123, a4567, a89ab, acdef);
+        current = ghash::_mul16(table, a0123, a4567, a89ab, acdef);
     }
 
-    let cipher_inout = remainder;
-    let mut counter = counter.into_128();
-
-    if !ENC {
-        ghash.add(cipher_inout);
-    }
-
-    {
-        let (blocks_iter, remainder) = cipher_inout.as_chunks_mut::<16>();
-        let (rk_first, rks, rk_last) = key.round_keys();
-        for block in blocks_iter {
-            let c1 = counter.next();
-
-            let mut c1 = _mm_xor_si128(c1, rk_first);
-
-            for rk in rks {
-                c1 = _mm_aesenc_si128(c1, *rk);
-            }
-
-            let c1 = _mm_aesenclast_si128(c1, rk_last);
-
-            // SAFETY: `block` is 16 bytes and writable.
-            let p1 = unsafe { _mm_loadu_si128(block.as_ptr().cast()) };
-            let c1 = _mm_xor_si128(c1, p1);
-
-            // SAFETY: `block` is 16 bytes and writable.
-            unsafe {
-                _mm_storeu_si128(block.as_mut_ptr().cast(), c1);
-            }
-        }
-
-        let cipher_inout = remainder;
-        if !cipher_inout.is_empty() {
-            let mut block = [0u8; 16];
-            let len = cipher_inout.len();
-            debug_assert!(len < 16);
-            block[..len].copy_from_slice(cipher_inout);
-
-            let c1 = counter.next();
-            let mut c1 = _mm_xor_si128(c1, rk_first);
-
-            for rk in rks {
-                c1 = _mm_aesenc_si128(c1, *rk);
-            }
-
-            let c1 = _mm_aesenclast_si128(c1, rk_last);
-
-            // SAFETY: `block` is 16 bytes and writable.
-            let p1 = unsafe { _mm_loadu_si128(block.as_ptr().cast()) };
-            let c1 = _mm_xor_si128(c1, p1);
-
-            // SAFETY: `block` is 16 bytes and writable.
-            unsafe {
-                _mm_storeu_si128(block.as_mut_ptr().cast(), c1);
-            }
-
-            cipher_inout.copy_from_slice(&block[..len]);
-        }
-    }
-
-    if ENC {
-        ghash.add(cipher_inout);
-    }
+    // SAFETY: `xi` is 16 writable bytes
+    unsafe { _mm_storeu_si128(xi.as_mut_ptr().cast(), _mm_shuffle_epi8(current, BYTESWAP)) };
+    add_ctr32(ivec, by16_iter.len() * 16);
+    by16_iter.len() * 256
 }
-
-/// How many message bytes needed to benefit from the AVX512 by-16 impl
-///
-/// `cipher_avx512` _works_ for shorter lengths, but is not worth it.
-const AVX512_MINIMUM_CIPHER_LEN: usize = 16 * 16;
 
 /// This stores the current four counter values, in big endian.
 #[derive(Debug)]
 struct Counter512(__m512i);
 
 impl Counter512 {
+    /// Starts at the counter block `ivec`.
     #[inline]
-    #[target_feature(enable = "sse3,ssse3,avx,avx2,avx512f")]
-    fn new(bytes: &[u8; 16]) -> Self {
-        // SAFETY: `bytes` is a 128-bits and can be loaded from
-        Self(unsafe {
-            let mut cnt = Counter::new(bytes);
-            let a = cnt.next();
-            let b = cnt.next();
-            let c = cnt.next();
-            let d = cnt.next();
-
-            let r: __m512i = mem::transmute(_mm512_undefined());
-            let r = _mm512_inserti32x4::<0>(r, _mm_shuffle_epi8(a, BYTESWAP_EPI64));
-            let r = _mm512_inserti32x4::<1>(r, _mm_shuffle_epi8(b, BYTESWAP_EPI64));
-            let r = _mm512_inserti32x4::<2>(r, _mm_shuffle_epi8(c, BYTESWAP_EPI64));
-            _mm512_inserti32x4::<3>(r, _mm_shuffle_epi8(d, BYTESWAP_EPI64))
-        })
-    }
-
-    #[target_feature(enable = "avx512f")]
-    #[must_use]
-    #[inline]
-    fn into_128(self) -> Counter {
-        Counter(_mm512_extracti32x4_epi32::<0>(self.0))
+    #[target_feature(enable = "ssse3,avx512f")]
+    fn new(ivec: &[u8; 16]) -> Self {
+        // SAFETY: `ivec` is 16 readable bytes
+        let c = _mm_shuffle_epi8(
+            unsafe { _mm_loadu_si128(ivec.as_ptr().cast()) },
+            BYTESWAP_EPI64,
+        );
+        Self(_mm512_add_epi64(
+            _mm512_broadcast_i32x4(c),
+            COUNTER_512_0123,
+        ))
     }
 
     #[target_feature(enable = "sse3,ssse3,avx,avx2,avx512f,avx512bw")]
@@ -424,34 +249,15 @@ impl Counter512 {
     }
 }
 
-/// This stores the current counter value, in big endian.
-#[derive(Clone, Copy, Debug)]
-struct Counter(__m128i);
-
-impl Counter {
-    #[inline]
-    #[target_feature(enable = "sse2,sse3,ssse3")]
-    fn new(bytes: &[u8; 16]) -> Self {
-        // SAFETY: `bytes` is a 128-bit value and can be loaded from
-        let c = unsafe { _mm_lddqu_si128(bytes.as_ptr().cast()) };
-        let c = _mm_shuffle_epi8(c, BYTESWAP_EPI64);
-        let c = _mm_add_epi32(c, COUNTER_1); // skip first counter (it was already used as y0)
-
-        Self(c)
-    }
-
-    #[target_feature(enable = "sse2,ssse3")]
-    #[must_use]
-    #[inline]
-    fn next(&mut self) -> __m128i {
-        let r = _mm_shuffle_epi8(self.0, BYTESWAP_EPI64);
-        self.0 = _mm_add_epi32(self.0, COUNTER_1);
-        r
-    }
-}
-
-// SAFETY: both u128 and __m128i have the same size and all bits mean the same thing
-const COUNTER_1: __m128i = unsafe { mem::transmute(1u128 << 64) };
+// SAFETY: [u8; 64] and __m512i have the same size
+const COUNTER_512_0123: __m512i = unsafe {
+    mem::transmute([
+        0u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //
+        0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, //
+        0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, //
+        0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, //
+    ])
+};
 
 // SAFETY: [u8; 64] and __m512i have the same size
 const COUNTER_512_4: __m512i = unsafe {
@@ -489,41 +295,3 @@ const BYTESWAP_512_EPI64: __m512i = unsafe {
         55, 54, 53, 52, 51, 50, 49, 48, 63, 62, 61, 60, 59, 58, 57, 56,
     ])
 };
-
-#[cfg(test)]
-#[cfg_attr(coverage_nightly, coverage(off))]
-mod tests {
-    #![allow(clippy::undocumented_unsafe_blocks)]
-
-    #[test]
-    fn check_counter512() {
-        use super::*;
-
-        if HaveAvx512ForAesGcm::check().is_none() {
-            println!("no AVX512 support");
-            return;
-        }
-
-        let mut c = unsafe { Counter::new(&[0u8; 16]) };
-        println!("??? {c:x?}");
-        println!("1-- {:x?}", unsafe { c.next() });
-        println!("2-- {:x?}", unsafe { c.next() });
-        println!("3-- {:x?}", unsafe { c.next() });
-        println!("4-- {:x?}", unsafe { c.next() });
-        println!("??? {c:x?}");
-
-        let mut c4 = unsafe { Counter512::new(&[0u8; 16]) };
-        println!("{c4:x?}");
-        println!("1-4 {:x?}", unsafe { c4.next4() });
-        println!("{c4:x?}");
-        let c4c = unsafe { c4.into_128() };
-        println!("{c4c:x?}");
-
-        unsafe {
-            assert_eq!(
-                mem::transmute::<__m128i, u128>(c4c.0),
-                mem::transmute::<__m128i, u128>(c.0)
-            );
-        }
-    }
-}

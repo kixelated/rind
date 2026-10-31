@@ -139,6 +139,9 @@ macro_rules! have_cpu_feature {
     ("sha") => {
         crate::low::x86_64::cpu::test_toggle("sha", is_x86_feature_detected!("sha"))
     };
+    ("movbe") => {
+        crate::low::x86_64::cpu::test_toggle("movbe", is_x86_feature_detected!("movbe"))
+    };
 }
 
 /// Token type reflecting the check for CPU features needed for AVX512-AES-GCM
@@ -155,6 +158,22 @@ impl HaveAvx512ForAesGcm {
             && have_cpu_feature!("vpclmulqdq")
             && have_cpu_feature!("vaes")
         {
+            true => Some(Self(())),
+            false => None,
+        }
+    }
+}
+
+/// Token type reflecting the check for `movbe`, which aws-lc's stitched
+/// AES-GCM uses
+///
+/// A value of this type is proof that the CPU dynamic feature check has happened.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct HaveMovbe(());
+
+impl HaveMovbe {
+    pub(crate) fn check() -> Option<Self> {
+        match have_cpu_feature!("movbe") {
             true => Some(Self(())),
             false => None,
         }

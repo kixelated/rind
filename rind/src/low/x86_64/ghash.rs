@@ -1,39 +1,62 @@
 // Written for Graviola by Joe Birr-Pixton, 2024.
 // SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT-0
 //
-//! Refs.
-//! - <https://www.intel.com/content/dam/www/public/us/en/documents/software-support/enabling-high-performance-gcm.pdf>
-//! - <https://www.intel.com/content/dam/develop/external/us/en/documents/clmul-wp-rev-2-02-2014-04-20.pdf>
+//! GHASH with aws-lc's `gcm_init_avx` and `gcm_ghash_avx`, plus the powers
+//! of H that Graviola's AVX-512 by-16 AES-GCM kernel multiplies by.
+//!
+//! Refs. for the AVX-512 arithmetic:
 //! - <https://patchwork.kernel.org/project/linux-crypto/patch/20240527075626.142576-3-ebiggers@kernel.org/>
 //! - <https://github.com/google/boringssl/blob/d5440dd2c2c500ac2d3bba4afec47a054b4d99ae/crypto/fipsmodule/aes/asm/aes-gcm-avx512-x86_64.pl>
-//!
-//! The latter two especially, as we're using the arithmetic from those.
 
 use core::arch::x86_64::*;
 use core::mem;
 
-use super::cpu::HaveAvx512ForAesGcm;
+use super::aws_lc::{self, Htable};
+use super::cpu::{HaveAvx512ForAesGcm, HaveMovbe};
 use crate::low;
 
-#[expect(clippy::large_enum_variant)]
-pub(crate) enum GhashTable {
-    Avx(GhashTableAvx),
+pub(crate) struct GhashTable {
+    pub(super) htable: Htable,
+    pub(super) bulk: Bulk,
+}
+
+/// What runs the bulk of each AES-GCM message, picked from the CPU's
+/// features when the key is made.
+#[expect(clippy::large_enum_variant)] // boxing it would cost a heap allocation per key
+pub(super) enum Bulk {
+    /// Graviola's AVX-512 by-16 kernel, with the powers of H it needs.
     Avx512(GhashTableAvx512),
+    /// aws-lc's stitched AES-NI and AVX kernel.
+    Stitched(HaveMovbe),
+    /// Nothing: aws-lc's counter mode and GHASH take every block, as aws-lc
+    /// does without `movbe`.
+    Separate,
 }
 
 impl GhashTable {
     pub(crate) fn new(h: u128) -> Self {
-        if let Some(token) = HaveAvx512ForAesGcm::check() {
-            return Self::Avx512(GhashTableAvx512::new(h, token));
-        }
-
-        Self::Avx(GhashTableAvx::new(h))
+        let mut htable = Htable([[0; 2]; 16]);
+        // SAFETY: `htable` is an `Htable`, and the halves of `h` two words.
+        // This crate requires the `avx` and `pclmulqdq` cpu features.
+        unsafe { aws_lc::gcm_init_avx(&mut htable, &[(h >> 64) as u64, h as u64]) };
+        let bulk = match (HaveAvx512ForAesGcm::check(), HaveMovbe::check()) {
+            (Some(token), _) => Bulk::Avx512(GhashTableAvx512::new(h, token)),
+            (None, Some(token)) => Bulk::Stitched(token),
+            (None, None) => Bulk::Separate,
+        };
+        Self { htable, bulk }
     }
 
-    pub(crate) fn avx(&self) -> &GhashTableAvx {
-        match self {
-            Self::Avx(table) => table,
-            Self::Avx512(table) => &table.avx,
+    /// Folds whole blocks of `input` into the GHASH state `xi`.
+    pub(super) fn ghash(&self, xi: &mut [u8; 16], input: &[[u8; 16]]) {
+        // aws-lc loads the first block before checking the length.
+        if input.is_empty() {
+            return;
+        }
+        // SAFETY: `input` is `size_of_val(input)` readable bytes, a multiple
+        // of 16. This crate requires the `avx` and `pclmulqdq` cpu features.
+        unsafe {
+            aws_lc::gcm_ghash_avx(xi, &self.htable, input.as_ptr().cast(), size_of_val(input))
         }
     }
 }
@@ -47,91 +70,20 @@ impl Drop for GhashTable {
 // SAFETY: GhashTable is POD type
 impl low::generic::zeroise::Zeroable for GhashTable {}
 
-pub(crate) struct GhashTableAvx {
-    /// H, H^2, H^3, H^4, ... H^8
-    powers: [__m128i; 8],
-
-    /// `powers_xor[i]` is `powers[i].lo64 ^ powers[i].hi64`
-    ///
-    /// This can be used directly in the middle Karatsuba term.
-    powers_xor: [__m128i; 8],
-}
-
-impl GhashTableAvx {
-    pub(crate) fn new(h: u128) -> Self {
-        let mut powers = [zero(); 8];
-        let mut powers_xor = powers;
-        let h = u128_to_m128i(h);
-
-        // SAFETY: this crate requires the `avx` cpu feature
-        let h = unsafe { gf128_big_endian(h) };
-        powers[0] = h;
-
-        for i in 1..8 {
-            // SAFETY: this crate requires the `avx` and `pclmulqdq` cpu features
-            powers[i] = unsafe { _mul(powers[i - 1], h) };
-        }
-
-        for i in 0..8 {
-            // SAFETY: this crate requires the `avx` cpu feature
-            powers_xor[i] = unsafe { xor_halves(powers[i]) };
-        }
-
-        Self { powers, powers_xor }
-    }
-
-    fn add_wide<'a>(&self, bytes: &'a [u8], mut current: __m128i) -> (__m128i, &'a [u8]) {
-        let (eight_blocks, remainder) = bytes.as_chunks::<128>();
-
-        for chunk8 in eight_blocks {
-            let u1 = u128::from_be_bytes(chunk8[0..16].try_into().unwrap());
-            let u2 = u128::from_be_bytes(chunk8[16..32].try_into().unwrap());
-            let u3 = u128::from_be_bytes(chunk8[32..48].try_into().unwrap());
-            let u4 = u128::from_be_bytes(chunk8[48..64].try_into().unwrap());
-            let u5 = u128::from_be_bytes(chunk8[64..80].try_into().unwrap());
-            let u6 = u128::from_be_bytes(chunk8[80..96].try_into().unwrap());
-            let u7 = u128::from_be_bytes(chunk8[96..112].try_into().unwrap());
-            let u8 = u128::from_be_bytes(chunk8[112..128].try_into().unwrap());
-
-            let b1 = u128_to_m128i(u1);
-            let b2 = u128_to_m128i(u2);
-            let b3 = u128_to_m128i(u3);
-            let b4 = u128_to_m128i(u4);
-            let b5 = u128_to_m128i(u5);
-            let b6 = u128_to_m128i(u6);
-            let b7 = u128_to_m128i(u7);
-            let b8 = u128_to_m128i(u8);
-
-            // SAFETY: this crate requires the `avx` and `pclmulqdq` cpu features
-            unsafe {
-                let b1 = _mm_xor_si128(current, b1);
-                current = _mul8(self, b1, b2, b3, b4, b5, b6, b7, b8);
-            }
-        }
-
-        (current, remainder)
-    }
-}
-
 pub(crate) struct GhashTableAvx512 {
     /// H, H^2, H^3, H^4, ... H^16
-    powers: [__m512i; 4],
-    avx: GhashTableAvx,
-    pub(crate) token: HaveAvx512ForAesGcm,
+    pub(super) powers: [__m512i; 4],
+    pub(super) token: HaveAvx512ForAesGcm,
 }
 
 impl GhashTableAvx512 {
-    pub(crate) fn new(h: u128, token: HaveAvx512ForAesGcm) -> Self {
-        // This builds on the AVX version, which is perhaps not the most
-        // efficient option.
-        let avx = GhashTableAvx::new(h);
-
+    fn new(h: u128, token: HaveAvx512ForAesGcm) -> Self {
         let mut powers = [zero(); 16];
 
-        powers[..8].copy_from_slice(&avx.powers);
-
-        for i in 8..16 {
-            // SAFETY: necessary features mandated by crate
+        // SAFETY: this crate requires the `avx` cpu feature
+        powers[0] = unsafe { gf128_big_endian(u128_to_m128i(h)) };
+        for i in 1..16 {
+            // SAFETY: this crate requires the `avx` and `pclmulqdq` cpu features
             powers[i] = unsafe { _mul(powers[i - 1], powers[0]) };
         }
 
@@ -145,108 +97,36 @@ impl GhashTableAvx512 {
             ]
         };
 
-        Self { powers, avx, token }
-    }
-
-    #[target_feature(enable = "vpclmulqdq,avx512bw,avx512f,avx512vl")]
-    fn add_wide<'a>(&self, bytes: &'a [u8], mut current: __m128i) -> (__m128i, &'a [u8]) {
-        let bswap_mask = _mm512_broadcast_i32x4(BYTESWAP);
-
-        let (by_16_blocks, remainder) = bytes.as_chunks::<256>();
-        for chunk16 in by_16_blocks {
-            // SAFETY: `chunk16` is 256 bytes and readable, via `chunks_exact`
-            let (m0123, m4567, m89ab, mcdef) = unsafe {
-                (
-                    _mm512_loadu_epi8(chunk16.as_ptr().add(0).cast()),
-                    _mm512_loadu_epi8(chunk16.as_ptr().add(64).cast()),
-                    _mm512_loadu_epi8(chunk16.as_ptr().add(128).cast()),
-                    _mm512_loadu_epi8(chunk16.as_ptr().add(192).cast()),
-                )
-            };
-
-            let m0123 = _mm512_shuffle_epi8(m0123, bswap_mask);
-            let m4567 = _mm512_shuffle_epi8(m4567, bswap_mask);
-            let m89ab = _mm512_shuffle_epi8(m89ab, bswap_mask);
-            let mcdef = _mm512_shuffle_epi8(mcdef, bswap_mask);
-
-            let c0___ = _mm512_inserti32x4::<0>(_mm512_setzero_si512(), current);
-            let m0123 = _mm512_xor_epi64(m0123, c0___);
-
-            current = _mul16(self, m0123, m4567, m89ab, mcdef);
-        }
-
-        (current, remainder)
+        Self { powers, token }
     }
 }
 
 pub(crate) struct Ghash<'a> {
     pub(crate) table: &'a GhashTable,
-    pub(crate) current: __m128i,
+    /// The running hash in GHASH's byte order: aws-lc's `Xi`.
+    pub(crate) xi: [u8; 16],
 }
 
 impl<'a> Ghash<'a> {
     pub(crate) fn new(table: &'a GhashTable) -> Self {
-        Self {
-            table,
-            current: zero(),
-        }
+        Self { table, xi: [0; 16] }
     }
 
     /// Input `bytes` to the computation.
     ///
     /// `bytes` is zero-padded, if required.
-    pub(crate) fn add(&mut self, mut bytes: &[u8]) {
-        (self.current, bytes) = match self.table {
-            GhashTable::Avx(avx) => avx.add_wide(bytes, self.current),
-            // SAFETY: avx512.token proves features were dynamically checked
-            GhashTable::Avx512(avx512) => unsafe { avx512.add_wide(bytes, self.current) },
-        };
-
-        let (whole_blocks, remainder) = bytes.as_chunks::<16>();
-
-        for chunk in whole_blocks {
-            let u = u128::from_be_bytes(*chunk);
-            self.one_block(u128_to_m128i(u));
-        }
-
-        let bytes = remainder;
-        if !bytes.is_empty() {
-            let mut block = [0u8; 16];
-            block[..bytes.len()].copy_from_slice(bytes);
-
-            let u = u128::from_be_bytes(block);
-            self.one_block(u128_to_m128i(u));
+    pub(crate) fn add(&mut self, bytes: &[u8]) {
+        let (blocks, tail) = bytes.as_chunks::<16>();
+        self.table.ghash(&mut self.xi, blocks);
+        if !tail.is_empty() {
+            let mut last = [0u8; 16];
+            last[..tail.len()].copy_from_slice(tail);
+            self.table.ghash(&mut self.xi, &[last]);
         }
     }
 
     pub(crate) fn into_bytes(self) -> [u8; 16] {
-        // SAFETY: this crate requires the `sse2` and `ssse3` cpu features
-        unsafe { self._into_bytes() }
-    }
-
-    #[target_feature(enable = "sse2,ssse3")]
-    fn _into_bytes(self) -> [u8; 16] {
-        let mut out: i128 = 0;
-        let reverse = _mm_shuffle_epi8(self.current, BYTESWAP);
-        // SAFETY: `out` is 128 bits, and a suitable target for a 128-bit aligned store
-        unsafe { _mm_store_si128((&mut out as *mut i128).cast(), reverse) };
-        out.to_le_bytes()
-    }
-
-    fn one_block(&mut self, block: __m128i) {
-        // SAFETY: this crate requires the `avx` and `pclmulqdq` cpu features
-        unsafe {
-            self.current = _mm_xor_si128(self.current, block);
-            self.current = _mul(self.current, self.h());
-        }
-    }
-
-    #[inline]
-    fn h(&self) -> __m128i {
-        match self.table {
-            GhashTable::Avx(avx) => avx.powers[0],
-            GhashTable::Avx512(avx512) => avx512.avx.powers[0],
-        }
+        self.xi
     }
 }
 
@@ -291,31 +171,6 @@ fn _mul(a: __m128i, b: __m128i) -> __m128i {
     let (mut lo, mut mi, mut hi) = (zero(), zero(), zero());
     let bx = xor_halves(b);
     mul!(lo, mi, hi, a, b, bx);
-    reduce!(lo, mi, hi)
-}
-
-#[inline]
-#[target_feature(enable = "pclmulqdq,avx")]
-pub(crate) fn _mul8(
-    table: &GhashTableAvx,
-    x1: __m128i,
-    x2: __m128i,
-    x3: __m128i,
-    x4: __m128i,
-    x5: __m128i,
-    x6: __m128i,
-    x7: __m128i,
-    x8: __m128i,
-) -> __m128i {
-    let (mut lo, mut mi, mut hi) = (zero(), zero(), zero());
-    mul!(lo, mi, hi, x1, table.powers[7], table.powers_xor[7]);
-    mul!(lo, mi, hi, x2, table.powers[6], table.powers_xor[6]);
-    mul!(lo, mi, hi, x3, table.powers[5], table.powers_xor[5]);
-    mul!(lo, mi, hi, x4, table.powers[4], table.powers_xor[4]);
-    mul!(lo, mi, hi, x5, table.powers[3], table.powers_xor[3]);
-    mul!(lo, mi, hi, x6, table.powers[2], table.powers_xor[2]);
-    mul!(lo, mi, hi, x7, table.powers[1], table.powers_xor[1]);
-    mul!(lo, mi, hi, x8, table.powers[0], table.powers_xor[0]);
     reduce!(lo, mi, hi)
 }
 
@@ -414,9 +269,6 @@ fn u128_to_m128i(v: u128) -> __m128i {
     // SAFETY: sizeof(u128) == sizeof(__m128i), all bits have same meaning
     unsafe { mem::transmute(v) }
 }
-
-// SAFETY: sizeof(u128) == sizeof(__m128i), all bits have same meaning
-const BYTESWAP: __m128i = unsafe { mem::transmute(0x00010203_04050607_08090a0b_0c0d0e0fu128) };
 
 /// Constant for vpternlogd which is three-operand XOR.
 ///

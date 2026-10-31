@@ -1,0 +1,177 @@
+#!/usr/bin/env python3
+"""Regenerates rind/src/low/x86_64/aws_lc/*.s from aws-lc's x86_64 assembly.
+
+Usage: admin/import-aws-lc-x86_64 <aws-lc checkout at REV>
+
+Each output is aws-lc's pregenerated `generated-src/mac-x86_64` file, run
+through cpp, cut down to the routines rind calls, the internal routines they
+call, and the constants they load, then made to assemble for ELF, Mach-O,
+and COFF alike in `global_asm!`. The macOS flavour is the one aws-lc emits
+without ELF-only directives (`.type`, `.size`, `.cfi_*`), with `.p2align`
+rather than `.align` (whose operand Mach-O reads as a power of two), and
+with `L$` local labels, which only Mach-O needs to be assembler-local.
+
+The edits are: braces doubled; each routine's name a `{name}` operand that
+rind binds to a crate-version qualified symbol; each `L$` label and internal
+routine tagged with its file, since `global_asm!` blocks can share an
+assembler scope; and the `.private_extern` and `.section __DATA,__const`
+lines dropped, as Mach-O-only. The constants therefore stay in `.text`,
+where OpenSSL places them. Undoing those edits, and restoring the dropped
+lines, gives aws-lc's text line for line.
+"""
+
+import os
+import re
+import subprocess
+import sys
+
+REV = "91c93a8eb860e51482a871a8772cb9b1b310baea"
+
+CPP = [
+    "cpp",
+    "-traditional-cpp",
+    "-P",
+    "-undef",
+    "-nostdinc",
+    "-D__APPLE__",
+    "-DOPENSSL_X86_64",
+    "-D_CET_ENDBR=",
+    "-",
+]
+
+IMPORTS = [
+    {
+        "source": "aesni-gcm-x86_64.S",
+        "tag": "gcm",
+        "perlasm": "crypto/fipsmodule/modes/asm/aesni-gcm-x86_64.pl",
+        "copyright": "Copyright 2013-2016 The OpenSSL Project Authors. All Rights Reserved.",
+        "constants": [("L$bswap_mask:", 9)],
+        "internal": ["_aesni_ctr32_ghash_6x", "_aesni_ctr32_6x"],
+        "routines": ["aesni_gcm_decrypt", "aesni_gcm_encrypt"],
+    },
+    {
+        "source": "ghash-x86_64.S",
+        "tag": "ghash",
+        "perlasm": "crypto/fipsmodule/modes/asm/ghash-x86_64.pl",
+        "copyright": "Copyright 2010-2016 The OpenSSL Project Authors. All Rights Reserved.",
+        "constants": [("L$bswap_mask:", 3)],
+        "internal": [],
+        "routines": ["gcm_init_avx", "gcm_ghash_avx"],
+    },
+    {
+        "source": "aesni-x86_64.S",
+        "tag": "aes",
+        "perlasm": "crypto/fipsmodule/aes/asm/aesni-x86_64.pl",
+        "copyright": "Copyright 2009-2016 The OpenSSL Project Authors. All Rights Reserved.",
+        "constants": [],
+        "internal": ["_aesni_encrypt8"],
+        "routines": ["aes_hw_ctr32_encrypt_blocks"],
+    },
+]
+
+
+def preprocess(path):
+    # The header only defines `_CET_ENDBR`, which CPP empties: rind does not
+    # build for indirect branch tracking.
+    include = re.compile(r"#\s*include <openssl/")
+    with open(path) as f:
+        text = "".join(line for line in f if not include.match(line))
+    out = subprocess.run(CPP, input=text, capture_output=True, text=True, check=True)
+    return out.stdout.splitlines()
+
+
+def symbol_lines(lines):
+    """The index of each function symbol's definition, by name."""
+    defined = re.compile(r"^(_\w+):$")
+    return {m[1]: i for i, line in enumerate(lines) if (m := defined.match(line))}
+
+
+def preamble(lines, i):
+    """The first line of the `.globl`, `.p2align`, and blank lines before line `i`."""
+    while i > 0 and (lines[i - 1].split()[:1] in ([], [".globl"], [".private_extern"], [".p2align"])):
+        i -= 1
+    return i
+
+
+def routine(lines, symbols, name):
+    """`name` from its preamble up to the next routine's, or the constants."""
+    start = symbols.get(name)
+    if start is None:
+        sys.exit(f"missing routine: {name}")
+    ends = [preamble(lines, i) for i in symbols.values() if i > start]
+    ends += [i for i, line in enumerate(lines) if i > start and line.startswith(".section")]
+    body = lines[preamble(lines, start) : min(ends)]
+    while body and not body[-1].strip():
+        body.pop()
+    while body and not body[0].strip():
+        body.pop(0)
+    return body
+
+
+def constant(lines, label, following):
+    """`label`'s line and the `following` lines, after any `.p2align` before it."""
+    for i, line in enumerate(lines):
+        if line.startswith(label):
+            if lines[i - 1].split()[:1] == [".p2align"]:
+                i -= 1
+                following += 1
+            return lines[i : i + 1 + following]
+    sys.exit(f"missing constant: {label}")
+
+
+def escape(lines, routines, internal, tag):
+    # The macOS flavour prefixes each global routine's name with `_`.
+    names = re.compile(r"(?<![\w$])_(" + "|".join(routines) + r")\b")
+    labels = re.compile(r"(?<![\w$])L\$(\w+)")
+    helpers = re.compile(r"(?<![\w$])(" + "|".join(internal) + r")\b") if internal else None
+    for line in lines:
+        if line.split()[:1] == [".private_extern"]:
+            continue
+        line = line.replace("{", "{{").replace("}", "}}")
+        line = labels.sub(rf"L${tag}_\1", line)
+        if helpers:
+            line = helpers.sub(rf"L${tag}\1", line)
+        yield names.sub(r"{\1}", line)
+
+
+def main():
+    if len(sys.argv) != 2:
+        sys.exit(__doc__)
+    aws_lc = sys.argv[1]
+    rev = subprocess.run(
+        ["git", "-C", aws_lc, "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    if rev != REV:
+        sys.exit(f"aws-lc is at {rev}, expected {REV}")
+
+    out_dir = os.path.join(os.path.dirname(__file__), "..", "rind", "src", "low", "x86_64", "aws_lc")
+    for spec in IMPORTS:
+        source = os.path.join("generated-src", "mac-x86_64", "crypto", "fipsmodule", spec["source"])
+        lines = preprocess(os.path.join(aws_lc, source))
+        symbols = symbol_lines(lines)
+
+        # In aws-lc's order, each followed by one blank line.
+        names = spec["internal"] + ["_" + name for name in spec["routines"]]
+        body = []
+        for name in sorted(names, key=lambda name: symbols.get(name, -1)):
+            body += routine(lines, symbols, name) + [""]
+        for label, following in spec["constants"]:
+            body += constant(lines, label, following)
+
+        header = [
+            f"# {spec['copyright']}",
+            "# SPDX-License-Identifier: Apache-2.0",
+            "#",
+            f"# Generated by admin/import-aws-lc-x86_64 from aws-lc {REV}:",
+            f"# {source}, which aws-lc generates from {spec['perlasm']}.",
+            "# Do not edit by hand.",
+        ]
+        out = os.path.join(out_dir, spec["source"].removesuffix(".S") + ".s")
+        os.makedirs(out_dir, exist_ok=True)
+        with open(out, "w") as f:
+            body = escape(body, spec["routines"], spec["internal"], spec["tag"])
+            f.write("\n".join(header + list(body)) + "\n")
+
+
+if __name__ == "__main__":
+    main()
