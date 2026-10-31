@@ -371,7 +371,7 @@ const AVX512_MINIMUM_CIPHER_LEN: usize = 16 * 16;
 /// How many message bytes BoringSSL's 512-bit kernel needs to beat the AVX512
 /// by-16 impl: its interleaved AES and GHASH win on long messages, but its
 /// setup costs more on short ones.
-const AVX512_KERNEL_MINIMUM_CIPHER_LEN: usize = 4096;
+const AVX512_KERNEL_MINIMUM_CIPHER_LEN: usize = 2048;
 
 /// How many message bytes BoringSSL's 256-bit kernel needs to beat the AVX
 /// path, whose single blocks are quicker for short messages.

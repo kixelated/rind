@@ -17,5 +17,4 @@ with the code.
 
 ## Required
 
-- [x86_64 AES-GCM on VAES](/quest/m2/fastest/x86-aes-gcm-vaes.md) - a compact VAES kernel closes the 1.1-1.6x gap to aws-lc's AVX-512 code
 - [armv7 X25519 ladder on NEON](/quest/m2/fastest/armv7-curve25519.md) - BoringSSL's NEON assembly beat curve25519-dalek's X25519 by 13% (161.4 / 185.9 µs per key exchange)

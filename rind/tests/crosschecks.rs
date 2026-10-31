@@ -412,18 +412,23 @@ mod aead {
     // Every message and AAD length to 32 blocks, each with every partial
     // tail, so each path through the aarch64 kernels runs, the eight-way
     // loop's repeat included, and so does every tail after x86_64's 128- and
-    // 256-byte chunks. They work in place, which a block stored before it is
-    // loaded would break.
+    // 256-byte chunks. Then every message length across x86_64's switch to
+    // BoringSSL's 512-bit kernel at 2048 bytes, through every tail after its
+    // first chunk past it. They work in place, which a block stored before it
+    // is loaded would break.
     #[test]
     fn aes_gcm_every_length() {
-        let msg: Vec<u8> = (0..32 * 16 + 15).map(|i| (i * 7 + 3) as u8).collect();
+        let msg: Vec<u8> = (0..2048 + 256 + 15).map(|i| (i * 7 + 3) as u8).collect();
         for (ours, theirs, key) in [
             (&AES_128_GCM, &theirs::AES_128_GCM, &[1u8; 16][..]),
             (&AES_256_GCM, &theirs::AES_256_GCM, &[2u8; 32][..]),
         ] {
-            for len in 0..=msg.len() {
+            for len in 0..=32 * 16 + 15 {
                 check(ours, theirs, key, [3; 12], b"aad", &msg[..len], None).unwrap();
                 check(ours, theirs, key, [3; 12], &msg[..len], b"msg", None).unwrap();
+            }
+            for len in 2048 - 16..=msg.len() {
+                check(ours, theirs, key, [3; 12], b"aad", &msg[..len], None).unwrap();
             }
         }
     }
