@@ -2057,17 +2057,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libcrux-ed25519"
-version = "0.0.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55de36c252a9fd97a202c03535deecbe988c525eb16901b2ea17ed99e737edc9"
-dependencies = [
- "libcrux-hacl-rs",
- "libcrux-macros",
- "libcrux-sha2",
-]
-
-[[package]]
 name = "libcrux-hacl-rs"
 version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2992,12 +2981,12 @@ dependencies = [
  "aws-lc-rs",
  "cfg-if",
  "crabgrind 0.4.0",
+ "curve25519-dalek",
  "fiat-crypto",
  "getrandom 0.4.3",
  "hex",
  "libc",
  "libcrux-aes",
- "libcrux-ed25519",
  "libcrux-hacl-rs",
  "libcrux-macros",
  "libcrux-ml-kem",

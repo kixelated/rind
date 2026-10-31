@@ -37,9 +37,6 @@ impl Ed25519VerifyingKey {
     }
 
     /// Decode from the 32-byte Ed25519 public key encoding.
-    ///
-    /// On 32-bit ARM, an encoding that is not a curve point is refused
-    /// by [`Self::verify()`] rather than here.
     pub(crate) fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
         let _entry = Entry::new_public();
         ed25519::VerifyingKey::from_bytes(bytes).map(Self)
@@ -239,19 +236,45 @@ mod tests {
             0x05, 0xee, 0x0d, 0x9e,
         ];
         assert!(Ed25519VerifyingKey::from_bytes(GOOD).is_ok());
-        #[cfg(not(target_arch = "arm"))]
         assert_eq!(
             Ed25519VerifyingKey::from_bytes(&[0xff; 32]).err(),
             Some(Error::NotOnCurve)
         );
-        #[cfg(target_arch = "arm")]
-        assert_eq!(
-            Ed25519VerifyingKey::from_bytes(&[0xff; 32])
-                .unwrap()
-                .verify(&[0; 64], b"")
-                .err(),
-            Some(Error::BadSignature)
-        );
+
+        // Each point has one encoding: `y` below `p`, and no sign on `x = 0`,
+        // where `y = ±1`.
+        let encode = |y: [u8; 32], negative: bool| {
+            let mut bytes = y;
+            bytes[31] |= u8::from(negative) << 7;
+            bytes
+        };
+        let mut y_one = [0; 32];
+        y_one[0] = 1;
+        let mut y_minus_one = [0xff; 32];
+        y_minus_one[0] = 0xec;
+        y_minus_one[31] = 0x7f;
+        let mut y_p = y_minus_one;
+        y_p[0] = 0xed;
+        let mut y_two = [0; 32];
+        y_two[0] = 2;
+        for (y, negative, ok) in [
+            (y_one, false, true),
+            (y_one, true, false),
+            (y_minus_one, false, true),
+            (y_minus_one, true, false),
+            // `y = 0`, which has a point, but not reduced.
+            (y_p, false, false),
+            // No `x` has `y = 2`.
+            (y_two, false, false),
+        ] {
+            let result = Ed25519VerifyingKey::from_bytes(&encode(y, negative));
+            assert_eq!(
+                result.err(),
+                (!ok).then_some(Error::NotOnCurve),
+                "{y:x?} {negative}"
+            );
+        }
+
         assert_eq!(
             Ed25519VerifyingKey::from_bytes(&[0; 31]).err(),
             Some(Error::WrongLength)
