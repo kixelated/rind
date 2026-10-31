@@ -50,6 +50,8 @@ jobs:
   armv7:
     name: armv7 (${{ matrix.suite }})
     strategy:
+      # One suite's failure says nothing about the others.
+      fail-fast: false
       matrix:
         suite: [unit, wycheproof, adapters]
 
