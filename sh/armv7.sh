@@ -35,7 +35,8 @@ cargo clippy "${packages[@]}" --locked --target "$target" --all-targets -- --den
 export CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true
 export CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS=true
 
-# `max` has the ARMv8 crypto extension; the Cortex-A15 is ARMv7 with NEON but
-# without it. RIND_TEST_ARM_CRYPTO_EXT fails the run that lands on the wrong path.
+# `max` has the ARMv8 crypto extension, and so NEON; the Cortex-A15 is ARMv7
+# without the extension, and denying its NEON leaves only the scalar paths.
+# RIND_TEST_ARM_CRYPTO_EXT fails the run that lands on the wrong path.
 QEMU_CPU=max RIND_TEST_ARM_CRYPTO_EXT=1 cargo test "${packages[@]}" --locked --release --target "$target"
-QEMU_CPU=cortex-a15 RIND_TEST_ARM_CRYPTO_EXT=0 cargo test "${packages[@]}" --locked --release --target "$target"
+QEMU_CPU=cortex-a15 RIND_CPU_DISABLE_neon=1 RIND_TEST_ARM_CRYPTO_EXT=0 cargo test "${packages[@]}" --locked --release --target "$target"
