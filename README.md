@@ -54,7 +54,8 @@ but there is also a public API for general-purpose use.
   the CPU has the ARMv8 crypto extension, as most 32-bit Android devices do,
   AES, GHASH, SHA1, and SHA256 run [aws-lc]'s assembly for it instead.
   Without it, `rind::cpu::has_aes_hardware()` is false, and rind-rustls and
-  rind-dimpl prefer ChaCha20-Poly1305, which is faster there. An
+  rind-dimpl prefer ChaCha20-Poly1305, which is faster there: ChaCha20 runs
+  aws-lc's assembly, and so does Poly1305 where the CPU has NEON. An
   Ed25519 public key that is not a curve point is refused when verifying
   rather than when decoding.
 
@@ -83,8 +84,8 @@ cargo bench
 With [Nix](https://nixos.org), `nix develop` (or direnv) provides CI's
 toolchain, and `just check` runs CI's gate over what the branch changed.
 On Linux, `just armv7` runs the nightly armv7 job: it builds and lints for
-32-bit ARM, then runs the tests under qemu, with and without the ARMv8 crypto
-extension.
+32-bit ARM, then runs the tests under qemu with the ARMv8 crypto extension,
+with NEON alone, and with NEON denied.
 
 ## Algorithms
 
@@ -100,8 +101,8 @@ or a [quest](quest/m2/fastest/README.md) covers it. The table describes
 |---|---|---|---|
 | AES-128-GCM, AES-256-GCM | Graviola | [s2n-bignum] CTR and GHASH of whole blocks ✓, run from a copy of the input since its proofs exclude in-place operation; Graviola key schedule, H powers, single-block AES (H, the tag mask, and a final partial block), and GHASH of the AAD, final partial block, and lengths | crypto extension: [aws-lc] AES and GHASH (copied), rind GCM; otherwise: [libcrux-aes] |
 | AES block (header protection), AES-CTR (SRTP) | Graviola block, rind CTR | Graviola block, rind CTR | crypto extension: [aws-lc] block and CTR (copied); otherwise: [libcrux-aes] block (copied), rind CTR |
-| ChaCha20 (header protection) | Graviola | Graviola | [HACL\*] block function ✓ (copied), rind keystream |
-| ChaCha20-Poly1305, XChaCha20-Poly1305 | Graviola ⚡ | Graviola ⚡ | [HACL\*] ChaCha20 block function and Poly1305 ✓; Graviola AEAD; rind HChaCha20 |
+| ChaCha20 (header protection) | Graviola | Graviola | [aws-lc] (copied) ⚡ |
+| ChaCha20-Poly1305, XChaCha20-Poly1305 | Graviola ⚡ | Graviola ⚡ | [aws-lc] ChaCha20 (copied) ⚡; NEON: [aws-lc] Poly1305 (copied) ⚡; otherwise: [HACL\*] Poly1305 ✓; Graviola AEAD; rind HChaCha20 over [HACL\*] rounds ✓ (copied) |
 | SHA-1 (legacy only) | rind | rind | crypto extension: [aws-lc] (copied); otherwise: rind |
 | SHA-256, SHA-384, SHA-512 | Graviola SHA-256 ⚡, SHA-384, and SHA-512 | Graviola SHA-256 ⚡, SHA-384, and SHA-512 | crypto extension: [aws-lc] SHA-256 (copied) ⚡; otherwise: Graviola SHA-256 ⚡; Graviola SHA-384 and SHA-512 |
 | HMAC | Graviola ⚡ | Graviola ⚡ | Graviola ⚡ |
@@ -122,10 +123,10 @@ The tests use [Wycheproof]'s vectors.
 | [Graviola] | copied: rind began as a copy of it, and rind-rustls of its rustls-graviola; its aarch64 ChaCha20 and its Poly1305 began as [cifra], CC0-1.0 | Apache-2.0 OR ISC OR MIT-0 | nothing |
 | rind | its own code | Apache-2.0 OR ISC OR MIT-0 | nothing |
 | [s2n-bignum] | copied: its assembly, transliterated into Rust `asm!` by `admin/parse-asm` | Apache-2.0 OR ISC OR MIT-0; its ML-KEM and aarch64 Keccak-f routines (from mlkem-native) Apache-2.0 OR ISC OR MIT; its x86_64 Keccak-f (from OpenSSL) Apache-2.0 | HOL Light proofs ([x86_64](https://github.com/awslabs/s2n-bignum/tree/main/x86/proofs), [aarch64](https://github.com/awslabs/s2n-bignum/tree/main/arm/proofs)) that each routine's object code computes its specified result for all inputs. They check s2n-bignum's own build, not rind's transliteration, and do not cover memory safety. |
-| [HACL\*] | dependency, through libcrux-hacl-rs, libcrux-p256, libcrux-ed25519, and libcrux-poly1305; copied: the ChaCha20 block function, from libcrux-chacha20poly1305 | Apache-2.0 | [F\* proofs](https://github.com/hacl-star/hacl-star) of memory safety, functional correctness, and secret independence of the F\* source. libcrux's Rust is compiled mechanically from HACL\*'s verified C, and that step is not itself verified. |
+| [HACL\*] | dependency, through libcrux-hacl-rs, libcrux-p256, libcrux-ed25519, and libcrux-poly1305; copied: the ChaCha20 rounds, for HChaCha20, from libcrux-chacha20poly1305 | Apache-2.0 | [F\* proofs](https://github.com/hacl-star/hacl-star) of memory safety, functional correctness, and secret independence of the F\* source. libcrux's Rust is compiled mechanically from HACL\*'s verified C, and that step is not itself verified. |
 | [libcrux-ml-kem] | dependency | Apache-2.0 | [hax and F\* proofs](https://github.com/cryspen/libcrux/blob/main/libcrux-ml-kem/proofs/verification_status.md) of panic freedom and functional correctness for its portable arithmetic, NTT, serialization, and high-level code. Its SHA-3, from libcrux-sha3, is unverified. |
 | [libcrux-aes] | dependency for AES-GCM; copied: the block cipher | Apache-2.0 | nothing: libcrux marks it pre-verification |
-| [aws-lc] | copied: its 32-bit ARM assembly for the ARMv8 crypto extension (AES, GHASH, SHA-1, SHA-256), which aws-lc takes from OpenSSL, imported into Rust `global_asm!` by `admin/import-aws-lc-arm` | Apache-2.0 | nothing: aws-lc's proofs cover its x86_64 and aarch64 code, not this |
+| [aws-lc] | copied: its 32-bit ARM assembly for ChaCha20 and the ARMv8 crypto extension (AES, GHASH, SHA-1, SHA-256), which aws-lc takes from OpenSSL, and for NEON Poly1305, which it takes from BoringSSL, imported into Rust `global_asm!` by `admin/import-aws-lc-arm`; the C that drives that Poly1305, ported to Rust | Apache-2.0; Poly1305 ISC | nothing: aws-lc's proofs cover its x86_64 and aarch64 code, not this |
 | [fiat-crypto] | dependency | MIT OR Apache-2.0 OR BSD-1-Clause | [Coq proofs](https://github.com/mit-plv/fiat-crypto) that each generated field operation is correct. rind's point formulas, inversion, and table lookup over them are not covered. |
 
 rind's own code is licensed under Apache-2.0 OR ISC OR MIT-0. Copied code
@@ -134,7 +135,7 @@ texts they require; dependencies ship their own. Every file under
 `rind/src` names its license in a `SPDX-License-Identifier` comment, and
 files Graviola wrote keep their `Written for Graviola by ...` header. The
 `rind` crate as a whole is therefore `(Apache-2.0 OR ISC OR MIT-0) AND
-(Apache-2.0 OR ISC OR MIT) AND Apache-2.0`. The adapter crates copy
+(Apache-2.0 OR ISC OR MIT) AND Apache-2.0 AND ISC`. The adapter crates copy
 nothing under another license, so they stay `Apache-2.0 OR ISC OR MIT-0`.
 
 A change that copies code from a new source, or moves an algorithm to a
@@ -246,6 +247,11 @@ AES-CTR and GHASH over whole blocks.
 extension, AES and AES-GCM keys use aws-lc's `aesv8-armx` and `ghashv8-armx`
 assembly, composed as aws-lc does on that architecture; without it, libcrux's
 bitsliced AES and AES-GCM.
+
+32-bit `arm` runs ChaCha20 on aws-lc's `chacha-armv4` assembly, switching from
+its integer routine to its NEON one at 192 bytes as aws-lc does, where
+`AT_HWCAP` reports NEON. Poly1305 runs aws-lc's NEON code there too, and
+HACL*'s verified Poly1305 without NEON.
 
 ## Architecture
 

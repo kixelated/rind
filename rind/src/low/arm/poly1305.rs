@@ -81,11 +81,14 @@ impl Drop for Hacl {
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
+    use crate::low::ct;
 
     // Every other test sees only the path the CPU picks, so the NEON code is
     // checked against HACL*'s here: every length up to 200 bytes, plus some
     // past the assembly's 64-byte and 32-byte loops, each fed whole and in
-    // ragged pieces that cross its 32-byte buffer.
+    // ragged pieces that cross its 32-byte buffer. The key and message are
+    // secret, so under `admin/ctgrind` this also checks both are constant
+    // time in them.
     #[test]
     fn neon_matches_portable() {
         let Some(token) = HaveNeon::check() else {
@@ -95,18 +98,24 @@ mod tests {
         let msg: Vec<u8> = (0..1100u32)
             .map(|i| (i.wrapping_mul(0x9e3779b9) >> 24) as u8)
             .collect();
+        ct::secret_slice(&key);
+        ct::secret_slice(&msg);
         for len in (0..=200).chain([255, 256, 257, 1023, 1024, 1025, 1100]) {
             let msg = &msg[..len];
             let mut want = Hacl::new(&key);
             want.add_bytes(msg);
-            let want = want.finish();
+            let want = ct::into_public(want.finish());
 
             for piece in [len.max(1), 1, 7, 16, 31, 32, 33, 65] {
                 let mut got = Poly1305Neon::new(&key, token);
                 for chunk in msg.chunks(piece) {
                     got.add_bytes(chunk);
                 }
-                assert_eq!(got.finish(), want, "{len} bytes in pieces of {piece}");
+                assert_eq!(
+                    ct::into_public(got.finish()),
+                    want,
+                    "{len} bytes in pieces of {piece}"
+                );
             }
         }
 
@@ -119,7 +128,11 @@ mod tests {
             want.add_bytes(&msg[..len]);
             let mut got = Poly1305Neon::new(&ones, token);
             got.add_bytes(&msg[..len]);
-            assert_eq!(got.finish(), want.finish(), "{len} bytes of ones");
+            assert_eq!(
+                ct::into_public(got.finish()),
+                ct::into_public(want.finish()),
+                "{len} bytes of ones"
+            );
         }
     }
 }

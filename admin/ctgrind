@@ -4,8 +4,8 @@ set -e
 # Pass `--target armv7-unknown-linux-gnueabihf` on a host that executes
 # 32-bit ARM natively, such as an arm64 one, with an armhf valgrind.
 # Valgrind passes `AT_HWCAP2` only to ppc64 programs (3.22 through 3.28), so
-# the armv7 build always takes its portable path here, and the ARMv8 crypto
-# extension's assembly goes unchecked.
+# the armv7 build never takes its ARMv8 crypto extension path here, and that
+# assembly goes unchecked. It passes `AT_HWCAP`, so the NEON code is checked.
 #
 # Release builds keep line tables so memcheck names inlined frames, which
 # the suppressions match.
