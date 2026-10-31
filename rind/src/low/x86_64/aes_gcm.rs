@@ -313,69 +313,41 @@ fn _cipher_avx512<const ENC: bool>(
         ghash.current = ghash::_mul16(ghash_avx512, a0123, a4567, a89ab, acdef);
     }
 
-    let cipher_inout = remainder;
-    let mut counter = counter.into_128();
-
-    if !ENC {
-        ghash.add(cipher_inout);
+    if remainder.is_empty() {
+        return;
     }
 
-    {
-        let (blocks_iter, remainder) = cipher_inout.as_chunks_mut::<16>();
-        let (rk_first, rks, rk_last) = key.round_keys();
-        for block in blocks_iter {
-            let c1 = counter.next();
-
-            let mut c1 = _mm_xor_si128(c1, rk_first);
-
-            for rk in rks {
-                c1 = _mm_aesenc_si128(c1, *rk);
-            }
-
-            let c1 = _mm_aesenclast_si128(c1, rk_last);
-
-            // SAFETY: `block` is 16 bytes and writable.
-            let p1 = unsafe { _mm_loadu_si128(block.as_ptr().cast()) };
-            let c1 = _mm_xor_si128(c1, p1);
-
-            // SAFETY: `block` is 16 bytes and writable.
-            unsafe {
-                _mm_storeu_si128(block.as_mut_ptr().cast(), c1);
-            }
-        }
-
-        let cipher_inout = remainder;
-        if !cipher_inout.is_empty() {
-            let mut block = [0u8; 16];
-            let len = cipher_inout.len();
-            debug_assert!(len < 16);
-            block[..len].copy_from_slice(cipher_inout);
-
-            let c1 = counter.next();
-            let mut c1 = _mm_xor_si128(c1, rk_first);
-
-            for rk in rks {
-                c1 = _mm_aesenc_si128(c1, *rk);
-            }
-
-            let c1 = _mm_aesenclast_si128(c1, rk_last);
-
-            // SAFETY: `block` is 16 bytes and writable.
-            let p1 = unsafe { _mm_loadu_si128(block.as_ptr().cast()) };
-            let c1 = _mm_xor_si128(c1, p1);
-
-            // SAFETY: `block` is 16 bytes and writable.
-            unsafe {
-                _mm_storeu_si128(block.as_mut_ptr().cast(), c1);
-            }
-
-            cipher_inout.copy_from_slice(&block[..len]);
+    // The tail, under 256 bytes, in one pass of four vectors masked to its
+    // length. AES is latency-bound here, so the unused vectors cost little.
+    let mut ks = [
+        counter.next4(),
+        counter.next4(),
+        counter.next4(),
+        counter.next4(),
+    ];
+    for k in &mut ks {
+        *k = _mm512_xor_epi32(*k, rk_first);
+    }
+    for rk in rks {
+        for k in &mut ks {
+            *k = _mm512_aesenc_epi128(*k, *rk);
         }
     }
 
-    if ENC {
-        ghash.add(cipher_inout);
+    let mut tail = [_mm512_setzero_si512(); 4];
+    for ((t, k), chunk) in tail.iter_mut().zip(ks).zip(remainder.chunks_mut(64)) {
+        let mask = ghash::byte_mask(chunk.len());
+        // SAFETY: the mask covers `chunk`, and masked-off bytes are not read
+        let p = unsafe { _mm512_maskz_loadu_epi8(mask, chunk.as_ptr().cast()) };
+        let c = _mm512_xor_epi32(
+            _mm512_maskz_mov_epi8(mask, _mm512_aesenclast_epi128(k, rk_last)),
+            p,
+        );
+        // SAFETY: the mask covers `chunk`, and masked-off bytes are not written
+        unsafe { _mm512_mask_storeu_epi8(chunk.as_mut_ptr().cast(), mask, c) };
+        *t = _mm512_shuffle_epi8(if ENC { c } else { p }, BYTESWAP_512);
     }
+    ghash.current = ghash::_mul_tail(ghash_avx512, ghash.current, tail, remainder.len());
 }
 
 /// How many message bytes needed to benefit from the AVX512 by-16 impl
@@ -405,13 +377,6 @@ impl Counter512 {
             let r = _mm512_inserti32x4::<2>(r, _mm_shuffle_epi8(c, BYTESWAP_EPI64));
             _mm512_inserti32x4::<3>(r, _mm_shuffle_epi8(d, BYTESWAP_EPI64))
         })
-    }
-
-    #[target_feature(enable = "avx512f")]
-    #[must_use]
-    #[inline]
-    fn into_128(self) -> Counter {
-        Counter(_mm512_extracti32x4_epi32::<0>(self.0))
     }
 
     #[target_feature(enable = "sse3,ssse3,avx,avx2,avx512f,avx512bw")]
@@ -489,41 +454,3 @@ const BYTESWAP_512_EPI64: __m512i = unsafe {
         55, 54, 53, 52, 51, 50, 49, 48, 63, 62, 61, 60, 59, 58, 57, 56,
     ])
 };
-
-#[cfg(test)]
-#[cfg_attr(coverage_nightly, coverage(off))]
-mod tests {
-    #![allow(clippy::undocumented_unsafe_blocks)]
-
-    #[test]
-    fn check_counter512() {
-        use super::*;
-
-        if HaveAvx512ForAesGcm::check().is_none() {
-            println!("no AVX512 support");
-            return;
-        }
-
-        let mut c = unsafe { Counter::new(&[0u8; 16]) };
-        println!("??? {c:x?}");
-        println!("1-- {:x?}", unsafe { c.next() });
-        println!("2-- {:x?}", unsafe { c.next() });
-        println!("3-- {:x?}", unsafe { c.next() });
-        println!("4-- {:x?}", unsafe { c.next() });
-        println!("??? {c:x?}");
-
-        let mut c4 = unsafe { Counter512::new(&[0u8; 16]) };
-        println!("{c4:x?}");
-        println!("1-4 {:x?}", unsafe { c4.next4() });
-        println!("{c4:x?}");
-        let c4c = unsafe { c4.into_128() };
-        println!("{c4c:x?}");
-
-        unsafe {
-            assert_eq!(
-                mem::transmute::<__m128i, u128>(c4c.0),
-                mem::transmute::<__m128i, u128>(c.0)
-            );
-        }
-    }
-}
